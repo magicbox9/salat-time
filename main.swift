@@ -52,8 +52,12 @@ let kAdhkarEveningAnchor = "adhkarEveningAnchor"    // "asr" | "maghrib"
 /// Idempotency markers so each set fires once per day. Format "YYYY-MM-DD".
 let kLastAdhkarMorning   = "lastAdhkarMorning"
 let kLastAdhkarEvening   = "lastAdhkarEvening"
+/// Persisted user adhkar library (array of AdhkarCollection) as JSON Data.
+let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
+/// One-time v2→v3 migration marker so we seed default collections only once.
+let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "2.2.0"
+let kAppVersion          = "3.0.0-alpha.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -649,6 +653,142 @@ enum AdhkarData {
     static func items(for set: AdhkarSet) -> [AdhkarItem] {
         loadAll()[set.rawValue] ?? []
     }
+}
+
+// ============================================================================
+// MARK: Adhkar collections — user-editable groups of adhkar (v3 data model)
+// ============================================================================
+// Replaces the hardcoded morning/evening split with a user-defined Collection
+// model. Each collection has a name, an optional schedule (anchor prayer),
+// and an ordered list of AdhkarEntry items. Defaults are seeded once on first
+// launch of v3 (see `migrateAdhkarDefaults()` in AppDelegate) so existing v2
+// users keep their sunrise/Asr behavior.
+
+/// One user-authored dhikr inside a collection. `audioRef` is a logical ref,
+/// NOT a path — resolved at runtime by `resolveAdhkarAudio(_:)`. Two forms:
+///   • "bundled:<filename>"  → looked up in Resources/adhkar_audio/
+///   • "imported:<uuid>.<ext>" → looked up in ~/Library/Application Support/
+/// Storing a logical ref (not a path) means app-support can move without
+/// breaking saved libraries.
+struct AdhkarEntry: Codable, Identifiable, Equatable {
+    var id:       UUID
+    var arabic:   String
+    /// Recommended repetitions. Audio loops up to 3× authentically; higher
+    /// counts (33, 100) play once and the count is shown for the user.
+    var count:    Int
+    var virtue:   String
+    var source:   String
+    var audioRef: String
+    /// Initialize from a bundled-library AdhkarItem (preserves its content).
+    init(from item: AdhkarItem) {
+        self.id       = UUID()
+        self.arabic   = item.arabic
+        self.count    = item.count
+        self.virtue   = item.virtue
+        self.source   = item.source
+        self.audioRef = "bundled:\(item.audio_file)"
+    }
+    init(id: UUID = UUID(), arabic: String, count: Int = 1,
+         virtue: String = "", source: String = "", audioRef: String = "") {
+        self.id = id; self.arabic = arabic; self.count = count
+        self.virtue = virtue; self.source = source; self.audioRef = audioRef
+    }
+}
+
+/// A user-defined collection of adhkar (e.g. "Morning", "Evening", "Sleep").
+/// `anchorKind` controls the auto-trigger; "manual" means no schedule.
+struct AdhkarCollection: Codable, Identifiable, Equatable {
+    var id:         UUID
+    var name:       String
+    /// "manual" (no schedule) | "shuruq" | "fajr" | "dhuhr" | "asr" | "maghrib" | "isha"
+    var anchorKind: String
+    /// When true, the collection auto-recites at `anchorKind` time once/day.
+    var autoPlay:   Bool
+    var items:      [AdhkarEntry]
+    init(id: UUID = UUID(), name: String, anchorKind: String = "manual",
+         autoPlay: Bool = false, items: [AdhkarEntry] = []) {
+        self.id = id; self.name = name; self.anchorKind = anchorKind
+        self.autoPlay = autoPlay; self.items = items
+    }
+}
+
+/// Loads / saves the user's adhkar library to UserDefaults as JSON Data.
+/// Mirrors the favorites pattern (kFavoritesKey / loadFavorites / saveFavorites).
+enum AdhkarLibrary {
+    static func load() -> [AdhkarCollection] {
+        guard let data = UserDefaults.standard.data(forKey: kAdhkarLibraryKey),
+              let arr  = try? JSONDecoder().decode([AdhkarCollection].self, from: data) else {
+            return []
+        }
+        return arr
+    }
+    static func save(_ collections: [AdhkarCollection]) {
+        if let data = try? JSONEncoder().encode(collections) {
+            UserDefaults.standard.set(data, forKey: kAdhkarLibraryKey)
+        }
+    }
+    /// Find a collection by ID (defensive; returns nil if user deleted it).
+    static func find(_ id: UUID, in collections: [AdhkarCollection]) -> Int? {
+        collections.firstIndex(where: { $0.id == id })
+    }
+}
+
+/// One-time migration from v2's fixed morning/evening sets to v3 collections.
+/// Seeds "Morning" (sunrise anchor) + "Evening" (asr anchor) from the bundled
+/// library on first run of v3. Idempotent via `kAdhkarMigrated` flag.
+func migrateAdhkarDefaults() {
+    let migrated = UserDefaults.standard.bool(forKey: kAdhkarMigrated)
+    if migrated { return }
+    // Only seed if there's no library yet (don't clobber user edits).
+    if !AdhkarLibrary.load().isEmpty {
+        UserDefaults.standard.set(true, forKey: kAdhkarMigrated)
+        return
+    }
+    let morningItems = AdhkarData.items(for: .morning).map { AdhkarEntry(from: $0) }
+    let eveningItems = AdhkarData.items(for: .evening).map { AdhkarEntry(from: $0) }
+    // Respect the user's v2 anchor prefs if they changed them.
+    let mAnchor = UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq"
+    let eAnchor = UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr"
+    let autoOn  = UserDefaults.standard.object(forKey: kAdhkarEnabled) != nil
+                  ? UserDefaults.standard.bool(forKey: kAdhkarEnabled)
+                  : true
+    let seeded: [AdhkarCollection] = [
+        AdhkarCollection(name: t("adhkar.morning_title"), anchorKind: mAnchor,
+                         autoPlay: autoOn, items: morningItems),
+        AdhkarCollection(name: t("adhkar.evening_title"), anchorKind: eAnchor,
+                         autoPlay: autoOn, items: eveningItems),
+    ]
+    AdhkarLibrary.save(seeded)
+    UserDefaults.standard.set(true, forKey: kAdhkarMigrated)
+}
+
+/// Resolves an `audioRef` to a playable URL, or nil if not found.
+///   "bundled:75.mp3"  → Resources/adhkar_audio/75.mp3
+///   "imported:abc.mp3" → ~/Library/Application Support/SalatTime/audio/abc.mp3
+func resolveAdhkarAudio(_ ref: String) -> URL? {
+    if ref.hasPrefix("bundled:") {
+        let fname = String(ref.dropFirst("bundled:".count))
+        let base  = fname.replacingOccurrences(of: ".mp3", with: "")
+        return Bundle.main.url(forResource: base, withExtension: "mp3",
+                                subdirectory: "adhkar_audio")
+    }
+    if ref.hasPrefix("imported:") {
+        let fname = String(ref.dropFirst("imported:".count))
+        return adhkarAudioStorageDir().appendingPathComponent(fname)
+    }
+    return nil
+}
+
+/// Directory for user-imported adhkar audio. Created lazily on first import.
+func adhkarAudioStorageDir() -> URL {
+    let fm = FileManager.default
+    let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    let dir = support.appendingPathComponent("SalatTime/audio", isDirectory: true)
+    if !fm.fileExists(atPath: dir.path) {
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+    return dir
 }
 
 /// Drives adhkar playback. Owns its own `AVAudioPlayer` (separate from the
@@ -4167,6 +4307,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
 
         registerCairoFonts()
+        // One-time v2→v3 migration: seed default morning/evening collections.
+        migrateAdhkarDefaults()
         Localizer.shared.onChange = { [weak self] in self?.applyLanguageChange() }
 
         loadCachedInfo()
