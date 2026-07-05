@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.0.0-alpha.4"
+let kAppVersion          = "3.0.0-beta.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -885,13 +885,13 @@ func presentAudioImportPanel() -> String? {
 final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
 
     /// `(current item, current item index 0-based, total items)`.
-    var onItemChange:          ((AdhkarItem, Int, Int) -> Void)?
+    var onItemChange:          ((AdhkarEntry, Int, Int) -> Void)?
     /// Fired on play / pause / resume / mute toggles so the panel can refresh.
     var onPlaybackStateChange: (() -> Void)?
     /// Fired when the whole set completes naturally (last item finished).
     var onFinish:              (() -> Void)?
 
-    private(set) var items: [AdhkarItem] = []
+    private(set) var items: [AdhkarEntry] = []
     private var index   = 0
     /// How many times the CURRENT item's audio has played so far.
     private var playsSoFar = 0
@@ -906,7 +906,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     /// Total number of items in the active set (0 if not started).
     var count: Int { items.count }
     /// Currently-active item, or nil if the session hasn't started / has ended.
-    var currentItem: AdhkarItem? {
+    var currentItem: AdhkarEntry? {
         guard index >= 0 && index < items.count else { return nil }
         return items[index]
     }
@@ -916,14 +916,23 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
         return (index + 1, items.count)
     }
 
-    /// Begin reciting a full set. Replaces any in-flight session.
-    func start(set: AdhkarSet) {
+    /// Begin reciting a full collection. Replaces any in-flight session.
+    /// v3 entry point — accepts user-edited collections.
+    func start(collection: AdhkarCollection) {
         stop()
-        items = AdhkarData.items(for: set)
+        items = collection.items
         guard !items.isEmpty else { return }
         index = 0
         playsSoFar = 0
         playCurrent()
+    }
+
+    /// v2 compatibility shim — wraps a bundled morning/evening set into a
+    /// collection and starts it. Used by the right-click menu's fixed
+    /// morning/evening entries (which now read from the user's library).
+    func start(set: AdhkarSet) {
+        let entries = AdhkarData.items(for: set).map { AdhkarEntry(from: $0) }
+        start(collection: AdhkarCollection(name: set.rawValue, items: entries))
     }
 
     /// Advance to the next item (skips remaining repeats of the current one).
@@ -999,24 +1008,23 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
         targetPlays = max(1, min(item.count, 3))
         playsSoFar = 0
         onItemChange?(item, index, items.count)
-        playAudioFile(item.audio_file)
+        playAudioRef(item.audioRef)
     }
 
-    private func playAudioFile(_ fname: String) {
+    /// Resolve a logical audioRef to a URL and start playback. Handles both
+    /// bundled ("bundled:75.mp3") and imported ("imported:abc.mp3") refs via
+    /// resolveAdhkarAudio(). Falls back to auto-advance if audio is missing.
+    private func playAudioRef(_ ref: String) {
         player?.stop()
-        // MP3s live under Resources/adhkar_audio/<id>.mp3
-        let base = fname.replacingOccurrences(of: ".mp3", with: "")
-        guard let url = Bundle.main.url(forResource: base, withExtension: "mp3",
-                                        subdirectory: "adhkar_audio"),
+        // If the entry has no audio at all, just advance after a beat.
+        guard !ref.isEmpty else {
+            scheduleAutoAdvance()
+            return
+        }
+        guard let url = resolveAdhkarAudio(ref),
               FileManager.default.fileExists(atPath: url.path),
               let p = try? AVAudioPlayer(contentsOf: url) else {
-            // If audio is missing, auto-advance after a beat so the session
-            // never stalls on a single broken entry.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self = self else { return }
-                let dummy = AVAudioPlayer()
-                self.audioPlayerDidFinishPlaying(dummy, successfully: true)
-            }
+            scheduleAutoAdvance()
             return
         }
         player = p
@@ -1027,6 +1035,16 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
             isPlaying = true
             isPaused  = false
             onPlaybackStateChange?()
+        }
+    }
+
+    /// If audio is missing, auto-advance after a beat so the session never
+    /// stalls on a single broken/silent entry.
+    private func scheduleAutoAdvance() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self = self else { return }
+            let dummy = AVAudioPlayer()
+            self.audioPlayerDidFinishPlaying(dummy, successfully: true)
         }
     }
 
@@ -1046,7 +1064,9 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
         playsSoFar += 1
         if playsSoFar < targetPlays {
             // Same item, repeat.
-            playAudioFile(items[index].audio_file)
+            if items.indices.contains(index) {
+                playAudioRef(items[index].audioRef)
+            }
             return
         }
         // Advance to next item.
@@ -1119,13 +1139,46 @@ final class AdhkarPanel: NSPanel {
             : t("adhkar.evening_title")
         centerOnActiveScreen()
         makeKeyAndOrderFront(nil)
-        if autoPlay { session.start(set: set) }
+        if autoPlay {
+            // Try to play from the user's matching collection first; fall back
+            // to the bundled set if no user collection exists.
+            if let c = matchingUserCollection(for: set) {
+                session.start(collection: c)
+            } else {
+                session.start(set: set)
+            }
+        }
+    }
+
+    /// v3 entry point — present a specific user-edited collection.
+    func present(collection: AdhkarCollection, autoPlay: Bool = true) {
+        titleLabel.stringValue = collection.name
+        centerOnActiveScreen()
+        makeKeyAndOrderFront(nil)
+        if autoPlay { session.start(collection: collection) }
+    }
+
+    /// Find the user's first collection whose name matches the set's localized
+    /// title (so the right-click "Adhkar of the Morning" plays the user's
+    /// "Morning" collection, including any edits they've made).
+    private func matchingUserCollection(for set: AdhkarSet) -> AdhkarCollection? {
+        let target = (set == .morning)
+            ? t("adhkar.morning_title")
+            : t("adhkar.evening_title")
+        return AdhkarLibrary.load().first(where: { $0.name == target })
     }
 
     func togglePlayPause() {
         if session.isPlaying { session.pause() }
         else if session.isPaused { session.resume() }
-        else { session.start(set: currentSet) }
+        else {
+            // Restart from the user's matching collection if present.
+            if let c = matchingUserCollection(for: currentSet) {
+                session.start(collection: c)
+            } else {
+                session.start(set: currentSet)
+            }
+        }
     }
 
     // MARK: - UI build
@@ -1258,12 +1311,12 @@ final class AdhkarPanel: NSPanel {
         }
     }
 
-    private func renderItem(_ item: AdhkarItem, idx: Int, total: Int) {
+    private func renderItem(_ item: AdhkarEntry, idx: Int, total: Int) {
         arabicLabel.stringValue = item.arabic
-        // Show the recommended repeat count in Arabic when available.
+        // Show the repeat count as a localized "N times" string when > 1.
         let countText: String
-        if item.count > 1, !item.count_desc.isEmpty {
-            countText = item.count_desc
+        if item.count > 1 {
+            countText = String(format: t("adhkar.editor.count_times"), item.count)
         } else {
             countText = ""
         }
@@ -7312,7 +7365,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// adhkar set once per day when the anchor time is reached, mirroring the
     /// adhan idempotency pattern (marker "YYYY-MM-DD#morning" / "#evening").
     func checkAdhkarTrigger() {
-        guard UserDefaults.standard.bool(forKey: kAdhkarEnabled) else { return }
+        // v3: iterate every collection in the user's library. Each has its
+        // own anchorKind + autoPlay flag, so the user can schedule any number
+        // of independent recitations per day. Idempotency is keyed by the
+        // collection's UUID so deleting + recreating one re-arms it.
         let now = Date()
         let cal = Calendar.current
         let today = cal.startOfDay(for: now)
@@ -7322,31 +7378,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         fmt.timeZone = TimeZone.current
         let todayStr = todayString()
 
-        func attempt(set: AdhkarSet, anchor: String, key: String) {
-            let marker = "\(todayStr)#\(set.rawValue)"
-            let last = UserDefaults.standard.string(forKey: key) ?? ""
-            // Already fired today?
-            if last == marker { return }
-            if last > marker && last.hasPrefix(todayStr) { return }
-            guard let t = adhkarAnchorTime(anchor),
-                  let d = fmt.date(from: t) else { return }
-            let c = cal.dateComponents([.hour, .minute], from: d)
-            guard let when = cal.date(bySettingHour: c.hour ?? 0,
-                                       minute: c.minute ?? 0, second: 0, of: today) else { return }
-            // Fire window: [anchor, anchor + 60s). One tick-sized edge.
+        // One idempotency string per day per collection: "YYYY-MM-DD#<uuid-prefix>"
+        let firedKey = "adhkarFiredToday"
+        var fired = (UserDefaults.standard.array(forKey: firedKey) as? [String]) ?? []
+        // Prune any markers from prior days so the array doesn't grow forever.
+        fired = fired.filter { $0.hasPrefix(todayStr + "#") }
+
+        for c in AdhkarLibrary.load() {
+            guard c.autoPlay else { continue }
+            guard c.anchorKind != "manual" else { continue }
+            let marker = "\(todayStr)#\(c.id.uuidString.prefix(8))"
+            if fired.contains(marker) { continue }
+            guard let t = adhkarAnchorTime(c.anchorKind),
+                  let d = fmt.date(from: t) else { continue }
+            let comps = cal.dateComponents([.hour, .minute], from: d)
+            guard let when = cal.date(bySettingHour: comps.hour ?? 0,
+                                       minute: comps.minute ?? 0, second: 0, of: today) else { continue }
             let dt = now.timeIntervalSince(when)
             if dt >= 0 && dt < 60 {
-                presentAdhkar(set: set, autoPlay: true)
-                UserDefaults.standard.set(marker, forKey: key)
+                presentAdhkar(collection: c, autoPlay: true)
+                fired.append(marker)
             }
         }
-
-        attempt(set: .morning,
-                anchor: UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq",
-                key: kLastAdhkarMorning)
-        attempt(set: .evening,
-                anchor: UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr",
-                key: kLastAdhkarEvening)
+        UserDefaults.standard.set(fired, forKey: firedKey)
     }
 
     /// Open the adhkar window. `autoPlay` = true on scheduled trigger; false
@@ -7355,6 +7409,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     func presentAdhkar(set: AdhkarSet, autoPlay: Bool) {
         if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
         adhkarPanel?.present(set: set, autoPlay: autoPlay)
+    }
+
+    /// v3 entry point — present a specific user collection.
+    func presentAdhkar(collection: AdhkarCollection, autoPlay: Bool) {
+        if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
+        adhkarPanel?.present(collection: collection, autoPlay: autoPlay)
     }
 
     func todayString() -> String {
