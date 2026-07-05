@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.5.0-alpha.1"
+let kAppVersion          = "3.5.0-alpha.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -895,11 +895,12 @@ struct AdhkarAudioOption: Identifiable, Equatable {
 /// editor popup shows these in alphabetical order.
 func adhkarAudioOptions() -> [AdhkarAudioOption] {
     var out: [AdhkarAudioOption] = []
-    // Bundled — dedupe by filename across morning+evening sets.
+    // Bundled — dedupe by filename across ALL categories (not just morning/evening).
     var seen = Set<String>()
     let raw = AdhkarData.loadAll()
-    for setKey in [AdhkarSet.morning.rawValue, AdhkarSet.evening.rawValue] {
+    for setKey in raw.keys {
         for item in raw[setKey] ?? [] {
+            if item.audio_file.isEmpty { continue }
             if seen.insert(item.audio_file).inserted {
                 let ref = "bundled:\(item.audio_file)"
                 out.append(AdhkarAudioOption(id: ref,
@@ -4861,6 +4862,13 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         menu.addItem(schedItem)
 
         menu.addItem(.separator())
+        // Rename option — reuses the alert-based rename flow.
+        let ren = NSMenuItem(title: t("adhkar.editor.renamed"),
+                              action: #selector(renameFromMenu(_:)),
+                              keyEquivalent: "")
+        ren.target = self
+        ren.representedObject = c.id
+        menu.addItem(ren)
         let del = NSMenuItem(title: t("adhkar.editor.remove"),
                               action: #selector(deleteCollection(_:)),
                               keyEquivalent: "")
@@ -4916,13 +4924,6 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         }
     }
 
-    @objc private func selectCollection(_ g: NSClickGestureRecognizer) {
-        guard let row = g.view as? CollectionRowView, let id = row.collectionID else { return }
-        selectedCollectionID = id
-        rebuildCollectionList()
-        rebuildItemsPane()
-    }
-
     /// Play button on a collection row — opens the floating panel and starts
     /// reciting the collection. Replaces the removed right-click menu entries.
     @objc private func playCollection(_ sender: HoverIconButton) {
@@ -4932,8 +4933,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         appDelegate?.presentAdhkar(collection: collections[idx], autoPlay: true)
     }
 
-    @objc private func renameCollection(_ g: NSClickGestureRecognizer) {
-        guard let row = g.view as? CollectionRowView, let id = row.collectionID,
+    /// Rename a collection via alert, triggered from the right-click menu.
+    @objc private func renameFromMenu(_ mi: NSMenuItem) {
+        guard let id = mi.representedObject as? UUID,
               let idx = collections.firstIndex(where: { $0.id == id }) else { return }
         let alert = NSAlert()
         alert.messageText = t("adhkar.editor.renamed")
@@ -5310,8 +5312,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
     @objc private func addFromLibrary() {
         guard let ci = selectedCollectionIndex() else { return }
-        let allItems = AdhkarData.items(for: .morning) + AdhkarData.items(for: .evening)
-        // Dedupe by arabic text
+        // Offer items from ALL 14 categories, deduped by Arabic text.
+        var allItems: [AdhkarItem] = []
+        for set in AdhkarSet.allCases {
+            allItems.append(contentsOf: AdhkarData.items(for: set))
+        }
         var seen = Set<String>()
         let unique = allItems.filter { seen.insert($0.arabic).inserted }
         let sheet = AdhkarLibraryPickerSheet(items: unique)
@@ -5359,22 +5364,6 @@ final class CollectionRowView: NSView {
             onSelect?(id)
         }
     }
-}
-
-/// Creates a horizontally-flipped template image for RTL (points the play
-/// triangle to the left). Used for play buttons in Arabic mode.
-func rtlFlippedImage(_ source: NSImage) -> NSImage {
-    let size = source.size
-    let flipped = NSImage(size: size)
-    flipped.lockFocus()
-    if let ctx = NSGraphicsContext.current?.cgContext {
-        ctx.translateBy(x: size.width, y: 0)
-        ctx.scaleBy(x: -1, y: 1)
-    }
-    source.draw(in: NSRect(origin: .zero, size: size))
-    flipped.unlockFocus()
-    flipped.isTemplate = source.isTemplate
-    return flipped
 }
 
 // ----------------------------------------------------------------------------
@@ -7542,8 +7531,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         switch anchor {
         case "shuruq":  return info.shuruq.isEmpty ? nil : info.shuruq
         case "fajr":    return info.times.count > 0 ? info.times[0] : nil
+        case "dhuhr":   return info.times.count > 1 ? info.times[1] : nil
         case "asr":     return info.times.count > 2 ? info.times[2] : nil
         case "maghrib": return info.times.count > 3 ? info.times[3] : nil
+        case "isha":    return info.times.count > 4 ? info.times[4] : nil
         default:        return nil
         }
     }
