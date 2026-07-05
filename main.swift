@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.0-beta.1"
+let kAppVersion          = "3.1.0-beta.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -5155,12 +5155,34 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         removeBtn.idleTint = .systemRed
 
         // Audio popup + edit button
-        let audioBtn = NSButton(title: t("adhkar.editor.audio"), target: self,
+        // Audio button — shows current state (set / none) and opens the picker.
+        let audioTitle: String
+        if entry.audioRef.isEmpty {
+            audioTitle = "♩  \(t("adhkar.editor.audio.none"))"
+        } else {
+            audioTitle = "♩  \(t("adhkar.editor.audio"))"
+        }
+        let audioBtn = NSButton(title: audioTitle, target: self,
                                  action: #selector(pickAudio(_:)))
         audioBtn.bezelStyle = .rounded
         audioBtn.controlSize = .small
         audioBtn.tag = index
+        audioBtn.toolTip = entry.audioRef.isEmpty ? t("adhkar.editor.audio.choose") : audioDisplayName(entry.audioRef)
         audioBtn.translatesAutoresizingMaskIntoConstraints = false
+
+        // Quick preview button (only if audio is set).
+        let previewBtn: HoverIconButton?
+        if !entry.audioRef.isEmpty {
+            previewBtn = HoverIconButton(symbol: "play.circle",
+                                          toolTip: t("adhkar.editor.play_preview"),
+                                          target: self,
+                                          action: #selector(previewItemAudio(_:)),
+                                          pointSize: 13,
+                                          size: NSSize(width: 26, height: 26))
+            previewBtn!.tag = index
+        } else {
+            previewBtn = nil
+        }
 
         let editBtn = NSButton(title: t("adhkar.editor.repeat"), target: self,
                                 action: #selector(editItem(_:)))
@@ -5174,7 +5196,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         buttonsRow.spacing = 6
         buttonsRow.alignment = .centerY
         buttonsRow.translatesAutoresizingMaskIntoConstraints = false
-        for b in [upBtn, downBtn, removeBtn, audioBtn, editBtn] {
+        var rowButtons: [NSView] = [upBtn, downBtn, removeBtn, audioBtn]
+        if let pb = previewBtn { rowButtons.insert(pb, at: 4) }
+        rowButtons.append(editBtn)
+        for b in rowButtons {
             buttonsRow.addArrangedSubview(b)
         }
 
@@ -5298,6 +5323,20 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         guard i >= 0, i < collections[ci].items.count else { return }
         let ref = collections[ci].items[i].audioRef
         guard let url = resolveAdhkarAudio(ref),
+              let p = try? AVAudioPlayer(contentsOf: url) else { return }
+        previewPlayer?.stop()
+        previewPlayer = p
+        p.play()
+    }
+
+    /// Quick preview button on an item card — plays the item's audio.
+    @objc private func previewItemAudio(_ sender: HoverIconButton) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = sender.tag
+        guard i >= 0, i < collections[ci].items.count else { return }
+        let ref = collections[ci].items[i].audioRef
+        guard !ref.isEmpty,
+              let url = resolveAdhkarAudio(ref),
               let p = try? AVAudioPlayer(contentsOf: url) else { return }
         previewPlayer?.stop()
         previewPlayer = p
