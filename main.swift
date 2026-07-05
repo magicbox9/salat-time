@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.0.0-beta.1"
+let kAppVersion          = "3.0.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4801,8 +4801,42 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         dbl.numberOfClicksRequired = 2
         row.addGestureRecognizer(dbl)
 
-        // Right-click = delete menu
+        // Right-click = schedule submenu + delete
         let menu = NSMenu()
+
+        // Schedule submenu — pick the anchor prayer + toggle auto-play.
+        let schedItem = NSMenuItem(title: t("adhkar.editor.schedule"),
+                                    action: nil, keyEquivalent: "")
+        let schedSub = NSMenu()
+        let anchors: [(String, String)] = [
+            ("manual",  t("adhkar.editor.schedule.manual")),
+            ("shuruq",  t("adhkar.editor.schedule.shuruq")),
+            ("fajr",    t("adhkar.editor.schedule.fajr")),
+            ("dhuhr",   t("adhkar.editor.schedule.dhuhr")),
+            ("asr",     t("adhkar.editor.schedule.asr")),
+            ("maghrib", t("adhkar.editor.schedule.maghrib")),
+            ("isha",    t("adhkar.editor.schedule.isha")),
+        ]
+        for (kind, label) in anchors {
+            let mi = NSMenuItem(title: label, action: #selector(setAnchor(_:)),
+                                 keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = ["id": c.id, "kind": kind] as [String: Any]
+            if kind == c.anchorKind { mi.state = .on }
+            schedSub.addItem(mi)
+        }
+        schedSub.addItem(.separator())
+        let autoMi = NSMenuItem(title: t("adhkar.editor.autoplay"),
+                                 action: #selector(toggleAutoPlay(_:)),
+                                 keyEquivalent: "")
+        autoMi.target = self
+        autoMi.representedObject = c.id
+        if c.autoPlay { autoMi.state = .on }
+        schedSub.addItem(autoMi)
+        schedItem.submenu = schedSub
+        menu.addItem(schedItem)
+
+        menu.addItem(.separator())
         let del = NSMenuItem(title: t("adhkar.editor.remove"),
                               action: #selector(deleteCollection(_:)),
                               keyEquivalent: "")
@@ -4861,6 +4895,21 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
                 rebuildItemsPane()
             }
         }
+    }
+
+    @objc private func setAnchor(_ mi: NSMenuItem) {
+        guard let dict = mi.representedObject as? [String: Any],
+              let id = dict["id"] as? UUID,
+              let kind = dict["kind"] as? String,
+              let idx = collections.firstIndex(where: { $0.id == id }) else { return }
+        collections[idx].anchorKind = kind
+        persist(); rebuildCollectionList()
+    }
+    @objc private func toggleAutoPlay(_ mi: NSMenuItem) {
+        guard let id = mi.representedObject as? UUID,
+              let idx = collections.firstIndex(where: { $0.id == id }) else { return }
+        collections[idx].autoPlay.toggle()
+        persist(); rebuildCollectionList()
     }
 
     @objc private func deleteCollection(_ mi: NSMenuItem) {

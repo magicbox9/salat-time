@@ -13,6 +13,14 @@ AppKit + WebKit + AVFoundation + CoreLocation + UserNotifications.
 Target macOS 14+. All user prefs live in `UserDefaults` under `com.salattime.app`.
 At build time `build.sh` downloads adhan + adhkar audio and the Cairo font.
 
+The app has **two UI surfaces** (v3):
+- **Menu bar** (always): status icon with countdown, left-click popover for
+  quick prayer-time view, right-click menu for actions.
+- **Main window** (on demand): a full management window opened from the menu
+  bar's "Open Main Window…" item or the dock. Hosts tabs for Prayer Times,
+  Adhkar, Adhan, Settings. Switches the app to `.regular` activation policy
+  (dock icon appears) while open; back to `.accessory` (tray-only) on close.
+
 ## 2. Layout
 
 ```
@@ -156,3 +164,28 @@ If a feature spans many files, prefer several small commits over one big one.
 - `.DS_Store`.
 
 These are already in `.gitignore`.
+
+## 9. Adhkar collections (v3) — data model + storage
+
+The adhkar feature (v3) uses a user-editable Collection model:
+
+- **`AdhkarCollection`** — a named, ordered group of adhkar items with an
+  `anchorKind` (manual / shuruq / fajr / asr / maghrib / isha) and an
+  `autoPlay` flag. Stored as JSON in `UserDefaults` under `kAdhkarLibraryKey`.
+- **`AdhkarEntry`** — one dhikr inside a collection. `audioRef` is a logical
+  ref (`"bundled:75.mp3"` or `"imported:abc.mp3"`), resolved at runtime via
+  `resolveAdhkarAudio()` — never store absolute paths.
+- **Bundled library** — `adhkar.json` (read-only starter library, sourced
+  from Hisn al-Muslim) + 27 MP3s in `Resources/adhkar_audio/`. The user pulls
+  from these via "Add from Library…". Never overwritten.
+- **Imported audio** — copied to `~/Library/Application Support/SalatTime/audio/`
+  on import via `importAdhkarAudio(from:)`. NOT in the app bundle (the bundle
+  is wiped on each `./update.sh` rebuild).
+- **Migration** — `migrateAdhkarDefaults()` runs once on first v3 launch,
+  seeding Morning (sunrise) + Evening (asr) collections from the bundled
+  library so existing v2 behavior is preserved. Idempotent via
+  `kAdhkarMigrated`.
+
+The main window's Adhkar tab hosts the editor: two-pane (collections list
+on the left, items on the right). Schedule (anchor + autoplay) is set via
+each collection row's right-click menu.
