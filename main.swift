@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.0-alpha.2"
+let kAppVersion          = "3.1.0-beta.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4683,6 +4683,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         let v = NSView()
         buildTwoPaneLayout(into: v)
         self.view = v
+        // Arabic-first: mirror the whole editor for RTL when the active
+        // language is right-to-left (Arabic / Urdu).
+        if Localizer.shared.isRTL { applyRTL(v) }
     }
 
     func tabDidActivate() {
@@ -4717,8 +4720,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         root.addSubview(leftWrap)
 
         let collectionsTitle = NSTextField(labelWithString: t("adhkar.editor.collections"))
-        collectionsTitle.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        collectionsTitle.font = Localizer.shared.font(size: 13, weight: .semibold)
         collectionsTitle.textColor = .secondaryLabelColor
+        collectionsTitle.alignment = Localizer.shared.isRTL ? .right : .left
+        collectionsTitle.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         collectionsTitle.translatesAutoresizingMaskIntoConstraints = false
         leftWrap.addSubview(collectionsTitle)
 
@@ -4749,7 +4754,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         root.addSubview(itemsContainer)
 
         itemsHeaderLabel = NSTextField(labelWithString: "")
-        itemsHeaderLabel.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+        itemsHeaderLabel.font = Localizer.shared.font(size: 17, weight: .semibold)
+        itemsHeaderLabel.alignment = Localizer.shared.isRTL ? .right : .left
+        itemsHeaderLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         itemsHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(itemsHeaderLabel)
 
@@ -4782,9 +4789,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         itemsContainer.addSubview(itemsScrollView)
 
         emptyStateLabel = NSTextField(labelWithString: t("adhkar.editor.no_collection_selected"))
-        emptyStateLabel.font = NSFont.systemFont(ofSize: 13)
+        emptyStateLabel.font = Localizer.shared.font(size: 13)
         emptyStateLabel.textColor = .tertiaryLabelColor
         emptyStateLabel.alignment = .center
+        emptyStateLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(emptyStateLabel)
 
@@ -4854,16 +4862,26 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         let row = CollectionRowView()
         row.translatesAutoresizingMaskIntoConstraints = false
         row.wantsLayer = true
-        row.layer?.cornerRadius = 6
+        row.layer?.cornerRadius = 8
         row.collectionID = c.id
         let isSel = (c.id == selectedCollectionID)
-        row.layer?.backgroundColor = isSel
-            ? NSColor.controlAccentColor.withAlphaComponent(0.14).cgColor
-            : NSColor.clear.cgColor
+
+        // Selection highlight using the app's accent-aware adaptive background
+        // (matches the prayer-row highlight pattern), not a raw layer tint.
+        if isSel {
+            let pair = currentAccentPair()
+            row.addSubview(AdaptiveBackgroundView(
+                frame: row.bounds,
+                light: pair.light.withAlphaComponent(0.14),
+                dark:  pair.dark.withAlphaComponent(0.22),
+                radius: 8))
+        }
 
         let nameLbl = NSTextField(labelWithString: c.name)
-        nameLbl.font = NSFont.systemFont(ofSize: 13, weight: isSel ? .semibold : .regular)
+        nameLbl.font = Localizer.shared.font(size: 13, weight: isSel ? .semibold : .regular)
         nameLbl.textColor = isSel ? .controlAccentColor : .labelColor
+        nameLbl.alignment = Localizer.shared.isRTL ? .right : .left
+        nameLbl.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         nameLbl.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(nameLbl)
 
@@ -4875,7 +4893,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             badgeText = scheduleLabel(c.anchorKind)
         }
         let badge = NSTextField(labelWithString: badgeText)
-        badge.font = NSFont.systemFont(ofSize: 10)
+        badge.font = Localizer.shared.font(size: 10)
+        badge.alignment = Localizer.shared.isRTL ? .right : .left
+        badge.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         badge.textColor = .tertiaryLabelColor
         badge.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(badge)
@@ -5093,21 +5113,29 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     }
 
     private func makeItemCard(_ entry: AdhkarEntry, index: Int, collectionIndex: Int) -> NSView {
-        let card = NSView()
-        card.wantsLayer = true
-        card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        card.layer?.cornerRadius = 8
+        // Card background using the app's AdaptiveBackgroundView (same pattern
+        // as the mosque-picker rows), not raw controlBackgroundColor.
+        let card = AdaptiveBackgroundView(
+            frame: NSRect(x: 0, y: 0, width: 100, height: 100),
+            light: NSColor(white: 0, alpha: 0.05),
+            dark:  NSColor(white: 1, alpha: 0.07),
+            radius: 10)
         card.translatesAutoresizingMaskIntoConstraints = false
 
         let arabic = NSTextField(wrappingLabelWithString: entry.arabic)
-        arabic.font = Localizer.shared.font(size: 16, weight: .medium)
+        arabic.font = Localizer.shared.font(size: 18, weight: .medium)
         arabic.alignment = .right
         arabic.baseWritingDirection = .rightToLeft
         arabic.textColor = .labelColor
         arabic.translatesAutoresizingMaskIntoConstraints = false
 
-        let meta = NSTextField(labelWithString: "↻ \(entry.count)×   ·   \(audioDisplayName(entry.audioRef))")
-        meta.font = NSFont.systemFont(ofSize: 11)
+        // Meta line: repeat count + audio source. Uses Cairo so the Arabic
+        // numerals/badge render consistently with the rest of the app.
+        let audioDesc = entry.audioRef.isEmpty ? t("adhkar.editor.audio.none") : audioDisplayName(entry.audioRef)
+        let meta = NSTextField(labelWithString: "↻ \(entry.count)×   ·   \(audioDesc)")
+        meta.font = Localizer.shared.font(size: 11)
+        meta.alignment = Localizer.shared.isRTL ? .right : .left
+        meta.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         meta.textColor = .tertiaryLabelColor
         meta.translatesAutoresizingMaskIntoConstraints = false
 
@@ -5388,8 +5416,10 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
         w.contentView = c
 
         let hint = NSTextField(wrappingLabelWithString: t("adhkar.editor.custom_hint"))
-        hint.font = NSFont.systemFont(ofSize: 11)
+        hint.font = Localizer.shared.font(size: 11)
         hint.textColor = .secondaryLabelColor
+        hint.alignment = Localizer.shared.isRTL ? .right : .left
+        hint.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         hint.translatesAutoresizingMaskIntoConstraints = false
         c.addSubview(hint)
 
@@ -5419,7 +5449,9 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
         c.addSubview(countStepper)
         countField = NSTextField(labelWithString: String(format: t("adhkar.editor.count_times"),
                                                           countStepper.integerValue))
-        countField.font = NSFont.systemFont(ofSize: 12)
+        countField.font = Localizer.shared.font(size: 12)
+        countField.alignment = Localizer.shared.isRTL ? .right : .left
+        countField.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         countField.translatesAutoresizingMaskIntoConstraints = false
         c.addSubview(countField)
 
@@ -5429,7 +5461,9 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
         virtueField.isEditable = true
         virtueField.isBordered = true
         virtueField.drawsBackground = true
-        virtueField.font = NSFont.systemFont(ofSize: 12)
+        virtueField.font = Localizer.shared.font(size: 12)
+        virtueField.alignment = Localizer.shared.isRTL ? .right : .left
+        virtueField.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         virtueField.translatesAutoresizingMaskIntoConstraints = false
         c.addSubview(virtueField)
 
@@ -5439,7 +5473,9 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
         sourceField.isEditable = true
         sourceField.isBordered = true
         sourceField.drawsBackground = true
-        sourceField.font = NSFont.systemFont(ofSize: 12)
+        sourceField.font = Localizer.shared.font(size: 12)
+        sourceField.alignment = Localizer.shared.isRTL ? .right : .left
+        sourceField.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         sourceField.translatesAutoresizingMaskIntoConstraints = false
         c.addSubview(sourceField)
 
@@ -5493,8 +5529,10 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
 
     private func makeLabel(_ s: String) -> NSTextField {
         let l = NSTextField(labelWithString: s)
-        l.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        l.font = Localizer.shared.font(size: 12, weight: .medium)
         l.textColor = .secondaryLabelColor
+        l.alignment = Localizer.shared.isRTL ? .right : .left
+        l.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         l.translatesAutoresizingMaskIntoConstraints = false
         return l
     }
@@ -5555,8 +5593,10 @@ final class AdhkarLibraryPickerSheet: NSWindowController, NSWindowDelegate,
         w.contentView = c
 
         let hint = NSTextField(labelWithString: t("adhkar.editor.library_pick"))
-        hint.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        hint.font = Localizer.shared.font(size: 12, weight: .medium)
         hint.textColor = .secondaryLabelColor
+        hint.alignment = Localizer.shared.isRTL ? .right : .left
+        hint.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         hint.translatesAutoresizingMaskIntoConstraints = false
         c.addSubview(hint)
 
@@ -5566,6 +5606,10 @@ final class AdhkarLibraryPickerSheet: NSWindowController, NSWindowDelegate,
         tableView.headerView = nil
         tableView.allowsMultipleSelection = true
         tableView.rowSizeStyle = .large
+        // RTL table for Arabic so rows read right-to-left.
+        if Localizer.shared.isRTL {
+            tableView.userInterfaceLayoutDirection = .rightToLeft
+        }
         let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("adhkar"))
         tableView.addTableColumn(col)
         let scroll = NSScrollView()
