@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.2"
+let kAppVersion          = "3.3.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4467,8 +4467,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     init() {
         let frame = NSRect(x: 0, y: 0, width: 920, height: 620)
         super.init(contentRect: frame,
-                   styleMask: [.titled, .closable, .miniaturizable, .resizable,
-                               .fullSizeContentView],
+                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                    backing: .buffered, defer: false)
         self.title = "Salat Time"
         self.titlebarAppearsTransparent = false
@@ -4503,33 +4502,35 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         let content = NSView(frame: self.contentLayoutRect)
         contentView = content
 
-        // Sidebar (left, ~180pt) + content area (right).
-        let sidebarWidth: CGFloat = 180
-        let sidebar = NSVisualEffectView()
-        sidebar.material = .sidebar
-        sidebar.blendingMode = .behindWindow
-        sidebar.state = .active
-        sidebar.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(sidebar)
+        // Nav bar at the TOP (was: sidebar on the left). Same views, just
+        // rearranged: pinned to top with fixed height instead of leading
+        // with fixed width. The tab stack is horizontal instead of vertical.
+        let navBarHeight: CGFloat = 44
+        let navBar = NSVisualEffectView()
+        navBar.material = .titlebar
+        navBar.blendingMode = .withinWindow
+        navBar.state = .active
+        navBar.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(navBar)
 
         contentContainer = NSView()
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
         content.addSubview(contentContainer)
 
-        // App title at top of sidebar
+        // App title on the leading side of the nav bar.
         let titleLabel = NSTextField(labelWithString: "Salat Time")
-        titleLabel.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
-        titleLabel.textColor = .labelColor
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        titleLabel.textColor = .secondaryLabelColor
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        sidebar.addSubview(titleLabel)
+        navBar.addSubview(titleLabel)
 
-        // Stack of tab buttons
+        // Horizontal stack of tab buttons on the trailing side.
         let stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .leading
-        stack.spacing = 4
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 6
         stack.translatesAutoresizingMaskIntoConstraints = false
-        sidebar.addSubview(stack)
+        navBar.addSubview(stack)
 
         sidebarButtons = []
         for tab in MainTab.allCases {
@@ -4539,22 +4540,26 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         }
 
         NSLayoutConstraint.activate([
-            sidebar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            sidebar.topAnchor.constraint(equalTo: content.topAnchor),
-            sidebar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
-            sidebar.widthAnchor.constraint(equalToConstant: sidebarWidth),
+            // Nav bar: full width across the top, fixed height.
+            navBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            navBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            navBar.topAnchor.constraint(equalTo: content.topAnchor),
+            navBar.heightAnchor.constraint(equalToConstant: navBarHeight),
 
-            contentContainer.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            // Content container: full width, BELOW the nav bar.
+            contentContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             contentContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            contentContainer.topAnchor.constraint(equalTo: content.topAnchor),
+            contentContainer.topAnchor.constraint(equalTo: navBar.bottomAnchor),
             contentContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
 
-            titleLabel.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 48),
-            titleLabel.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 20),
+            // Title on the leading edge, vertically centered.
+            titleLabel.leadingAnchor.constraint(equalTo: navBar.leadingAnchor, constant: 16),
+            titleLabel.centerYAnchor.constraint(equalTo: navBar.centerYAnchor),
 
-            stack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 24),
-            stack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
-            stack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -12),
+            // Tab buttons on the trailing edge, vertically centered.
+            stack.trailingAnchor.constraint(equalTo: navBar.trailingAnchor, constant: -12),
+            stack.centerYAnchor.constraint(equalTo: navBar.centerYAnchor),
+            stack.heightAnchor.constraint(equalToConstant: 28),
         ])
     }
 
@@ -4563,18 +4568,19 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         btn.isBordered = false
         btn.bezelStyle = .regularSquare
         btn.imagePosition = .imageLeading
-        btn.alignment = .left
-        btn.image = templateSymbol(tab.icon, pointSize: 15, weight: .regular)
+        btn.alignment = .center
+        btn.image = templateSymbol(tab.icon, pointSize: 13, weight: .regular)
         btn.image?.isTemplate = true
         btn.title = "  \(tab.title())"
-        btn.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        btn.font = NSFont.systemFont(ofSize: 12, weight: .regular)
         btn.contentTintColor = .secondaryLabelColor
         btn.attributedTitle = NSAttributedString(
             string: btn.title,
-            attributes: [.font: NSFont.systemFont(ofSize: 13),
+            attributes: [.font: NSFont.systemFont(ofSize: 12),
                          .foregroundColor: NSColor.secondaryLabelColor])
         btn.translatesAutoresizingMaskIntoConstraints = false
-        btn.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        btn.heightAnchor.constraint(equalToConstant: 28).isActive = true
+        btn.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
         btn.tag = tab.rawValue
         btn.target = self
         btn.action = #selector(sidebarClicked(_:))
