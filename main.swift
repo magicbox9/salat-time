@@ -6,6 +6,7 @@ import CoreAudio
 import CoreLocation
 import UserNotifications
 import ServiceManagement
+import UniformTypeIdentifiers
 
 // ============================================================================
 // MARK: Constants
@@ -57,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.0.0-alpha.1"
+let kAppVersion          = "3.0.0-alpha.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -628,7 +629,7 @@ enum AdhkarSet: String {
 /// Loads + filters the bundled `adhkar.json`. Cached after first load.
 enum AdhkarData {
     private static var cache: [String: [AdhkarItem]]?
-    private static func loadAll() -> [String: [AdhkarItem]] {
+    static func loadAll() -> [String: [AdhkarItem]] {
         if let c = cache { return c }
         guard let url = Bundle.main.url(forResource: "adhkar", withExtension: "json"),
               let data = try? Data(contentsOf: url),
@@ -789,6 +790,93 @@ func adhkarAudioStorageDir() -> URL {
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
     }
     return dir
+}
+
+/// One entry in the audio picker UI — bundled recitation or imported file.
+struct AdhkarAudioOption: Identifiable, Equatable {
+    let id: String          // the audioRef ("bundled:75.mp3" / "imported:abc.mp3")
+    let displayName: String // what the user sees in the popup
+    let isBundled: Bool
+}
+
+/// Lists all audio available to the adhkar picker: the bundled recitations
+/// (from adhkar.json) plus any user-imported files in app-support. The
+/// editor popup shows these in alphabetical order.
+func adhkarAudioOptions() -> [AdhkarAudioOption] {
+    var out: [AdhkarAudioOption] = []
+    // Bundled — dedupe by filename across morning+evening sets.
+    var seen = Set<String>()
+    let raw = AdhkarData.loadAll()
+    for setKey in [AdhkarSet.morning.rawValue, AdhkarSet.evening.rawValue] {
+        for item in raw[setKey] ?? [] {
+            if seen.insert(item.audio_file).inserted {
+                let ref = "bundled:\(item.audio_file)"
+                out.append(AdhkarAudioOption(id: ref,
+                                              displayName: "Bundled · \(item.audio_file)",
+                                              isBundled: true))
+            }
+        }
+    }
+    // Imported — anything in app-support/audio.
+    let dir = adhkarAudioStorageDir()
+    if let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) {
+        for name in names.sorted() {
+            let lower = name.lowercased()
+            guard lower.hasSuffix(".mp3") || lower.hasSuffix(".m4a") || lower.hasSuffix(".aac") || lower.hasSuffix(".wav") else { continue }
+            let ref = "imported:\(name)"
+            out.append(AdhkarAudioOption(id: ref,
+                                          displayName: "Imported · \(name)",
+                                          isBundled: false))
+        }
+    }
+    return out
+}
+
+/// Imports a user-selected audio file into app-support and returns the
+/// `audioRef` ("imported:<filename>") on success, or nil on failure.
+/// Copies (not moves) so the user's source file is untouched. Filenames are
+/// de-duplicated by appending a counter if a name collision occurs.
+@discardableResult
+func importAdhkarAudio(from sourceURL: URL) -> String? {
+    let dir = adhkarAudioStorageDir()
+    var dest = dir.appendingPathComponent(sourceURL.lastPathComponent)
+    // De-dup: if the file exists, append " 2", " 3", … before the extension.
+    if FileManager.default.fileExists(atPath: dest.path) {
+        let ext = dest.pathExtension
+        let base = dest.deletingPathExtension().lastPathComponent
+        var i = 2
+        repeat {
+            let candidate = dir.appendingPathComponent("\(base) \(i).\(ext)")
+            if !FileManager.default.fileExists(atPath: candidate.path) {
+                dest = candidate; break
+            }
+            i += 1
+        } while i < 1000
+    }
+    do {
+        // .copyItem refuses to cross certain volume boundaries; use Data for safety.
+        let data = try Data(contentsOf: sourceURL)
+        try data.write(to: dest, options: [.atomic])
+        return "imported:\(dest.lastPathComponent)"
+    } catch {
+        return nil
+    }
+}
+
+/// Presents the audio-open panel and returns the imported audioRef, or nil
+/// if the user cancelled. Filtered to common audio formats.
+func presentAudioImportPanel() -> String? {
+    let panel = NSOpenPanel()
+    panel.canChooseFiles = true
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = false
+    panel.allowsOtherFileTypes = false
+    panel.prompt = t("adhkar.import_audio")
+    panel.allowedContentTypes = [
+        .mp3, .mpeg4Audio, .wav, .aiff
+    ]
+    guard panel.runModal() == .OK, let url = panel.url else { return nil }
+    return importAdhkarAudio(from: url)
 }
 
 /// Drives adhkar playback. Owns its own `AVAudioPlayer` (separate from the
