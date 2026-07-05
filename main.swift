@@ -6513,18 +6513,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         changeBtn.setFrameOrigin(NSPoint(x: centers[1] - btnSize.width/2, y: btnY))
         content.addSubview(changeBtn)
 
-        // Theme button — appearance (System/Light/Dark), accent color, and
-        // Opaque vs Liquid Glass material — all from a single menu so the
-        // user doesn't have to open Settings for common visual tweaks.
-        let themeBtn = HoverIconButton(
-            symbol: "paintpalette.fill",
-            toolTip: t("tooltip.theme"),
+        // Adhkar button — opens the adhkar manager window directly, so the
+        // user doesn't have to right-click → "Open Main Window…".
+        // (Theme tweaks are still available in Settings → Appearance.)
+        let adhkarBtn = HoverIconButton(
+            symbol: "text.book.closed.fill",
+            toolTip: t("adhkar.editor.title"),
             target: self,
-            action: #selector(themeBtnTapped(_:)),
+            action: #selector(menuOpenMainWindow),
             pointSize: 15,
             size: btnSize)
-        themeBtn.setFrameOrigin(NSPoint(x: centers[2] - btnSize.width/2, y: btnY))
-        content.addSubview(themeBtn)
+        adhkarBtn.setFrameOrigin(NSPoint(x: centers[2] - btnSize.width/2, y: btnY))
+        content.addSubview(adhkarBtn)
 
         let settingsBtn = HoverIconButton(
             symbol: "gearshape.fill",
