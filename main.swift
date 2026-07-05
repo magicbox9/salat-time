@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.0.0"
+let kAppVersion          = "3.1.0-alpha.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -622,11 +622,56 @@ struct AdhkarItem: Codable {
 
 /// Which set to recite. Morning adhkar are recited after Fajr / around sunrise;
 /// evening adhkar after Asr / around Maghrib.
-enum AdhkarSet: String {
+/// Which set to recite. v3.1 expanded from morning/evening to the full
+/// daily-use catalog from Hisn al-Muslim (sleep, waking, post-prayer, etc.).
+enum AdhkarSet: String, CaseIterable {
     case morning, evening
+    case postPrayer = "post_prayer"
+    case sleep
+    case waking
+    case afterAblution = "after_ablution"
+    case enteringMosque = "entering_mosque"
+    case leavingMosque = "leaving_mosque"
+    case beforeEating = "before_eating"
+    case afterEating = "after_eating"
+    case enteringHome = "entering_home"
+    case leavingHome = "leaving_home"
+    case distress
+    case forgiveness
+
+    /// Localized Arabic display name for this set.
+    var arabicName: String {
+        switch self {
+        case .morning:        return "أذكار الصباح"
+        case .evening:        return "أذكار المساء"
+        case .postPrayer:     return "أذكار بعد الصلاة"
+        case .sleep:          return "أذكار النوم"
+        case .waking:         return "أذكار الاستيقاظ"
+        case .afterAblution:  return "أذكار بعد الوضوء"
+        case .enteringMosque: return "أذكار دخول المسجد"
+        case .leavingMosque:  return "أذكار الخروج من المسجد"
+        case .beforeEating:   return "أذكار قبل الطعام"
+        case .afterEating:    return "أذكار بعد الطعام"
+        case .enteringHome:   return "أذكار دخول المنزل"
+        case .leavingHome:    return "أذكار الخروج من المنزل"
+        case .distress:       return "أذكار الكرب والهم"
+        case .forgiveness:    return "أذكار الاستغفار والتوبة"
+        }
+    }
+    /// Default schedule anchor for auto-play ("manual" = no schedule).
+    var defaultAnchor: String {
+        switch self {
+        case .morning:  return "shuruq"
+        case .evening:  return "asr"
+        case .sleep:    return "isha"
+        default:        return "manual"
+        }
+    }
 }
 
 /// Loads + filters the bundled `adhkar.json`. Cached after first load.
+/// v3.1: loads ALL categories dynamically (any key whose value is an array),
+/// not just morning/evening.
 enum AdhkarData {
     private static var cache: [String: [AdhkarItem]]?
     static func loadAll() -> [String: [AdhkarItem]] {
@@ -636,16 +681,15 @@ enum AdhkarData {
               let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return [:]
         }
-        // Parse loosely so a metadata key like "_meta" (a dict, not an array)
-        // doesn't fail the whole decode. Only arrays under known set keys are
-        // converted into AdhkarItem lists.
+        // Parse loosely: any top-level key whose value is an array becomes an
+        // AdhkarItem list. Metadata keys (dicts like "_meta") are skipped.
         let decoder = JSONDecoder()
         var out: [String: [AdhkarItem]] = [:]
-        for set in [AdhkarSet.morning, .evening] {
-            guard let arr = raw[set.rawValue] else { continue }
+        for (key, val) in raw {
+            guard let arr = val as? [Any] else { continue }  // skip non-arrays
             if let jsonData = try? JSONSerialization.data(withJSONObject: arr),
                let items = try? decoder.decode([AdhkarItem].self, from: jsonData) {
-                out[set.rawValue] = items
+                out[key] = items
             }
         }
         cache = out
@@ -653,6 +697,10 @@ enum AdhkarData {
     }
     static func items(for set: AdhkarSet) -> [AdhkarItem] {
         loadAll()[set.rawValue] ?? []
+    }
+    /// v3.1: items for a raw category key (e.g. "post_prayer").
+    static func items(forKey key: String) -> [AdhkarItem] {
+        loadAll()[key] ?? []
     }
 }
 
@@ -737,6 +785,8 @@ enum AdhkarLibrary {
 /// One-time migration from v2's fixed morning/evening sets to v3 collections.
 /// Seeds "Morning" (sunrise anchor) + "Evening" (asr anchor) from the bundled
 /// library on first run of v3. Idempotent via `kAdhkarMigrated` flag.
+/// One-time v2→v3 migration: seeds Morning + Evening collections from the
+/// bundled library on first run of v3. Idempotent via `kAdhkarMigrated`.
 func migrateAdhkarDefaults() {
     let migrated = UserDefaults.standard.bool(forKey: kAdhkarMigrated)
     if migrated { return }
@@ -745,22 +795,60 @@ func migrateAdhkarDefaults() {
         UserDefaults.standard.set(true, forKey: kAdhkarMigrated)
         return
     }
-    let morningItems = AdhkarData.items(for: .morning).map { AdhkarEntry(from: $0) }
-    let eveningItems = AdhkarData.items(for: .evening).map { AdhkarEntry(from: $0) }
-    // Respect the user's v2 anchor prefs if they changed them.
+    seedAllDefaultCollections()
+    UserDefaults.standard.set(true, forKey: kAdhkarMigrated)
+}
+
+/// v3.1 migration: adds the expanded catalog (sleep, waking, post-prayer,
+/// etc.) to users who already migrated on v3.0.0 (which only seeded
+/// morning/evening). Idempotent — only adds collections that don't already
+/// exist by name, so user edits are never clobbered.
+func migrateAdhkarExpandedCatalog() {
+    let expanded = UserDefaults.standard.bool(forKey: "adhkarCatalogExpanded_v31")
+    if expanded { return }
+    var existing = AdhkarLibrary.load()
+    let existingNames = Set(existing.map { $0.name })
+    // Respect the user's v2 anchor prefs for morning/evening.
     let mAnchor = UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq"
     let eAnchor = UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr"
     let autoOn  = UserDefaults.standard.object(forKey: kAdhkarEnabled) != nil
-                  ? UserDefaults.standard.bool(forKey: kAdhkarEnabled)
-                  : true
-    let seeded: [AdhkarCollection] = [
-        AdhkarCollection(name: t("adhkar.morning_title"), anchorKind: mAnchor,
-                         autoPlay: autoOn, items: morningItems),
-        AdhkarCollection(name: t("adhkar.evening_title"), anchorKind: eAnchor,
-                         autoPlay: autoOn, items: eveningItems),
-    ]
+                  ? UserDefaults.standard.bool(forKey: kAdhkarEnabled) : true
+    for set in AdhkarSet.allCases {
+        let name = set.arabicName
+        if existingNames.contains(name) { continue }  // don't clobber
+        let items = AdhkarData.items(for: set).map { AdhkarEntry(from: $0) }
+        guard !items.isEmpty else { continue }
+        // Override anchors for morning/evening from v2 prefs.
+        var anchor = set.defaultAnchor
+        if set == .morning { anchor = mAnchor }
+        if set == .evening { anchor = eAnchor }
+        // Only morning/evening/sleep auto-play by default; the rest are manual.
+        let plays = (set == .morning || set == .evening) ? autoOn : false
+        existing.append(AdhkarCollection(name: name, anchorKind: anchor,
+                                          autoPlay: plays, items: items))
+    }
+    AdhkarLibrary.save(existing)
+    UserDefaults.standard.set(true, forKey: "adhkarCatalogExpanded_v31")
+}
+
+/// Seeds the full default catalog (used by the v2→v3 first-run migration).
+func seedAllDefaultCollections() {
+    let mAnchor = UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq"
+    let eAnchor = UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr"
+    let autoOn  = UserDefaults.standard.object(forKey: kAdhkarEnabled) != nil
+                  ? UserDefaults.standard.bool(forKey: kAdhkarEnabled) : true
+    var seeded: [AdhkarCollection] = []
+    for set in AdhkarSet.allCases {
+        let items = AdhkarData.items(for: set).map { AdhkarEntry(from: $0) }
+        guard !items.isEmpty else { continue }
+        var anchor = set.defaultAnchor
+        if set == .morning { anchor = mAnchor }
+        if set == .evening { anchor = eAnchor }
+        let plays = (set == .morning || set == .evening) ? autoOn : false
+        seeded.append(AdhkarCollection(name: set.arabicName, anchorKind: anchor,
+                                       autoPlay: plays, items: items))
+    }
     AdhkarLibrary.save(seeded)
-    UserDefaults.standard.set(true, forKey: kAdhkarMigrated)
 }
 
 /// Resolves an `audioRef` to a playable URL, or nil if not found.
@@ -5651,8 +5739,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
 
         registerCairoFonts()
-        // One-time v2→v3 migration: seed default morning/evening collections.
+        // One-time migrations: v2→v3 (morning/evening) + v3.1 (expanded catalog).
         migrateAdhkarDefaults()
+        migrateAdhkarExpandedCatalog()
         Localizer.shared.onChange = { [weak self] in self?.applyLanguageChange() }
 
         loadCachedInfo()
