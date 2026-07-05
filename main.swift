@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.0-alpha.1"
+let kAppVersion          = "3.1.0-alpha.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4880,6 +4880,18 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         badge.translatesAutoresizingMaskIntoConstraints = false
         row.addSubview(badge)
 
+        // Play button — opens the floating panel and starts recitation.
+        // This replaces the removed right-click menu's morning/evening entries.
+        let playBtn = HoverIconButton(symbol: "play.fill",
+                                       toolTip: t("adhkar.play"),
+                                       target: self,
+                                       action: #selector(playCollection(_:)),
+                                       pointSize: 12,
+                                       size: NSSize(width: 28, height: 24))
+        playBtn.translatesAutoresizingMaskIntoConstraints = false
+        playBtn.identifier = NSUserInterfaceItemIdentifier(c.id.uuidString)
+        row.addSubview(playBtn)
+
         // Select on click
         let click = NSClickGestureRecognizer(target: self, action: #selector(selectCollection(_:)))
         row.addGestureRecognizer(click)
@@ -4961,6 +4973,15 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         selectedCollectionID = id
         rebuildCollectionList()
         rebuildItemsPane()
+    }
+
+    /// Play button on a collection row — opens the floating panel and starts
+    /// reciting the collection. Replaces the removed right-click menu entries.
+    @objc private func playCollection(_ sender: HoverIconButton) {
+        guard let idStr = sender.identifier?.rawValue,
+              let id = UUID(uuidString: idStr),
+              let idx = collections.firstIndex(where: { $0.id == id }) else { return }
+        appDelegate?.presentAdhkar(collection: collections[idx], autoPlay: true)
     }
 
     @objc private func renameCollection(_ g: NSClickGestureRecognizer) {
@@ -5869,19 +5890,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         menu.addItem(NSMenuItem(title: t("menu.choose"),   action: #selector(menuChoose),   keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: t("menu.settings"), action: #selector(menuSettings), keyEquivalent: ","))
 
-        // Adhkar submenu — manual entry to the morning/evening recitations.
-        let adhkarItem = NSMenuItem(title: t("menu.adhkar"), action: nil, keyEquivalent: "")
-        let adhkarSub = NSMenu()
-        adhkarSub.addItem(NSMenuItem(title: t("adhkar.morning_title"),
-                                       action: #selector(menuAdhkarMorning(_:)),
-                                       keyEquivalent: ""))
-        adhkarSub.addItem(NSMenuItem(title: t("adhkar.evening_title"),
-                                       action: #selector(menuAdhkarEvening(_:)),
-                                       keyEquivalent: ""))
-        adhkarItem.submenu = adhkarSub
-        menu.addItem(adhkarItem)
-
-        // Open the full main window (management UI).
+        // Open the full main window (management UI) — the single entry point
+        // for browsing, reciting, and editing adhkar.
         menu.addItem(NSMenuItem(title: t("menu.main_window"),
                                  action: #selector(menuOpenMainWindow),
                                  keyEquivalent: "o"))
@@ -5922,9 +5932,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         if !popover.isShown { togglePopover() }
         showSettings()
     }
-    @objc func menuAdhkarMorning(_ sender: NSMenuItem) { presentAdhkar(set: .morning, autoPlay: true) }
-    @objc func menuAdhkarEvening(_ sender: NSMenuItem) { presentAdhkar(set: .evening, autoPlay: true) }
-
     /// Open the main management window (v3). Lazily builds the window + its
     /// tab factory on first call.
     @objc func menuOpenMainWindow() { openMainWindow(tab: .adhkar) }
