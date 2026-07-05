@@ -57,6 +57,11 @@ let kLastAdhkarEvening   = "lastAdhkarEvening"
 let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
+/// Adhkar playback volume (0.0–1.0). Default 1.0.
+let kAdhkarVolume        = "adhkarVolume"
+/// CoreAudio device UID for adhkar audio output ("" = system default).
+/// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
+let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
 let kAppVersion          = "3.5.0-beta.1"
 
@@ -1121,7 +1126,13 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
         }
         player = p
         p.delegate = self
-        p.volume = isMuted ? 0 : 1.0
+        // Apply volume from settings (default 1.0), silenced if muted.
+        let savedVolume = UserDefaults.standard.float(forKey: kAdhkarVolume)
+        let vol = savedVolume > 0 ? savedVolume : 1.0
+        p.volume = isMuted ? 0 : vol
+        // Route to the selected output device (mirrors playAdhan's routing).
+        let wantedUID = UserDefaults.standard.string(forKey: kAdhkarAudioDevice) ?? ""
+        if !wantedUID.isEmpty { p.currentDevice = wantedUID }
         p.prepareToPlay()
         if p.play() {
             isPlaying = true
@@ -5797,6 +5808,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         if UserDefaults.standard.object(forKey: kAdhkarEveningAnchor) == nil {
             UserDefaults.standard.set("asr", forKey: kAdhkarEveningAnchor)
+        }
+        if UserDefaults.standard.object(forKey: kAdhkarVolume) == nil {
+            UserDefaults.standard.set(1.0, forKey: kAdhkarVolume)
         }
 
         registerCairoFonts()
