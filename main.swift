@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.0.0-alpha.2"
+let kAppVersion          = "3.0.0-alpha.3"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4266,6 +4266,275 @@ final class SettingsView: FlippedView {
 }
 
 // ============================================================================
+// MARK: Main window — full management UI (v3)
+// ============================================================================
+// The app stays a menu-bar app by default (LSUIElement=true, .accessory
+// policy). When the main window opens we flip to .regular so a dock icon
+// appears, and flip back to .accessory when it closes — keeping the
+// "tray-only" feel when the user isn't actively managing things.
+//
+// The window hosts a sidebar of tab buttons on the left and a content area
+// on the right. Tabs: Prayer Times / Adhkar / Adhan / Settings. Each tab's
+// content view is built lazily and cached so switching is instant.
+
+/// Identifies a main-window tab.
+enum MainTab: Int, CaseIterable {
+    case prayerTimes = 0
+    case adhkar      = 1
+    case adhan       = 2
+    case settings    = 3
+
+    var icon: String {
+        switch self {
+        case .prayerTimes: return "clock.fill"
+        case .adhkar:      return "text.book.closed.fill"
+        case .adhan:       return "speaker.wave.3.fill"
+        case .settings:    return "gearshape.fill"
+        }
+    }
+    func title() -> String {
+        switch self {
+        case .prayerTimes: return t("main.tab.prayer_times")
+        case .adhkar:      return t("main.tab.adhkar")
+        case .adhan:       return t("main.tab.adhan")
+        case .settings:    return t("main.tab.settings")
+        }
+    }
+}
+
+protocol MainTabContent: NSViewController {
+    /// Called whenever the tab becomes visible (e.g. to refresh data).
+    func tabDidActivate()
+}
+
+final class MainWindow: NSWindow, NSWindowDelegate {
+
+    private var sidebarButtons: [NSButton] = []
+    private var contentContainer: NSView!
+    /// One cached view controller per tab. Built lazily on first show.
+    private var tabControllers: [MainTab: NSViewController] = [:]
+    private var currentTab: MainTab = .prayerTimes
+
+    /// Factory closures so the window doesn't need to know how to build each
+    /// tab — the AppDelegate supplies them. Keeps MainWindow decoupled from
+    /// the rest of the code.
+    var tabFactory: ((MainTab) -> NSViewController?)?
+
+    init() {
+        let frame = NSRect(x: 0, y: 0, width: 920, height: 620)
+        super.init(contentRect: frame,
+                   styleMask: [.titled, .closable, .miniaturizable, .resizable,
+                               .fullSizeContentView],
+                   backing: .buffered, defer: false)
+        self.title = "Salat Time"
+        self.titlebarAppearsTransparent = false
+        self.center()
+        self.isReleasedWhenClosed = false
+        self.minSize = NSSize(width: 720, height: 520)
+        self.delegate = self
+        buildShell()
+    }
+
+    // MARK: - public
+
+    /// Show the window, switch to dock mode so it gets an icon, and bring to
+    /// front. Called from the menu item / dock activation.
+    func showMainWindow(tab: MainTab = .adhkar) {
+        NSApp.setActivationPolicy(.regular)
+        makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        selectTab(tab)
+    }
+
+    // MARK: - NSWindowDelegate
+
+    func windowWillClose(_ notification: Notification) {
+        // Back to tray-only mode so the dock icon disappears.
+        NSApp.setActivationPolicy(.accessory)
+    }
+
+    // MARK: - shell build
+
+    private func buildShell() {
+        let content = NSView(frame: self.contentLayoutRect)
+        contentView = content
+
+        // Sidebar (left, ~180pt) + content area (right).
+        let sidebarWidth: CGFloat = 180
+        let sidebar = NSVisualEffectView()
+        sidebar.material = .sidebar
+        sidebar.blendingMode = .behindWindow
+        sidebar.state = .active
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(sidebar)
+
+        contentContainer = NSView()
+        contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(contentContainer)
+
+        // App title at top of sidebar
+        let titleLabel = NSTextField(labelWithString: "Salat Time")
+        titleLabel.font = NSFont.systemFont(ofSize: 16, weight: .semibold)
+        titleLabel.textColor = .labelColor
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(titleLabel)
+
+        // Stack of tab buttons
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 4
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(stack)
+
+        sidebarButtons = []
+        for tab in MainTab.allCases {
+            let btn = makeSidebarButton(tab)
+            sidebarButtons.append(btn)
+            stack.addArrangedSubview(btn)
+        }
+
+        NSLayoutConstraint.activate([
+            sidebar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: content.topAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            sidebar.widthAnchor.constraint(equalToConstant: sidebarWidth),
+
+            contentContainer.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            contentContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            contentContainer.topAnchor.constraint(equalTo: content.topAnchor),
+            contentContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+
+            titleLabel.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 48),
+            titleLabel.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 20),
+
+            stack.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 24),
+            stack.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -12),
+        ])
+    }
+
+    private func makeSidebarButton(_ tab: MainTab) -> NSButton {
+        let btn = NSButton()
+        btn.isBordered = false
+        btn.bezelStyle = .regularSquare
+        btn.imagePosition = .imageLeading
+        btn.alignment = .left
+        btn.image = templateSymbol(tab.icon, pointSize: 15, weight: .regular)
+        btn.image?.isTemplate = true
+        btn.title = "  \(tab.title())"
+        btn.font = NSFont.systemFont(ofSize: 13, weight: .regular)
+        btn.contentTintColor = .secondaryLabelColor
+        btn.attributedTitle = NSAttributedString(
+            string: btn.title,
+            attributes: [.font: NSFont.systemFont(ofSize: 13),
+                         .foregroundColor: NSColor.secondaryLabelColor])
+        btn.translatesAutoresizingMaskIntoConstraints = false
+        btn.heightAnchor.constraint(equalToConstant: 34).isActive = true
+        btn.tag = tab.rawValue
+        btn.target = self
+        btn.action = #selector(sidebarClicked(_:))
+        btn.wantsLayer = true
+        btn.layer?.cornerRadius = 6
+        return btn
+    }
+
+    @objc private func sidebarClicked(_ sender: NSButton) {
+        guard let tab = MainTab(rawValue: sender.tag) else { return }
+        selectTab(tab)
+    }
+
+    func selectTab(_ tab: MainTab) {
+        currentTab = tab
+        // Update sidebar highlight
+        for (i, btn) in sidebarButtons.enumerated() {
+            let isActive = (MainTab.allCases[i] == tab)
+            btn.attributedTitle = NSAttributedString(
+                string: btn.title,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 13,
+                                              weight: isActive ? .semibold : .regular),
+                    .foregroundColor: isActive ? NSColor.controlAccentColor
+                                               : NSColor.secondaryLabelColor,
+                ])
+            btn.layer?.backgroundColor = isActive
+                ? NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
+                : NSColor.clear.cgColor
+        }
+        // Swap content view
+        contentContainer.subviews.forEach { $0.removeFromSuperview() }
+        let vc: NSViewController
+        if let cached = tabControllers[tab] {
+            vc = cached
+        } else if let made = tabFactory?(tab) {
+            tabControllers[tab] = made
+            vc = made
+        } else {
+            // Placeholder for tabs not yet implemented.
+            let ph = NSViewController()
+            ph.view = makePlaceholder(tab.title())
+            vc = ph
+            tabControllers[tab] = vc
+        }
+        // Embed
+        vc.view.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.addSubview(vc.view)
+        NSLayoutConstraint.activate([
+            vc.view.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            vc.view.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            vc.view.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            vc.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+        ])
+        if let activatable = vc as? MainTabContent {
+            activatable.tabDidActivate()
+        }
+    }
+
+    private func makePlaceholder(_ name: String) -> NSView {
+        let v = NSView()
+        let l = NSTextField(labelWithString: name)
+        l.font = NSFont.systemFont(ofSize: 20, weight: .medium)
+        l.textColor = .tertiaryLabelColor
+        l.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(l)
+        NSLayoutConstraint.activate([
+            l.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            l.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+        ])
+        return v
+    }
+}
+
+// ============================================================================
+// MARK: Adhkar editor (stub — full UI arrives in phase 4)
+// ============================================================================
+/// Placeholder controller. Phase 4 replaces this with the real two-pane
+/// editor (collection list + items pane). Kept as a thin stub now so the
+/// main window's tab factory has something to instantiate.
+final class AdhkarEditorViewController: NSViewController, MainTabContent {
+    weak var appDelegate: AppDelegate?
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func loadView() {
+        let v = NSView()
+        let l = NSTextField(labelWithString: t("adhkar.editor.coming_soon"))
+        l.font = NSFont.systemFont(ofSize: 16, weight: .medium)
+        l.textColor = .tertiaryLabelColor
+        l.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(l)
+        NSLayoutConstraint.activate([
+            l.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            l.centerYAnchor.constraint(equalTo: v.centerYAnchor),
+        ])
+        self.view = v
+    }
+    func tabDidActivate() {}
+}
+
+// ============================================================================
 // MARK: AppDelegate
 // ============================================================================
 class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
@@ -4282,6 +4551,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// Floating adhkar window. Lazily instantiated on first use (auto-trigger
     /// or manual menu open) so it costs nothing until needed.
     var adhkarPanel: AdhkarPanel?
+
+    /// Full management window (v3). Lazily instantiated on first open.
+    var mainWindow: MainWindow?
 
     var info = MosqueInfo()
 
@@ -4536,6 +4808,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         adhkarItem.submenu = adhkarSub
         menu.addItem(adhkarItem)
 
+        // Open the full main window (management UI).
+        menu.addItem(NSMenuItem(title: t("menu.main_window"),
+                                 action: #selector(menuOpenMainWindow),
+                                 keyEquivalent: "o"))
+
         // Favorites submenu
         let favs = loadFavorites()
         if !favs.isEmpty {
@@ -4574,6 +4851,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
     @objc func menuAdhkarMorning(_ sender: NSMenuItem) { presentAdhkar(set: .morning, autoPlay: true) }
     @objc func menuAdhkarEvening(_ sender: NSMenuItem) { presentAdhkar(set: .evening, autoPlay: true) }
+
+    /// Open the main management window (v3). Lazily builds the window + its
+    /// tab factory on first call.
+    @objc func menuOpenMainWindow() { openMainWindow(tab: .adhkar) }
+    func openMainWindow(tab: MainTab = .adhkar) {
+        if mainWindow == nil {
+            let w = MainWindow()
+            w.tabFactory = { [weak self] tab -> NSViewController? in
+                guard let self = self else { return nil }
+                switch tab {
+                case .adhkar:
+                    return AdhkarEditorViewController(appDelegate: self)
+                default:
+                    return nil  // other tabs fall back to placeholder for now
+                }
+            }
+            mainWindow = w
+        }
+        mainWindow?.showMainWindow(tab: tab)
+    }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
         guard favs.indices.contains(sender.tag) else { return }

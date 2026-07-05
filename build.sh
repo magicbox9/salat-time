@@ -305,7 +305,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "Next dhikr",
     "adhkar.prev": "Previous dhikr",
     "settings.section.adhkar": "Adhkar",
-    "settings.adhkar.auto": "Auto-recite morning & evening adhkar"
+    "settings.adhkar.auto": "Auto-recite morning & evening adhkar",
+    "main.tab.prayer_times": "Prayer Times",
+    "main.tab.adhkar": "Adhkar",
+    "main.tab.adhan": "Adhan",
+    "main.tab.settings": "Settings",
+    "menu.main_window": "Open Main Window…",
+    "adhkar.editor.coming_soon": "Adhkar editor — coming in the next build"
   },
   "fr": {
     "col.prayer": "Prière",
@@ -424,7 +430,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "Dhikr suivant",
     "adhkar.prev": "Dhikr précédent",
     "settings.section.adhkar": "Adhkār",
-    "settings.adhkar.auto": "Réciter automatiquement les adhkār du matin et du soir"
+    "settings.adhkar.auto": "Réciter automatiquement les adhkār du matin et du soir",
+    "main.tab.prayer_times": "Heures de Prière",
+    "main.tab.adhkar": "Adhkār",
+    "main.tab.adhan": "Adhān",
+    "main.tab.settings": "Réglages",
+    "menu.main_window": "Ouvrir la fenêtre principale…",
+    "adhkar.editor.coming_soon": "Éditeur d'adhkār — dans la prochaine version"
   },
   "es": {
     "col.prayer": "Oración",
@@ -538,7 +550,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "Dhikr siguiente",
     "adhkar.prev": "Dhikr anterior",
     "settings.section.adhkar": "Adhkār",
-    "settings.adhkar.auto": "Recitar automáticamente los adhkār de la mañana y la tarde"
+    "settings.adhkar.auto": "Recitar automáticamente los adhkār de la mañana y la tarde",
+    "main.tab.prayer_times": "Horarios de Oración",
+    "main.tab.adhkar": "Adhkār",
+    "main.tab.adhan": "Adhān",
+    "main.tab.settings": "Ajustes",
+    "menu.main_window": "Abrir ventana principal…",
+    "adhkar.editor.coming_soon": "Editor de adhkār — en la próxima versión"
   },
   "ar": {
     "col.prayer": "الصلاة",
@@ -657,7 +675,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "الذكر التالي",
     "adhkar.prev": "الذكر السابق",
     "settings.section.adhkar": "الأذكار",
-    "settings.adhkar.auto": "تلاوة أذكار الصباح والمساء تلقائيًا"
+    "settings.adhkar.auto": "تلاوة أذكار الصباح والمساء تلقائيًا",
+    "main.tab.prayer_times": "مواقيت الصلاة",
+    "main.tab.adhkar": "الأذكار",
+    "main.tab.adhan": "الأذان",
+    "main.tab.settings": "الإعدادات",
+    "menu.main_window": "فتح النافذة الرئيسية…",
+    "adhkar.editor.coming_soon": "محرر الأذكار — في الإصدار القادم"
   },
   "zh": {
     "col.prayer": "礼拜",
@@ -769,7 +793,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "下一条",
     "adhkar.prev": "上一条",
     "settings.section.adhkar": "赞词",
-    "settings.adhkar.auto": "自动诵读晨间与晚间赞词"
+    "settings.adhkar.auto": "自动诵读晨间与晚间赞词",
+    "main.tab.prayer_times": "礼拜时间",
+    "main.tab.adhkar": "赞词",
+    "main.tab.adhan": "宣礼",
+    "main.tab.settings": "设置",
+    "menu.main_window": "打开主窗口…",
+    "adhkar.editor.coming_soon": "赞词编辑器 — 将在下个版本推出"
   },
   "hi": {
     "col.prayer": "नमाज़",
@@ -881,7 +911,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "अगला ज़िक्र",
     "adhkar.prev": "पिछला ज़िक्र",
     "settings.section.adhkar": "अज़्कार",
-    "settings.adhkar.auto": "सुबह और शाम के अज़्कार स्वतः पढ़ें"
+    "settings.adhkar.auto": "सुबह और शाम के अज़्कार स्वतः पढ़ें",
+    "main.tab.prayer_times": "नमाज़ के समय",
+    "main.tab.adhkar": "अज़्कार",
+    "main.tab.adhan": "अज़ान",
+    "main.tab.settings": "सेटिंग्स",
+    "menu.main_window": "मुख्य विंडो खोलें…",
+    "adhkar.editor.coming_soon": "अज़्कार संपादक — अगले संस्करण में"
   },
   "bn": {
     "col.prayer": "নামাজ",
@@ -993,7 +1029,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "পরবর্তী জিকর",
     "adhkar.prev": "পূর্ববর্তী জিকর",
     "settings.section.adhkar": "আজকার",
-    "settings.adhkar.auto": "সকাল ও সন্ধ্যার আজকার স্বয়ংক্রিয়ভাবে পাঠ করুন"
+    "settings.adhkar.auto": "সকাল ও সন্ধ্যার আজকার স্বয়ংক্রিয়ভাবে পাঠ করুন",
+    "main.tab.prayer_times": "নামাজের সময়",
+    "main.tab.adhkar": "আজকার",
+    "main.tab.adhan": "আজান",
+    "main.tab.settings": "সেটিংস",
+    "menu.main_window": "মূল উইন্ডো খুলুন…",
+    "adhkar.editor.coming_soon": "আজকার সম্পাদক — পরবর্তী সংস্করণে"
   },
   "ru": {
     "col.prayer": "Молитва",
@@ -1105,7 +1147,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "Следующий зикр",
     "adhkar.prev": "Предыдущий зикр",
     "settings.section.adhkar": "Азкар",
-    "settings.adhkar.auto": "Автоматически читать утренние и вечерние азкар"
+    "settings.adhkar.auto": "Автоматически читать утренние и вечерние азкар",
+    "main.tab.prayer_times": "Времена молитв",
+    "main.tab.adhkar": "Азкар",
+    "main.tab.adhan": "Азан",
+    "main.tab.settings": "Настройки",
+    "menu.main_window": "Открыть главное окно…",
+    "adhkar.editor.coming_soon": "Редактор азкар — в следующей сборке"
   },
   "pt": {
     "col.prayer": "Oração",
@@ -1217,7 +1265,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "Dhikr seguinte",
     "adhkar.prev": "Dhikr anterior",
     "settings.section.adhkar": "Adhkār",
-    "settings.adhkar.auto": "Recitar automaticamente os adhkār da manhã e da tarde"
+    "settings.adhkar.auto": "Recitar automaticamente os adhkār da manhã e da tarde",
+    "main.tab.prayer_times": "Horários de Oração",
+    "main.tab.adhkar": "Adhkār",
+    "main.tab.adhan": "Adhān",
+    "main.tab.settings": "Ajustes",
+    "menu.main_window": "Abrir janela principal…",
+    "adhkar.editor.coming_soon": "Editor de adhkār — na próxima versão"
   },
   "ur": {
     "col.prayer": "نماز",
@@ -1329,7 +1383,13 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "adhkar.next": "اگلا ذکر",
     "adhkar.prev": "پچھلا ذکر",
     "settings.section.adhkar": "اذکار",
-    "settings.adhkar.auto": "اذکارِ صباح و مساء خودکار تلاوت"
+    "settings.adhkar.auto": "اذکارِ صباح و مساء خودکار تلاوت",
+    "main.tab.prayer_times": "نماز کے اوقات",
+    "main.tab.adhkar": "اذکار",
+    "main.tab.adhan": "اذان",
+    "main.tab.settings": "ترتیبات",
+    "menu.main_window": "مرکزی ونڈو کھولیں…",
+    "adhkar.editor.coming_soon": "اذکار ایڈیٹر — اگلے ورژن میں"
   }
 }
 JSON_EOF
