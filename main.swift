@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.0-beta.2"
+let kAppVersion          = "3.1.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -605,9 +605,12 @@ func listAudioOutputDevices() -> [AudioOutputDevice] {
 
 /// One dhikr entry as loaded from `adhkar.json`.
 struct AdhkarItem: Codable {
-    let id:          Int
+    /// Optional because the expanded v3.1 categories (from the full Hisn
+    /// al-Muslim) don't carry an id. Morning/evening (curated) do.
+    let id:          Int?
     /// 0 = both morning & evening, 1 = morning only, 2 = evening only.
-    let type:        Int
+    /// Optional for the same reason as `id`.
+    let type:        Int?
     let arabic:      String
     /// Recommended repetitions (1, 3, 7, 10, 33, 100…). The audio is a single
     /// recitation; for `count ≤ 3` we loop the audio that many times (matches
