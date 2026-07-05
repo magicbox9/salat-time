@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.1"
+let kAppVersion          = "3.1.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4717,7 +4717,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         divider.boxType = .separator
         divider.translatesAutoresizingMaskIntoConstraints = false
 
-        // ---- left pane: collections ----
+        // For RTL (Arabic): the collections sidebar goes on the RIGHT, items
+        // pane on the LEFT. For LTR: sidebar on the left, items on the right.
+        let isRTL = Localizer.shared.isRTL
+
+        // ---- collections sidebar ----
         let leftWrap = NSView()
         leftWrap.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(leftWrap)
@@ -4725,8 +4729,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         let collectionsTitle = NSTextField(labelWithString: t("adhkar.editor.collections"))
         collectionsTitle.font = Localizer.shared.font(size: 13, weight: .semibold)
         collectionsTitle.textColor = .secondaryLabelColor
-        collectionsTitle.alignment = Localizer.shared.isRTL ? .right : .left
-        collectionsTitle.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        collectionsTitle.alignment = isRTL ? .right : .left
+        collectionsTitle.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
         collectionsTitle.translatesAutoresizingMaskIntoConstraints = false
         leftWrap.addSubview(collectionsTitle)
 
@@ -4739,7 +4743,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         collectionList = NSStackView()
         collectionList.orientation = .vertical
-        collectionList.alignment = .centerX
+        collectionList.alignment = .leading
         collectionList.spacing = 4
         collectionList.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
         collectionList.translatesAutoresizingMaskIntoConstraints = false
@@ -4749,17 +4753,18 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         collectionView.hasVerticalScroller = true
         collectionView.drawsBackground = false
         collectionView.translatesAutoresizingMaskIntoConstraints = false
+        collectionView.hasHorizontalScroller = false
         leftWrap.addSubview(collectionView)
 
-        // ---- right pane: items ----
+        // ---- items pane ----
         itemsContainer = NSView()
         itemsContainer.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(itemsContainer)
 
         itemsHeaderLabel = NSTextField(labelWithString: "")
         itemsHeaderLabel.font = Localizer.shared.font(size: 17, weight: .semibold)
-        itemsHeaderLabel.alignment = Localizer.shared.isRTL ? .right : .left
-        itemsHeaderLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        itemsHeaderLabel.alignment = isRTL ? .right : .left
+        itemsHeaderLabel.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
         itemsHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(itemsHeaderLabel)
 
@@ -4779,8 +4784,6 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         itemsStack = NSStackView()
         itemsStack.orientation = .vertical
-        // Fill width (not centerX) so cards always span the available width
-        // and Arabic text wraps inside the card instead of stretching forever.
         itemsStack.alignment = .leading
         itemsStack.spacing = 10
         itemsStack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
@@ -4791,7 +4794,6 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         itemsScrollView.hasVerticalScroller = true
         itemsScrollView.drawsBackground = false
         itemsScrollView.translatesAutoresizingMaskIntoConstraints = false
-        // Prevent horizontal scrolling entirely — content must wrap vertically.
         itemsScrollView.hasHorizontalScroller = false
         itemsScrollView.autohidesScrollers = true
         itemsContainer.addSubview(itemsScrollView)
@@ -4800,21 +4802,24 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         emptyStateLabel.font = Localizer.shared.font(size: 13)
         emptyStateLabel.textColor = .tertiaryLabelColor
         emptyStateLabel.alignment = .center
-        emptyStateLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        emptyStateLabel.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
         emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(emptyStateLabel)
 
         root.addSubview(divider)
 
+        // Layout: sidebar + divider + items pane, with order swapped for RTL.
+        // The constraints below use `leading/trailing` anchors so they flip
+        // automatically with userInterfaceLayoutDirection.
         NSLayoutConstraint.activate([
-            // Left pane
-            leftWrap.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            // Sidebar: leading edge in LTR, trailing edge (right) in RTL.
             leftWrap.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
             leftWrap.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
             leftWrap.widthAnchor.constraint(equalToConstant: 220),
 
             collectionsTitle.topAnchor.constraint(equalTo: leftWrap.topAnchor),
             collectionsTitle.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
+            collectionsTitle.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
 
             newBtn.topAnchor.constraint(equalTo: collectionsTitle.bottomAnchor, constant: 8),
             newBtn.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
@@ -4824,20 +4829,42 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor),
+        ])
 
-            // Divider
-            divider.leadingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: 12),
-            divider.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            divider.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+        if isRTL {
+            // RTL: sidebar on the RIGHT, items pane on the LEFT.
+            NSLayoutConstraint.activate([
+                leftWrap.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
 
-            // Right pane
-            itemsContainer.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 16),
-            itemsContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
-            itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
-            itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+                divider.trailingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: -12),
+                divider.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+                divider.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
 
+                itemsContainer.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -16),
+                itemsContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+                itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+                itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+            ])
+        } else {
+            // LTR: sidebar on the LEFT, items pane on the RIGHT.
+            NSLayoutConstraint.activate([
+                leftWrap.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+
+                divider.leadingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: 12),
+                divider.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+                divider.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+
+                itemsContainer.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 16),
+                itemsContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+                itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+                itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+            ])
+        }
+
+        NSLayoutConstraint.activate([
             itemsHeaderLabel.topAnchor.constraint(equalTo: itemsContainer.topAnchor),
             itemsHeaderLabel.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
+            itemsHeaderLabel.trailingAnchor.constraint(equalTo: itemsContainer.trailingAnchor),
 
             addLibBtn.topAnchor.constraint(equalTo: itemsHeaderLabel.bottomAnchor, constant: 12),
             addLibBtn.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
@@ -4850,10 +4877,13 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             itemsScrollView.trailingAnchor.constraint(equalTo: itemsContainer.trailingAnchor),
             itemsScrollView.bottomAnchor.constraint(equalTo: itemsContainer.bottomAnchor),
 
-            // Pin the stack's width to the scroll view's width so cards never
-            // grow horizontally to fit long text — the Arabic wraps instead.
-            // This is the key constraint that stops the "one long line" bug.
-            itemsStack.widthAnchor.constraint(equalTo: itemsScrollView.widthAnchor),
+            // Pin the stack's width to the scroll view's CONTENT width (the
+            // clip view, which excludes the scroller) so cards never grow to
+            // fit long text horizontally — Arabic wraps vertically instead.
+            itemsStack.leadingAnchor.constraint(equalTo: itemsScrollView.contentView.leadingAnchor),
+            itemsStack.trailingAnchor.constraint(equalTo: itemsScrollView.contentView.trailingAnchor),
+            itemsStack.topAnchor.constraint(equalTo: itemsScrollView.contentView.topAnchor),
+            itemsStack.heightAnchor.constraint(greaterThanOrEqualTo: itemsScrollView.contentView.heightAnchor),
 
             emptyStateLabel.centerXAnchor.constraint(equalTo: itemsContainer.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: itemsContainer.centerYAnchor),
@@ -5122,13 +5152,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         for (i, entry) in c.items.enumerated() {
             let card = makeItemCard(entry, index: i, collectionIndex: idx)
             itemsStack.addArrangedSubview(card)
-            // Force each card to fill the stack's width so the Arabic wraps
-            // inside the card rather than stretching the card sideways.
-            itemsStack.addConstraint(
-                NSLayoutConstraint(item: card, attribute: .width,
-                                    relatedBy: .equal,
-                                    toItem: itemsStack, attribute: .width,
-                                    multiplier: 1, constant: 0))
+            // Pin each card's width to the stack so it always spans the full
+            // available width and Arabic text wraps inside instead of stretching.
+            card.leadingAnchor.constraint(equalTo: itemsStack.leadingAnchor).isActive = true
+            card.trailingAnchor.constraint(equalTo: itemsStack.trailingAnchor).isActive = true
         }
     }
 
@@ -5148,6 +5175,15 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         arabic.baseWritingDirection = .rightToLeft
         arabic.textColor = .labelColor
         arabic.translatesAutoresizingMaskIntoConstraints = false
+        // Critical for wrapping: low horizontal resistance so the field
+        // shrinks/wraps instead of forcing the card wider. Without this,
+        // long Arabic text pushes the card to its intrinsic width and the
+        // text never wraps.
+        arabic.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        arabic.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        arabic.cell?.truncatesLastVisibleLine = false
+        arabic.cell?.wraps = true
+        arabic.maximumNumberOfLines = 0
 
         // Meta line: repeat count + audio source. Uses Cairo so the Arabic
         // numerals/badge render consistently with the rest of the app.
