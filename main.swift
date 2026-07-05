@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.3.2"
+let kAppVersion          = "3.3.4"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4730,6 +4730,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // ---- collections sidebar ----
         let leftWrap = NSView()
         leftWrap.translatesAutoresizingMaskIntoConstraints = false
+        // Set RTL layout direction so leadingAnchor/trailingAnchor auto-flip
+        // for Arabic. This makes bullet points, titles, and rows respect RTL.
+        if isRTL { leftWrap.userInterfaceLayoutDirection = .rightToLeft }
         root.addSubview(leftWrap)
 
         let collectionsTitle = NSTextField(labelWithString: t("adhkar.editor.collections"))
@@ -4749,7 +4752,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         collectionList = NSStackView()
         collectionList.orientation = .vertical
-        collectionList.alignment = .leading
+        // For RTL (Arabic), align trailing so rows hug the right edge.
+        collectionList.alignment = isRTL ? .trailing : .leading
         collectionList.spacing = 4
         collectionList.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
         collectionList.translatesAutoresizingMaskIntoConstraints = false
@@ -4765,6 +4769,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // ---- items pane ----
         itemsContainer = NSView()
         itemsContainer.translatesAutoresizingMaskIntoConstraints = false
+        if isRTL { itemsContainer.userInterfaceLayoutDirection = .rightToLeft }
         root.addSubview(itemsContainer)
 
         itemsHeaderLabel = NSTextField(labelWithString: "")
@@ -4835,6 +4840,13 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor),
+
+            // Pin the collection list to the clip view so rows fill the width.
+            // Do NOT constrain height — that would stretch the stack and spread
+            // items when the window is tall. Natural height, pinned to top.
+            collectionList.leadingAnchor.constraint(equalTo: collectionView.contentView.leadingAnchor),
+            collectionList.trailingAnchor.constraint(equalTo: collectionView.contentView.trailingAnchor),
+            collectionList.topAnchor.constraint(equalTo: collectionView.contentView.topAnchor),
         ])
 
         if isRTL {
@@ -4904,6 +4916,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         for c in collections {
             let row = makeCollectionRow(c)
             collectionList.addArrangedSubview(row)
+            // Pin each row's width to the stack so rows fill the pane.
+            row.leadingAnchor.constraint(equalTo: collectionList.leadingAnchor).isActive = true
+            row.trailingAnchor.constraint(equalTo: collectionList.trailingAnchor).isActive = true
         }
     }
 
