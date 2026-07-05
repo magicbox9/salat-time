@@ -4551,77 +4551,10 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 }
 
 // ============================================================================
-// MARK: Adhkar settings — Apple-style grouped settings panel
+// MARK: Adhkar settings — Apple-style grouped settings panel (frame-based)
 // ============================================================================
-/// Settings panel designed like macOS System Settings: grouped inset cards
-/// with rows (label + control), hairline separators, section headers above
-/// each group. Fully RTL-aware.
-
-/// A rounded card that holds stacked settings rows. Mirrors the iOS/macOS
-/// Settings "grouped list" appearance.
-final class SettingsGroupView: NSView {
-    private let stack: NSStackView
-    init() {
-        stack = NSStackView()
-        stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 0
-        stack.edgeInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-        super.init(frame: .zero)
-        wantsLayer = true
-        layer?.cornerRadius = 10
-        layer?.backgroundColor = NSColor.controlBackgroundColor.withAlphaComponent(0.5).cgColor
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError() }
-    func addRow(_ view: NSView) {
-        // Add a hairline separator before each row except the first.
-        if !stack.arrangedSubviews.isEmpty {
-            let sep = NSBox()
-            sep.boxType = .separator
-            sep.translatesAutoresizingMaskIntoConstraints = false
-            sep.heightAnchor.constraint(equalToConstant: 0.5).isActive = true
-            stack.addArrangedSubview(sep)
-        }
-        stack.addArrangedSubview(view)
-    }
-}
-
-/// A single settings row: label on the leading side, control on the trailing.
-/// Automatically flips for RTL via userInterfaceLayoutDirection.
-final class SettingsRowView: NSView {
-    let label: NSTextField
-    init(label text: String, control: NSView) {
-        label = NSTextField(labelWithString: text)
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        label.font = Localizer.shared.font(size: 13)
-        label.textColor = .labelColor
-        label.alignment = Localizer.shared.isRTL ? .right : .left
-        label.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        label.translatesAutoresizingMaskIntoConstraints = false
-        label.drawsBackground = false
-        addSubview(label)
-        addSubview(control)
-        control.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 36),
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            label.widthAnchor.constraint(lessThanOrEqualToConstant: 120),
-            control.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            control.centerYAnchor.constraint(equalTo: centerYAnchor),
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError() }
-}
+/// Settings panel designed like macOS System Settings. All frame-based
+/// (no Auto Layout) so it works inside the FlippedView documentView.
 
 final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
@@ -4646,12 +4579,9 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         if isRTL { scroll.userInterfaceLayoutDirection = .rightToLeft }
 
         let body = FlippedView()
-        body.translatesAutoresizingMaskIntoConstraints = false
-        body.userInterfaceLayoutDirection = isRTL ? .rightToLeft : .leftToRight
         scroll.documentView = body
 
         let root = NSView()
-        root.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(scroll)
         self.view = root
@@ -4665,116 +4595,147 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     }
 
     private func buildContent(into body: FlippedView) {
+        let isRTL = Localizer.shared.isRTL
         let W: CGFloat = 440
-        let margin: CGFloat = 40
-        var y: CGFloat = 24
+        let cardX: CGFloat = 40
+        let cardW: CGFloat = W - cardX * 2
+        var y: CGFloat = 28
+        let rowH: CGFloat = 38
+        let labelW: CGFloat = 100
 
-        // Helper to add a section header (small uppercase text above a group).
+        // --- helpers ---
+
         func sectionHeader(_ text: String) {
             let l = NSTextField(labelWithString: text.uppercased())
             l.font = Localizer.shared.font(size: 11, weight: .bold)
             l.textColor = .tertiaryLabelColor
-            l.alignment = Localizer.shared.isRTL ? .right : .left
-            l.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-            l.frame = NSRect(x: margin + 4, y: y, width: W - margin * 2, height: 16)
+            l.alignment = isRTL ? .right : .left
+            l.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+            l.frame = NSRect(x: cardX + 6, y: y, width: cardW - 12, height: 16)
             l.drawsBackground = false
             body.addSubview(l)
             y += 22
         }
 
-        // Helper to add a group card and return it for row additions.
-        func makeGroup() -> SettingsGroupView {
-            let g = SettingsGroupView()
-            g.frame = NSRect(x: margin, y: y, width: W - margin * 2, height: 0)
-            body.addSubview(g)
-            return g
+        // Draw a rounded card background and return its frame.
+        // `rowCount` determines the height. Rows are added by the caller.
+        func beginGroup(rowCount: Int) -> CGFloat {
+            let cardH = CGFloat(rowCount) * rowH
+            let card = NSView(frame: NSRect(x: cardX, y: y, width: cardW, height: cardH))
+            card.wantsLayer = true
+            card.layer?.cornerRadius = 10
+            card.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.06).cgColor
+            card.layer?.borderWidth = 0.5
+            card.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
+            card.identifier = NSUserInterfaceItemIdentifier("settings_card")
+            body.addSubview(card)
+            return cardH
         }
 
-        // Finalize a group's height after adding rows, then advance y.
-        func finalizeGroup(_ g: SettingsGroupView) {
-            var h: CGFloat = 0
-            for v in g.subviews.first?.subviews ?? [] { h += v.frame.height + 0.5 }
-            g.frame.size.height = h
-            y += h + 28  // gap between groups
+        // Add a row inside the current group card.
+        var groupRowY: CGFloat = 0
+        func addRow(to card: NSView, label: String, control: NSView, isLast: Bool) {
+            let isRTL = Localizer.shared.isRTL
+            // Hairline separator (except before first row — handled by isLast reverse)
+            if groupRowY > 0 {
+                let sep = NSBox(frame: NSRect(x: 12, y: groupRowY, width: cardW - 24, height: 0.5))
+                sep.boxType = .separator
+                card.addSubview(sep)
+            }
+            // Label
+            let lblX: CGFloat = isRTL ? (cardW - labelW - 12) : 12
+            let ctrlX: CGFloat = isRTL ? 12 : (labelW + 12)
+            let ctrlW: CGFloat = cardW - labelW - 24
+            if !label.isEmpty {
+                let lbl = NSTextField(labelWithString: label)
+                lbl.font = Localizer.shared.font(size: 13)
+                lbl.textColor = .labelColor
+                lbl.alignment = isRTL ? .right : .left
+                lbl.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+                lbl.frame = NSRect(x: lblX, y: groupRowY + 8, width: labelW, height: 20)
+                lbl.drawsBackground = false
+                card.addSubview(lbl)
+            }
+            // Control
+            if let btn = control as? NSButton {
+                btn.frame = NSRect(x: ctrlX, y: groupRowY + 6, width: label.isEmpty ? cardW - 24 : ctrlW, height: 24)
+            } else {
+                control.frame = NSRect(x: ctrlX, y: groupRowY + 5, width: label.isEmpty ? cardW - 24 : ctrlW, height: 26)
+            }
+            card.addSubview(control)
+            groupRowY += rowH
+        }
+
+        func endGroup(_ cardH: CGFloat) {
+            y += cardH + 28
+            groupRowY = 0
         }
 
         // ---- Sound section ----
         sectionHeader(t("adhkar.settings.sound"))
-        let soundGroup = makeGroup()
-
-        // Volume row
+        groupRowY = 0
+        let soundH = beginGroup(rowCount: 3)
+        // Find the card we just added
+        let soundCard = body.subviews.last!
         volumeSlider = NSSlider(value: Double(UserDefaults.standard.float(forKey: kAdhkarVolume)),
                                  minValue: 0, maxValue: 1,
                                  target: self, action: #selector(volumeChanged(_:)))
-        volumeSlider.frame = NSRect(x: 0, y: 0, width: 180, height: 22)
-        soundGroup.addRow(SettingsRowView(label: t("adhkar.settings.volume"), control: volumeSlider))
-
-        // Output device row
-        outputPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 26), pullsDown: false)
+        addRow(to: soundCard, label: t("adhkar.settings.volume"), control: volumeSlider, isLast: false)
+        outputPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         outputPopup.target = self
         outputPopup.action = #selector(outputChanged(_:))
         populateDevices()
-        soundGroup.addRow(SettingsRowView(label: t("adhkar.settings.output_device"), control: outputPopup))
-
-        // Test row
-        let testBtn = NSButton(title: t("adhkar.settings.test"), target: self,
-                                action: #selector(testPlayback))
+        addRow(to: soundCard, label: t("adhkar.settings.output_device"), control: outputPopup, isLast: false)
+        let testBtn = NSButton(title: t("adhkar.settings.test"), target: self, action: #selector(testPlayback))
         testBtn.bezelStyle = .rounded
         testBtn.controlSize = .small
-        testBtn.frame = NSRect(x: 0, y: 0, width: 80, height: 24)
-        soundGroup.addRow(SettingsRowView(label: "", control: testBtn))
-        finalizeGroup(soundGroup)
+        addRow(to: soundCard, label: "", control: testBtn, isLast: true)
+        endGroup(soundH)
 
         // ---- Schedule section ----
         sectionHeader(t("adhkar.settings.schedule"))
-        let schedGroup = makeGroup()
-
-        // Auto-play checkbox row (full width, no trailing control)
+        groupRowY = 0
+        let schedH = beginGroup(rowCount: 3)
+        let schedCard = body.subviews.last!
         autoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                   target: self, action: #selector(autoPlayChanged(_:)))
         autoPlayCheck.state = UserDefaults.standard.bool(forKey: kAdhkarEnabled) ? .on : .off
-        let autoRow = SettingsRowView(label: "", control: autoPlayCheck)
-        schedGroup.addRow(autoRow)
-
-        // Morning anchor
-        morningPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 26), pullsDown: false)
+        addRow(to: schedCard, label: "", control: autoPlayCheck, isLast: false)
+        morningPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         morningPopup.addItem(withTitle: t("adhkar.editor.schedule.shuruq"))
         morningPopup.addItem(withTitle: t("adhkar.editor.schedule.fajr"))
         morningPopup.selectItem(at: (UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq") == "fajr" ? 1 : 0)
         morningPopup.target = self
         morningPopup.action = #selector(morningAnchorChanged(_:))
-        schedGroup.addRow(SettingsRowView(label: t("adhkar.settings.morning_anchor"), control: morningPopup))
-
-        // Evening anchor
-        eveningPopup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 200, height: 26), pullsDown: false)
+        addRow(to: schedCard, label: t("adhkar.settings.morning_anchor"), control: morningPopup, isLast: false)
+        eveningPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         eveningPopup.addItem(withTitle: t("adhkar.editor.schedule.asr"))
         eveningPopup.addItem(withTitle: t("adhkar.editor.schedule.maghrib"))
         eveningPopup.selectItem(at: (UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr") == "maghrib" ? 1 : 0)
         eveningPopup.target = self
         eveningPopup.action = #selector(eveningAnchorChanged(_:))
-        schedGroup.addRow(SettingsRowView(label: t("adhkar.settings.evening_anchor"), control: eveningPopup))
-        finalizeGroup(schedGroup)
+        addRow(to: schedCard, label: t("adhkar.settings.evening_anchor"), control: eveningPopup, isLast: true)
+        endGroup(schedH)
 
         // ---- Appearance section ----
         sectionHeader(t("adhkar.settings.appearance"))
-        let appGroup = makeGroup()
-
-        // Accent swatches — wrap in a container view for the row.
-        let swatchContainer = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 30))
+        groupRowY = 0
+        let appH = beginGroup(rowCount: 2)
+        let appCard = body.subviews.last!
+        // Accent swatches
+        let swatchContainer = NSView(frame: .zero)
         let curAccent = currentAccentKey()
         var sx: CGFloat = 0
         for key in kAccentOrder {
-            let s = AccentSwatchButton(key: key, diameter: 24,
+            let s = AccentSwatchButton(key: key, diameter: 22,
                                         target: self, action: #selector(accentTapped(_:)))
-            s.frame = NSRect(x: sx, y: 1, width: 26, height: 26)
+            s.frame = NSRect(x: sx, y: -2, width: 24, height: 24)
             if key == curAccent { s.isSelectedSwatch = true }
             accentSwatches.append(s)
             swatchContainer.addSubview(s)
-            sx += 32
+            sx += 30
         }
-        appGroup.addRow(SettingsRowView(label: t("adhkar.settings.accent"), control: swatchContainer))
-
-        // Material toggle
+        addRow(to: appCard, label: t("adhkar.settings.accent"), control: swatchContainer, isLast: false)
         materialSeg = NSSegmentedControl()
         materialSeg.segmentCount = 2
         materialSeg.setLabel(t("menu.theme.material.opaque"), forSegment: 0)
@@ -4783,22 +4744,22 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         materialSeg.selectedSegment = isGlassMaterial() ? 1 : 0
         materialSeg.target = self
         materialSeg.action = #selector(materialChanged(_:))
-        materialSeg.frame = NSRect(x: 0, y: 0, width: 180, height: 24)
-        appGroup.addRow(SettingsRowView(label: t("adhkar.settings.material"), control: materialSeg))
-        finalizeGroup(appGroup)
+        addRow(to: appCard, label: t("adhkar.settings.material"), control: materialSeg, isLast: true)
+        endGroup(appH)
 
         // ---- About ----
         sectionHeader(t("adhkar.settings.about"))
-        let aboutGroup = makeGroup()
+        groupRowY = 0
+        let aboutH = beginGroup(rowCount: 1)
+        let aboutCard = body.subviews.last!
         let aboutLabel = NSTextField(labelWithString: "Salat Time v\(kAppVersion) · Hisn al-Muslim")
         aboutLabel.font = Localizer.shared.font(size: 13)
         aboutLabel.textColor = .secondaryLabelColor
-        aboutLabel.alignment = Localizer.shared.isRTL ? .right : .left
-        aboutLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        aboutLabel.translatesAutoresizingMaskIntoConstraints = false
-        let aboutRow = SettingsRowView(label: "Version", control: aboutLabel)
-        aboutGroup.addRow(aboutRow)
-        finalizeGroup(aboutGroup)
+        aboutLabel.alignment = isRTL ? .right : .left
+        aboutLabel.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+        aboutLabel.drawsBackground = false
+        addRow(to: aboutCard, label: t("adhkar.settings.about"), control: aboutLabel, isLast: true)
+        endGroup(aboutH)
 
         body.frame = NSRect(x: 0, y: 0, width: W, height: y)
     }
