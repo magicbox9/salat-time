@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.3.4"
+let kAppVersion          = "3.4.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1512,6 +1512,10 @@ final class AdaptiveBackgroundView: NSView {
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
         layer?.backgroundColor = (isDark ? darkColor : lightColor).cgColor
     }
+    // Decorative view — never intercept mouse events. Without this, a
+    // full-frame AdaptiveBackgroundView (like the row selection highlight)
+    // eats all clicks, making the parent row unclickable.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 class FlippedView: NSView { override var isFlipped: Bool { true } }
@@ -4752,7 +4756,6 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         collectionList = NSStackView()
         collectionList.orientation = .vertical
-        // For RTL (Arabic), align trailing so rows hug the right edge.
         collectionList.alignment = isRTL ? .trailing : .leading
         collectionList.spacing = 4
         collectionList.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
@@ -4764,6 +4767,12 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         collectionView.drawsBackground = false
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.hasHorizontalScroller = false
+        if let clip = collectionView.contentView as? NSClipView {
+            clip.drawsBackground = false
+        }
+        // autoresizingMask = .width makes the stack match the scroll view's
+        // width. Height is natural (sum of rows), so it scrolls when needed.
+        collectionList.autoresizingMask = [.width]
         leftWrap.addSubview(collectionView)
 
         // ---- items pane ----
@@ -4840,13 +4849,6 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor),
-
-            // Pin the collection list to the clip view so rows fill the width.
-            // Do NOT constrain height — that would stretch the stack and spread
-            // items when the window is tall. Natural height, pinned to top.
-            collectionList.leadingAnchor.constraint(equalTo: collectionView.contentView.leadingAnchor),
-            collectionList.trailingAnchor.constraint(equalTo: collectionView.contentView.trailingAnchor),
-            collectionList.topAnchor.constraint(equalTo: collectionView.contentView.topAnchor),
         ])
 
         if isRTL {
@@ -4947,6 +4949,12 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         nameLbl.alignment = Localizer.shared.isRTL ? .right : .left
         nameLbl.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         nameLbl.translatesAutoresizingMaskIntoConstraints = false
+        // Make the label transparent to mouse clicks so they pass through to
+        // the row's mouseDown handler (otherwise the label absorbs the click).
+        nameLbl.isBezeled = false
+        nameLbl.drawsBackground = false
+        nameLbl.isSelectable = false
+        nameLbl.isEditable = false
         row.addSubview(nameLbl)
 
         // Schedule badge
@@ -4965,25 +4973,32 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         row.addSubview(badge)
 
         // Play button — opens the floating panel and starts recitation.
-        // This replaces the removed right-click menu's morning/evening entries.
-        let playBtn = HoverIconButton(symbol: "play.fill",
+        // Play button. For RTL, use "backward.fill" (◀) which already points
+        // left — much more reliable than flipping images at runtime.
+        let playSymbol = Localizer.shared.isRTL ? "backward.fill" : "play.fill"
+        let playBtn = HoverIconButton(symbol: playSymbol,
                                        toolTip: t("adhkar.play"),
                                        target: self,
                                        action: #selector(playCollection(_:)),
-                                       pointSize: 12,
-                                       size: NSSize(width: 28, height: 24))
+                                       pointSize: 13,
+                                       size: NSSize(width: 32, height: 28))
         playBtn.translatesAutoresizingMaskIntoConstraints = false
         playBtn.identifier = NSUserInterfaceItemIdentifier(c.id.uuidString)
         row.addSubview(playBtn)
 
-        // Select on click
-        let click = NSClickGestureRecognizer(target: self, action: #selector(selectCollection(_:)))
-        row.addGestureRecognizer(click)
-
-        // Double-click = rename
-        let dbl = NSClickGestureRecognizer(target: self, action: #selector(renameCollection(_:)))
-        dbl.numberOfClicksRequired = 2
-        row.addGestureRecognizer(dbl)
+        // Select on click via the row's mouseDown handler (more reliable than
+        // gesture recognizers, which conflict with the play button subview).
+        row.onSelect = { [weak self] id in
+            guard let self = self else { return }
+            self.selectedCollectionID = id
+            // Defer the rebuild to the next run loop — rebuilding inside
+            // mouseDown would destroy the clicked row mid-event, causing
+            // the click to be lost or crash.
+            DispatchQueue.main.async {
+                self.rebuildCollectionList()
+                self.rebuildItemsPane()
+            }
+        }
 
         // Right-click = schedule submenu + delete
         let menu = NSMenu()
@@ -5029,14 +5044,38 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         menu.addItem(del)
         row.menu = menu
 
+        let isRTL = Localizer.shared.isRTL
         NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 38),
-            nameLbl.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
+
+            // Name: for RTL, anchor to the TRAILING (right) edge with the play
+            // button to its LEFT. For LTR, name on leading (left), play on right.
             nameLbl.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
-            nameLbl.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
-            badge.leadingAnchor.constraint(equalTo: nameLbl.leadingAnchor),
+
             badge.topAnchor.constraint(equalTo: nameLbl.bottomAnchor, constant: 2),
+            playBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            playBtn.widthAnchor.constraint(equalToConstant: 28),
+            playBtn.heightAnchor.constraint(equalToConstant: 24),
         ])
+
+        if isRTL {
+            // RTL: play button on the FAR RIGHT (user wants arrows on right),
+            // name to its left.
+            NSLayoutConstraint.activate([
+                playBtn.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -8),
+                nameLbl.trailingAnchor.constraint(equalTo: playBtn.leadingAnchor, constant: -6),
+                nameLbl.leadingAnchor.constraint(greaterThanOrEqualTo: row.leadingAnchor, constant: 10),
+                badge.trailingAnchor.constraint(equalTo: nameLbl.trailingAnchor),
+            ])
+        } else {
+            // LTR: name on the left, play button on the right.
+            NSLayoutConstraint.activate([
+                nameLbl.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+                nameLbl.trailingAnchor.constraint(equalTo: playBtn.leadingAnchor, constant: -8),
+                playBtn.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
+                badge.leadingAnchor.constraint(equalTo: nameLbl.leadingAnchor),
+            ])
+        }
         return row
     }
 
@@ -5483,9 +5522,34 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     }
 }
 
-/// Custom row view that carries its collection UUID via the recognizer target.
+/// Custom row view that carries its collection UUID. Handles mouse clicks
+/// to select the collection (more reliable than gesture recognizers, which
+/// conflict with subview buttons like the play button).
 final class CollectionRowView: NSView {
     var collectionID: UUID?
+    var onSelect: ((UUID) -> Void)?
+
+    override func mouseDown(with event: NSEvent) {
+        if let id = collectionID {
+            onSelect?(id)
+        }
+    }
+}
+
+/// Creates a horizontally-flipped template image for RTL (points the play
+/// triangle to the left). Used for play buttons in Arabic mode.
+func rtlFlippedImage(_ source: NSImage) -> NSImage {
+    let size = source.size
+    let flipped = NSImage(size: size)
+    flipped.lockFocus()
+    if let ctx = NSGraphicsContext.current?.cgContext {
+        ctx.translateBy(x: size.width, y: 0)
+        ctx.scaleBy(x: -1, y: 1)
+    }
+    source.draw(in: NSRect(origin: .zero, size: size))
+    flipped.unlockFocus()
+    flipped.isTemplate = source.isTemplate
+    return flipped
 }
 
 // ----------------------------------------------------------------------------
