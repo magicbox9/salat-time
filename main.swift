@@ -63,7 +63,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.5.0-beta.1"
+let kAppVersion          = "3.5.0-beta.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4520,6 +4520,18 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     private var itemsHeaderLabel: NSTextField!
     private var emptyStateLabel: NSTextField!
 
+    // Inline player bar
+    private var playerBar: NSView!
+    private var playerPlayBtn: HoverIconButton!
+    private var playerPositionLabel: NSTextField!
+    private var playerVolumeSlider: NSSlider!
+    private var playerSettingsBtn: HoverIconButton!
+
+    // The inline playback session (separate from AdhkarPanel's session).
+    private let session = AdhkarSession()
+    /// Index of the currently-highlighted card (-1 = none).
+    private var highlightedCardIndex = -1
+
     // Transient preview player for the audio picker's "preview" button.
     private var previewPlayer: AVAudioPlayer?
 
@@ -4533,16 +4545,105 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         let v = NSView()
         buildTwoPaneLayout(into: v)
         self.view = v
-        // Note: we do NOT call applyRTL here. It mirrors frames AND swaps
-        // .right↔.left text alignment, which fights with the explicit
-        // alignment = isRTL ? .right : .left we set on every field. The
-        // buildTwoPaneLayout already handles RTL via leading/trailing
-        // constraint branches and explicit text alignment.
+        wireSession()
     }
 
     func tabDidActivate() {
         reloadFromStorage()
     }
+
+    // MARK: - inline playback session
+
+    private func wireSession() {
+        session.onItemChange = { [weak self] item, idx, total in
+            DispatchQueue.main.async {
+                self?.updatePlayerForItem(item, idx: idx, total: total)
+            }
+        }
+        session.onPlaybackStateChange = { [weak self] in
+            DispatchQueue.main.async { self?.refreshPlayerButton() }
+        }
+        session.onFinish = { [weak self] in
+            DispatchQueue.main.async { self?.resetPlayer() }
+        }
+    }
+
+    private func updatePlayerForItem(_ item: AdhkarEntry, idx: Int, total: Int) {
+        playerPositionLabel.stringValue = "\(idx + 1) / \(total)"
+        highlightCard(at: idx)
+        refreshPlayerButton()
+    }
+
+    private func refreshPlayerButton() {
+        let playing = session.isPlaying
+        let sym = playing ? "pause.fill" : "play.fill"
+        if let img = templateSymbol(sym, pointSize: 16) {
+            playerPlayBtn.image = img
+        }
+        playerPlayBtn.toolTip = playing ? t("adhkar.pause") : t("adhkar.play")
+    }
+
+    private func resetPlayer() {
+        playerPositionLabel.stringValue = "— / —"
+        highlightedCardIndex = -1
+        refreshCardsHighlight()
+        refreshPlayerButton()
+    }
+
+    /// Highlight the card at the given index and scroll to it.
+    private func highlightCard(at idx: Int) {
+        highlightedCardIndex = idx
+        refreshCardsHighlight()
+        // Scroll the card into view.
+        let cards = itemsStack.arrangedSubviews
+        if idx >= 0 && idx < cards.count {
+            let cardFrame = cards[idx].frame
+            itemsScrollView.scrollToVisible(cardFrame)
+        }
+    }
+
+    /// Apply/remove highlight backgrounds on all cards.
+    private func refreshCardsHighlight() {
+        for (i, card) in itemsStack.arrangedSubviews.enumerated() {
+            // Remove old highlight subviews (identified).
+            card.subviews.filter {
+                $0.identifier?.rawValue == "adhkar_highlight"
+            }.forEach { $0.removeFromSuperview() }
+            if i == highlightedCardIndex {
+                let pair = currentAccentPair()
+                let hl = AdaptiveBackgroundView(frame: card.bounds,
+                                                 light: pair.light.withAlphaComponent(0.18),
+                                                 dark:  pair.dark.withAlphaComponent(0.25),
+                                                 radius: 10)
+                hl.identifier = NSUserInterfaceItemIdentifier("adhkar_highlight")
+                hl.autoresizingMask = [.width, .height]
+                card.addSubview(hl)
+                // NSView doesn't have sendSubviewToBack; addSubview puts it
+                // on top, but AdaptiveBackgroundView.hitTest returns nil so
+                // it's transparent to clicks. Visual layering: since it's
+                // decorative and semi-transparent, drawing on top is fine.
+            }
+        }
+    }
+
+    // Player bar actions
+    @objc private func playerTogglePlay(_ sender: Any?) {
+        if session.isPlaying { session.pause() }
+        else if session.isPaused { session.resume() }
+        else if let c = selectedCollection() {
+            session.start(collection: c)
+        }
+    }
+    @objc private func playerPrev(_ sender: Any?) { session.previous() }
+    @objc private func playerNext(_ sender: Any?) { session.next() }
+    @objc private func playerVolumeChanged(_ sender: NSSlider) {
+        UserDefaults.standard.set(Float(sender.floatValue), forKey: kAdhkarVolume)
+        session.setMuted(sender.floatValue == 0)
+    }
+    @objc private func playerSettingsTapped(_ sender: HoverIconButton) {
+        showAdhkarSettingsMenu(from: sender)
+    }
+
 
     // MARK: - load / save
 
@@ -4657,6 +4758,72 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         itemsScrollView.autohidesScrollers = true
         itemsContainer.addSubview(itemsScrollView)
 
+        // ---- inline player bar ----
+        // Sits between the add-buttons and the scroll view. Shows play/pause,
+        // prev/next, position, volume slider, and a settings gear.
+        playerBar = NSView()
+        playerBar.wantsLayer = true
+        playerBar.layer?.cornerRadius = 8
+        playerBar.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.1).cgColor
+        playerBar.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(playerBar)
+
+        playerPlayBtn = HoverIconButton(symbol: "play.fill",
+                                         toolTip: t("adhkar.play"),
+                                         target: self,
+                                         action: #selector(playerTogglePlay(_:)),
+                                         pointSize: 16,
+                                         size: NSSize(width: 36, height: 30))
+        playerPlayBtn.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(playerPlayBtn)
+
+        let playerPrevBtn = HoverIconButton(symbol: "backward.fill",
+                                              toolTip: t("adhkar.prev"),
+                                              target: self,
+                                              action: #selector(playerPrev(_:)),
+                                              pointSize: 13,
+                                              size: NSSize(width: 30, height: 30))
+        playerPrevBtn.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(playerPrevBtn)
+
+        let playerNextBtn = HoverIconButton(symbol: "forward.fill",
+                                              toolTip: t("adhkar.next"),
+                                              target: self,
+                                              action: #selector(playerNext(_:)),
+                                              pointSize: 13,
+                                              size: NSSize(width: 30, height: 30))
+        playerNextBtn.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(playerNextBtn)
+
+        playerPositionLabel = NSTextField(labelWithString: "— / —")
+        playerPositionLabel.font = Localizer.shared.font(size: 12)
+        playerPositionLabel.textColor = .secondaryLabelColor
+        playerPositionLabel.alignment = .center
+        playerPositionLabel.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(playerPositionLabel)
+
+        let volumeIcon = NSTextField(labelWithString: "🔊")
+        volumeIcon.font = NSFont.systemFont(ofSize: 12)
+        volumeIcon.textColor = .secondaryLabelColor
+        volumeIcon.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(volumeIcon)
+
+        playerVolumeSlider = NSSlider(value: Double(UserDefaults.standard.float(forKey: kAdhkarVolume)),
+                                       minValue: 0, maxValue: 1,
+                                       target: self,
+                                       action: #selector(playerVolumeChanged(_:)))
+        playerVolumeSlider.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(playerVolumeSlider)
+
+        playerSettingsBtn = HoverIconButton(symbol: "speaker.wave.2.fill",
+                                              toolTip: t("adhkar.editor.audio"),
+                                              target: self,
+                                              action: #selector(playerSettingsTapped(_:)),
+                                              pointSize: 14,
+                                              size: NSSize(width: 32, height: 30))
+        playerSettingsBtn.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.addSubview(playerSettingsBtn)
+
         emptyStateLabel = NSTextField(labelWithString: t("adhkar.editor.no_collection_selected"))
         emptyStateLabel.font = Localizer.shared.font(size: 13)
         emptyStateLabel.textColor = .tertiaryLabelColor
@@ -4731,7 +4898,34 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             addCustomBtn.topAnchor.constraint(equalTo: itemsHeaderLabel.bottomAnchor, constant: 12),
             addCustomBtn.leadingAnchor.constraint(equalTo: addLibBtn.trailingAnchor, constant: 8),
 
-            itemsScrollView.topAnchor.constraint(equalTo: addLibBtn.bottomAnchor, constant: 12),
+            // Player bar: between the add-buttons and the scroll view.
+            playerBar.topAnchor.constraint(equalTo: addLibBtn.bottomAnchor, constant: 10),
+            playerBar.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
+            playerBar.trailingAnchor.constraint(equalTo: itemsContainer.trailingAnchor),
+            playerBar.heightAnchor.constraint(equalToConstant: 40),
+
+            playerPrevBtn.leadingAnchor.constraint(equalTo: playerBar.leadingAnchor, constant: 8),
+            playerPrevBtn.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+            playerPlayBtn.leadingAnchor.constraint(equalTo: playerPrevBtn.trailingAnchor, constant: 4),
+            playerPlayBtn.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+            playerNextBtn.leadingAnchor.constraint(equalTo: playerPlayBtn.trailingAnchor, constant: 4),
+            playerNextBtn.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+
+            playerPositionLabel.leadingAnchor.constraint(equalTo: playerNextBtn.trailingAnchor, constant: 12),
+            playerPositionLabel.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+            playerPositionLabel.widthAnchor.constraint(equalToConstant: 60),
+
+            // Volume slider on the trailing side.
+            playerVolumeSlider.trailingAnchor.constraint(equalTo: volumeIcon.leadingAnchor, constant: -4),
+            playerVolumeSlider.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+            playerVolumeSlider.widthAnchor.constraint(equalToConstant: 100),
+            volumeIcon.trailingAnchor.constraint(equalTo: playerSettingsBtn.leadingAnchor, constant: -4),
+            volumeIcon.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+            playerSettingsBtn.trailingAnchor.constraint(equalTo: playerBar.trailingAnchor, constant: -8),
+            playerSettingsBtn.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+
+            // Scroll view below the player bar.
+            itemsScrollView.topAnchor.constraint(equalTo: playerBar.bottomAnchor, constant: 10),
             itemsScrollView.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
             itemsScrollView.trailingAnchor.constraint(equalTo: itemsContainer.trailingAnchor),
             itemsScrollView.bottomAnchor.constraint(equalTo: itemsContainer.bottomAnchor),
@@ -4943,7 +5137,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         guard let idStr = sender.identifier?.rawValue,
               let id = UUID(uuidString: idStr),
               let idx = collections.firstIndex(where: { $0.id == id }) else { return }
-        appDelegate?.presentAdhkar(collection: collections[idx], autoPlay: true)
+        // Select this collection and start the inline session.
+        selectedCollectionID = id
+        rebuildCollectionList()
+        rebuildItemsPane()
+        session.start(collection: collections[idx])
     }
 
     /// Rename a collection via alert, triggered from the right-click menu.
@@ -5193,6 +5391,47 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     private func selectedCollectionIndex() -> Int? {
         guard let id = selectedCollectionID else { return nil }
         return collections.firstIndex(where: { $0.id == id })
+    }
+    private func selectedCollection() -> AdhkarCollection? {
+        guard let idx = selectedCollectionIndex() else { return nil }
+        return collections[idx]
+    }
+
+    /// Settings menu for the player bar — volume is already on the slider,
+    /// so this popup shows output device options (mirrors adhan settings).
+    private func showAdhkarSettingsMenu(from sender: NSView) {
+        let menu = NSMenu()
+        let headerItem = NSMenuItem(title: t("settings.adhan.output"),
+                                     action: nil, keyEquivalent: "")
+        headerItem.isEnabled = false
+        menu.addItem(headerItem)
+        menu.addItem(.separator())
+        let devices = listAudioOutputDevices()
+        let curUID = UserDefaults.standard.string(forKey: kAdhkarAudioDevice) ?? ""
+        // "System Default" option
+        let defaultItem = NSMenuItem(title: t("settings.adhan.output.default"),
+                                      action: #selector(adhkarOutputChanged(_:)),
+                                      keyEquivalent: "")
+        defaultItem.target = self
+        defaultItem.representedObject = ""
+        if curUID.isEmpty { defaultItem.state = .on }
+        menu.addItem(defaultItem)
+        for dev in devices {
+            let mi = NSMenuItem(title: dev.name,
+                                 action: #selector(adhkarOutputChanged(_:)),
+                                 keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = dev.uid
+            if dev.uid == curUID { mi.state = .on }
+            menu.addItem(mi)
+        }
+        if let event = NSApp.currentEvent {
+            NSMenu.popUpContextMenu(menu, with: event, for: sender)
+        }
+    }
+    @objc private func adhkarOutputChanged(_ mi: NSMenuItem) {
+        let uid = (mi.representedObject as? String) ?? ""
+        UserDefaults.standard.set(uid, forKey: kAdhkarAudioDevice)
     }
 
     @objc private func itemMoveUp(_ sender: NSButton) {
