@@ -42,7 +42,18 @@ let kLastPreAdhanKey     = "lastPreAdhanPrepped"
 /// Options surfaced in the Settings dropdown for the pre-adhan heads-up.
 let kPreAdhanOptions: [Int] = [0, 5, 10, 15, 20, 30, 45, 60]
 
-let kAppVersion          = "2.1"
+// --- Adhkar (morning/evening remembrances) ---
+/// Master on/off for adhkar auto-recitation.
+let kAdhkarEnabled       = "adhkarEnabled"          // Bool (default true)
+/// Which prayer the morning adhkar should follow. "shuruq" (default) or "fajr".
+let kAdhkarMorningAnchor = "adhkarMorningAnchor"    // "shuruq" | "fajr"
+/// Which prayer the evening adhkar should follow. "asr" (default) or "maghrib".
+let kAdhkarEveningAnchor = "adhkarEveningAnchor"    // "asr" | "maghrib"
+/// Idempotency markers so each set fires once per day. Format "YYYY-MM-DD".
+let kLastAdhkarMorning   = "lastAdhkarMorning"
+let kLastAdhkarEvening   = "lastAdhkarEvening"
+
+let kAppVersion          = "2.2.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -574,6 +585,505 @@ func listAudioOutputDevices() -> [AudioOutputDevice] {
     // call (CoreAudio does not guarantee insertion order).
     result.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     return result
+}
+
+// ============================================================================
+// MARK: Adhkar (morning / evening) — model + playback session
+// ============================================================================
+// Adhkar are the daily remembrances from Hisn al-Muslim. We bundle 25 morning
+// and 23 evening items, each with its own recitation MP3. The session plays
+// them in order; when each item's audio finishes, the panel advances to the
+// next item and shows its Arabic text — so the text on screen always matches
+// the audio being recited (per-dhikr sync, the authentic model).
+//
+// Audio is stored under Resources/adhkar_audio/<id>.mp3; metadata in adhkar.json.
+
+/// One dhikr entry as loaded from `adhkar.json`.
+struct AdhkarItem: Codable {
+    let id:          Int
+    /// 0 = both morning & evening, 1 = morning only, 2 = evening only.
+    let type:        Int
+    let arabic:      String
+    /// Recommended repetitions (1, 3, 7, 10, 33, 100…). The audio is a single
+    /// recitation; for `count ≤ 3` we loop the audio that many times (matches
+    /// the authentic practice for the three Quls). For higher counts the audio
+    /// plays once and the recommended count is shown for the user to complete.
+    let count:       Int
+    let count_desc:  String
+    let virtue:      String
+    let source:      String
+    let audio_file:  String
+}
+
+/// Which set to recite. Morning adhkar are recited after Fajr / around sunrise;
+/// evening adhkar after Asr / around Maghrib.
+enum AdhkarSet: String {
+    case morning, evening
+}
+
+/// Loads + filters the bundled `adhkar.json`. Cached after first load.
+enum AdhkarData {
+    private static var cache: [String: [AdhkarItem]]?
+    private static func loadAll() -> [String: [AdhkarItem]] {
+        if let c = cache { return c }
+        guard let url = Bundle.main.url(forResource: "adhkar", withExtension: "json"),
+              let data = try? Data(contentsOf: url),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        // Parse loosely so a metadata key like "_meta" (a dict, not an array)
+        // doesn't fail the whole decode. Only arrays under known set keys are
+        // converted into AdhkarItem lists.
+        let decoder = JSONDecoder()
+        var out: [String: [AdhkarItem]] = [:]
+        for set in [AdhkarSet.morning, .evening] {
+            guard let arr = raw[set.rawValue] else { continue }
+            if let jsonData = try? JSONSerialization.data(withJSONObject: arr),
+               let items = try? decoder.decode([AdhkarItem].self, from: jsonData) {
+                out[set.rawValue] = items
+            }
+        }
+        cache = out
+        return out
+    }
+    static func items(for set: AdhkarSet) -> [AdhkarItem] {
+        loadAll()[set.rawValue] ?? []
+    }
+}
+
+/// Drives adhkar playback. Owns its own `AVAudioPlayer` (separate from the
+/// adhan player so the two never collide). The owning panel drives the UI by
+/// setting `onItemChange` / `onPlaybackStateChange` / `onFinish` closures.
+final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
+
+    /// `(current item, current item index 0-based, total items)`.
+    var onItemChange:          ((AdhkarItem, Int, Int) -> Void)?
+    /// Fired on play / pause / resume / mute toggles so the panel can refresh.
+    var onPlaybackStateChange: (() -> Void)?
+    /// Fired when the whole set completes naturally (last item finished).
+    var onFinish:              (() -> Void)?
+
+    private(set) var items: [AdhkarItem] = []
+    private var index   = 0
+    /// How many times the CURRENT item's audio has played so far.
+    private var playsSoFar = 0
+    /// How many times we should play the current item's audio before advancing.
+    private var targetPlays = 1
+
+    private var player: AVAudioPlayer?
+    private(set) var isPlaying  = false
+    private(set) var isPaused   = false
+    private(set) var isMuted    = false
+
+    /// Total number of items in the active set (0 if not started).
+    var count: Int { items.count }
+    /// Currently-active item, or nil if the session hasn't started / has ended.
+    var currentItem: AdhkarItem? {
+        guard index >= 0 && index < items.count else { return nil }
+        return items[index]
+    }
+    /// 1-based position for display ("3 of 25"); nil if nothing active.
+    var position: (Int, Int)? {
+        guard !items.isEmpty, index < items.count else { return nil }
+        return (index + 1, items.count)
+    }
+
+    /// Begin reciting a full set. Replaces any in-flight session.
+    func start(set: AdhkarSet) {
+        stop()
+        items = AdhkarData.items(for: set)
+        guard !items.isEmpty else { return }
+        index = 0
+        playsSoFar = 0
+        playCurrent()
+    }
+
+    /// Advance to the next item (skips remaining repeats of the current one).
+    func next() {
+        guard !items.isEmpty else { return }
+        if index + 1 < items.count {
+            index += 1
+            playsSoFar = 0
+            if isPaused { onItemChange?(items[index], index, items.count); return }
+            playCurrent()
+        } else {
+            finish()
+        }
+    }
+
+    /// Jump back to the previous item.
+    func previous() {
+        guard !items.isEmpty else { return }
+        if index > 0 {
+            index -= 1
+            playsSoFar = 0
+            if isPaused { onItemChange?(items[index], index, items.count); return }
+            playCurrent()
+        }
+    }
+
+    func pause() {
+        guard isPlaying else { return }
+        player?.pause()
+        isPlaying = false
+        isPaused  = true
+        onPlaybackStateChange?()
+    }
+
+    func resume() {
+        guard isPaused else { return }
+        if player?.play() ?? false {
+            isPlaying = true
+            isPaused  = false
+            onPlaybackStateChange?()
+        }
+    }
+
+    /// Toggle mute — keeps advancing through items but the audio is silent.
+    var muted: Bool { isMuted }
+    func setMuted(_ m: Bool) {
+        guard isMuted != m else { return }
+        isMuted = m
+        player?.volume = m ? 0 : 1.0
+        onPlaybackStateChange?()
+    }
+
+    /// Hard stop — abandons the session and releases the player.
+    func stop() {
+        player?.stop()
+        player = nil
+        items = []
+        index = 0
+        playsSoFar = 0
+        isPlaying = false
+        isPaused  = false
+        onPlaybackStateChange?()
+    }
+
+    // MARK: - internal
+
+    private func playCurrent() {
+        guard index >= 0 && index < items.count else { finish(); return }
+        let item = items[index]
+        // Loop count: respect up to 3 (authentic for the three Quls); higher
+        // recommended counts (33, 100) are shown in the UI for the user to
+        // complete via tasbih — we only play the audio once in that case.
+        targetPlays = max(1, min(item.count, 3))
+        playsSoFar = 0
+        onItemChange?(item, index, items.count)
+        playAudioFile(item.audio_file)
+    }
+
+    private func playAudioFile(_ fname: String) {
+        player?.stop()
+        // MP3s live under Resources/adhkar_audio/<id>.mp3
+        let base = fname.replacingOccurrences(of: ".mp3", with: "")
+        guard let url = Bundle.main.url(forResource: base, withExtension: "mp3",
+                                        subdirectory: "adhkar_audio"),
+              FileManager.default.fileExists(atPath: url.path),
+              let p = try? AVAudioPlayer(contentsOf: url) else {
+            // If audio is missing, auto-advance after a beat so the session
+            // never stalls on a single broken entry.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self else { return }
+                let dummy = AVAudioPlayer()
+                self.audioPlayerDidFinishPlaying(dummy, successfully: true)
+            }
+            return
+        }
+        player = p
+        p.delegate = self
+        p.volume = isMuted ? 0 : 1.0
+        p.prepareToPlay()
+        if p.play() {
+            isPlaying = true
+            isPaused  = false
+            onPlaybackStateChange?()
+        }
+    }
+
+    private func finish() {
+        player?.stop()
+        player = nil
+        isPlaying = false
+        isPaused  = false
+        let cb = onFinish
+        items = []
+        index = 0
+        cb?()
+    }
+
+    // MARK: - AVAudioPlayerDelegate
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        playsSoFar += 1
+        if playsSoFar < targetPlays {
+            // Same item, repeat.
+            playAudioFile(items[index].audio_file)
+            return
+        }
+        // Advance to next item.
+        if index + 1 < items.count {
+            index += 1
+            playCurrent()
+        } else {
+            finish()
+        }
+    }
+    func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
+        // Skip to next on decode failure rather than stalling.
+        next()
+    }
+}
+
+// ============================================================================
+// MARK: Adhkar panel — floating, always-on-top window for following the recitation
+// ============================================================================
+// The adhkar panel is a borderless NSPanel that floats above other apps so the
+// user can follow along while doing other things. It owns its own AdhkarSession
+// (separate from the adhan player so they never collide). The text on screen is
+// always the dhikr currently being recited.
+
+final class AdhkarPanel: NSPanel {
+
+    private let session = AdhkarSession()
+    private var currentSet: AdhkarSet = .morning
+
+    // UI elements
+    private var titleLabel:    NSTextField!
+    private var positionLabel: NSTextField!       // "3 of 25"
+    private var arabicLabel:   NSTextField!       // the dhikr (large, RTL)
+    private var countLabel:    NSTextField!       // "تُقرأ 3 مرات"
+    private var virtueLabel:   NSTextField!      // virtue / hadith source
+    private var playBtn:       HoverIconButton!
+    private var muteBtn:       HoverIconButton!
+    private var container:     NSView!            // everything sits in here
+
+    private let panelWidth:  CGFloat = 440
+    private let panelHeight: CGFloat = 580
+
+    init() {
+        let frame = NSRect(x: 0, y: 0, width: panelWidth, height: panelHeight)
+        // nonactivatingPanel = the panel doesn't steal focus from the current
+        // app (you can keep typing while it floats). floating level keeps it
+        // above normal windows. titled + closable for the standard chrome.
+        super.init(contentRect: frame,
+                   styleMask: [.nonactivatingPanel, .titled, .closable, .resizable],
+                   backing: .buffered, defer: false)
+        self.level              = .floating
+        self.isOpaque           = false
+        self.backgroundColor    = .clear
+        self.isMovableByWindowBackground = true
+        self.titleVisibility    = .hidden
+        self.titlebarAppearsTransparent = false
+        self.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        self.isReleasedWhenClosed = false
+        buildUI()
+        wireSession()
+    }
+
+    // MARK: - public API
+
+    /// Open (or reopen) the panel and start reciting the chosen set.
+    func present(set: AdhkarSet, autoPlay: Bool = true) {
+        currentSet = set
+        titleLabel.stringValue = (set == .morning)
+            ? t("adhkar.morning_title")
+            : t("adhkar.evening_title")
+        centerOnActiveScreen()
+        makeKeyAndOrderFront(nil)
+        if autoPlay { session.start(set: set) }
+    }
+
+    func togglePlayPause() {
+        if session.isPlaying { session.pause() }
+        else if session.isPaused { session.resume() }
+        else { session.start(set: currentSet) }
+    }
+
+    // MARK: - UI build
+
+    private func buildUI() {
+        let content = AdaptiveBackgroundView(frame: NSRect(x: 0, y: 0,
+                                                            width: panelWidth,
+                                                            height: panelHeight),
+                                              light: .windowBackgroundColor,
+                                              dark: NSColor(calibratedWhite: 0.12, alpha: 1.0))
+        content.wantsLayer = true
+        contentView = content
+
+        container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(container)
+
+        titleLabel = makeLabel(fontSize: 18, weight: .semibold, alignment: .center)
+        positionLabel = makeLabel(fontSize: 11, weight: .regular, alignment: .center,
+                                   textColor: .secondaryLabelColor)
+
+        // Big Arabic line — this is the centerpiece. RTL, large Cairo.
+        arabicLabel = NSTextField(wrappingLabelWithString: "")
+        arabicLabel.isEditable = false
+        arabicLabel.isBordered = false
+        arabicLabel.drawsBackground = false
+        arabicLabel.alignment = .center
+        arabicLabel.font = Localizer.shared.font(size: 22, weight: .medium)
+        arabicLabel.baseWritingDirection = .rightToLeft
+        arabicLabel.translatesAutoresizingMaskIntoConstraints = false
+        arabicLabel.cell?.truncatesLastVisibleLine = false
+        arabicLabel.cell?.wraps = true
+        arabicLabel.maximumNumberOfLines = 0
+
+        countLabel = makeLabel(fontSize: 12, weight: .regular, alignment: .center,
+                               textColor: .secondaryLabelColor)
+        virtueLabel = makeLabel(fontSize: 11, weight: .regular, alignment: .center,
+                                textColor: .tertiaryLabelColor)
+        virtueLabel.cell?.truncatesLastVisibleLine = false
+        virtueLabel.cell?.wraps = true
+        virtueLabel.maximumNumberOfLines = 0
+
+        // Controls row
+        let prevBtn  = makeControl(symbol: "backward.fill", tool: t("adhkar.prev"),
+                                    action: #selector(prevTapped))
+        playBtn      = makeControl(symbol: "pause.fill", tool: t("adhkar.pause"),
+                                    action: #selector(playTapped))
+        let nextBtn  = makeControl(symbol: "forward.fill", tool: t("adhkar.next"),
+                                    action: #selector(nextTapped))
+        muteBtn      = makeControl(symbol: "speaker.wave.2.fill", tool: t("adhkar.mute"),
+                                    action: #selector(muteTapped))
+        let stopBtn  = makeControl(symbol: "stop.fill", tool: t("adhkar.stop"),
+                                    action: #selector(stopTapped), tint: .systemRed)
+
+        let controls = NSStackView(views: [prevBtn, playBtn, nextBtn, muteBtn, stopBtn])
+        controls.orientation = .horizontal
+        controls.spacing = 12
+        controls.distribution = .equalCentering
+        controls.translatesAutoresizingMaskIntoConstraints = false
+
+        container.addSubview(titleLabel)
+        container.addSubview(positionLabel)
+        container.addSubview(arabicLabel)
+        container.addSubview(countLabel)
+        container.addSubview(virtueLabel)
+        container.addSubview(controls)
+
+        let guide = content.leadingAnchor
+        NSLayoutConstraint.activate([
+            container.leadingAnchor.constraint(equalTo: guide, constant: 24),
+            container.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -24),
+            container.topAnchor.constraint(equalTo: content.topAnchor, constant: 16),
+            container.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -20),
+
+            titleLabel.topAnchor.constraint(equalTo: container.topAnchor),
+            titleLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+
+            positionLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
+            positionLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+
+            arabicLabel.topAnchor.constraint(equalTo: positionLabel.bottomAnchor, constant: 24),
+            arabicLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 8),
+            arabicLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -8),
+
+            countLabel.topAnchor.constraint(equalTo: arabicLabel.bottomAnchor, constant: 20),
+            countLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+
+            virtueLabel.topAnchor.constraint(equalTo: countLabel.bottomAnchor, constant: 14),
+            virtueLabel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 4),
+            virtueLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -4),
+
+            controls.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -4),
+            controls.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            controls.heightAnchor.constraint(equalToConstant: 36),
+        ])
+    }
+
+    private func makeLabel(fontSize: CGFloat, weight: NSFont.Weight,
+                           alignment: NSTextAlignment,
+                           textColor: NSColor = .labelColor) -> NSTextField {
+        let l = NSTextField(labelWithString: "")
+        l.font = Localizer.shared.font(size: fontSize, weight: weight)
+        l.textColor = textColor
+        l.alignment = alignment
+        l.translatesAutoresizingMaskIntoConstraints = false
+        l.lineBreakMode = .byWordWrapping
+        return l
+    }
+
+    private func makeControl(symbol: String, tool: String,
+                              action: Selector, tint: NSColor? = nil) -> HoverIconButton {
+        let b = HoverIconButton(symbol: symbol, toolTip: tool,
+                                 target: self, action: action,
+                                 pointSize: 16, size: NSSize(width: 44, height: 34))
+        if let tint = tint { b.idleTint = tint; b.hoverTint = tint }
+        return b
+    }
+
+    // MARK: - session wiring
+
+    private func wireSession() {
+        session.onItemChange = { [weak self] item, idx, total in
+            self?.renderItem(item, idx: idx, total: total)
+        }
+        session.onPlaybackStateChange = { [weak self] in
+            self?.refreshPlayButton()
+        }
+        session.onFinish = { [weak self] in
+            self?.close()
+        }
+    }
+
+    private func renderItem(_ item: AdhkarItem, idx: Int, total: Int) {
+        arabicLabel.stringValue = item.arabic
+        // Show the recommended repeat count in Arabic when available.
+        let countText: String
+        if item.count > 1, !item.count_desc.isEmpty {
+            countText = item.count_desc
+        } else {
+            countText = ""
+        }
+        countLabel.stringValue = countText
+        // Virtue + source (small, dimmed). Truncate virtue so it doesn't dominate.
+        var v = item.virtue
+        if v.count > 220 { v = String(v.prefix(220)) + "…" }
+        virtueLabel.stringValue = v
+        positionLabel.stringValue = "\(idx + 1) / \(total)"
+        refreshPlayButton()
+    }
+
+    private func refreshPlayButton() {
+        let playing = session.isPlaying
+        let sym = playing ? "pause.fill" : "play.fill"
+        let tool = playing ? t("adhkar.pause") : t("adhkar.play")
+        if let img = templateSymbol(sym, pointSize: 16) {
+            playBtn.image = img
+        }
+        playBtn.toolTip = tool
+        muteBtn.image = templateSymbol(session.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                                        pointSize: 16)
+        muteBtn.toolTip = session.muted ? t("adhkar.unmute") : t("adhkar.mute")
+    }
+
+    // MARK: - control actions
+
+    @objc private func prevTapped()  { session.previous() }
+    @objc private func nextTapped()  { session.next() }
+    @objc private func playTapped()  { togglePlayPause() }
+    @objc private func muteTapped()  { session.setMuted(!session.muted) }
+    @objc private func stopTapped()  { session.stop(); close() }
+
+    // MARK: - placement
+
+    /// Anchor to the top-right of whichever screen the user is on, just under
+    /// the menu bar — predictable location that doesn't fight the active app.
+    private func centerOnActiveScreen() {
+        guard let screen = NSScreen.main else { return }
+        let sf = screen.visibleFrame
+        let w = panelWidth, h = panelHeight
+        let x = sf.maxX - w - 24
+        let y = sf.maxY - h - 8
+        setFrame(NSRect(x: x, y: y, width: w, height: h), display: true)
+    }
+
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
 }
 
 // ============================================================================
@@ -2798,6 +3308,10 @@ final class SettingsView: FlippedView {
     private var testBtn: HoverIconButton!
     private let notifCheck      = NSButton(checkboxWithTitle: t("settings.notif.show"),
                                            target: nil, action: nil)
+    /// Master on/off for auto-reciting the morning & evening adhkar at the
+    /// chosen anchor time. Manual opening from the menu still works when off.
+    private let adhkarCheck     = NSButton(checkboxWithTitle: t("settings.adhkar.auto"),
+                                           target: nil, action: nil)
     /// Pick how many minutes before each prayer to fire a heads-up
     /// notification. First entry = Off; rest are values from
     /// `kPreAdhanOptions` rendered as "N min before".
@@ -2847,6 +3361,7 @@ final class SettingsView: FlippedView {
 
         adhanCheck.state = UserDefaults.standard.bool(forKey: kAdhanEnabled) ? .on : .off
         notifCheck.state = UserDefaults.standard.bool(forKey: kNotificationsKey) ? .on : .off
+        adhkarCheck.state = UserDefaults.standard.bool(forKey: kAdhkarEnabled) ? .on : .off
 
         // Select the pre-adhan popup item matching the saved minutes; fall
         // back to "Off" (index 0) if the saved value isn't in the menu.
@@ -3367,6 +3882,15 @@ final class SettingsView: FlippedView {
         body.addSubview(preAdhanPopup)
         y += 34
 
+        // Adhkar auto-recite toggle — when on, the morning/evening adhkar
+        // recitation opens automatically at the anchor time (sunrise / Asr).
+        body.addSubview(sectionLabel(t("settings.section.adhkar"), y: y, width: W)); y += 18
+        adhkarCheck.frame = NSRect(x: 18, y: y, width: W - 36, height: 22)
+        adhkarCheck.target = self
+        adhkarCheck.action = #selector(adhkarToggleChanged)
+        body.addSubview(adhkarCheck)
+        y += 30
+
         installPanel(body, contentHeight: y, scrollView: soundTabScroll, width: W)
     }
 
@@ -3457,6 +3981,10 @@ final class SettingsView: FlippedView {
         UserDefaults.standard.set(on, forKey: kNotificationsKey)
         if on { appDelegate?.requestNotificationAuthorization() }
     }
+    @objc private func adhkarToggleChanged() {
+        let on = (adhkarCheck.state == .on)
+        UserDefaults.standard.set(on, forKey: kAdhkarEnabled)
+    }
     @objc private func preAdhanChanged() {
         let idx = preAdhanPopup.indexOfSelectedItem
         guard kPreAdhanOptions.indices.contains(idx) else { return }
@@ -3522,6 +4050,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     var stopAdhanStatusItem: NSStatusItem?
     var popover: NSPopover!
     var loader: WKWebView!
+
+    /// Floating adhkar window. Lazily instantiated on first use (auto-trigger
+    /// or manual menu open) so it costs nothing until needed.
+    var adhkarPanel: AdhkarPanel?
 
     var info = MosqueInfo()
 
@@ -3622,6 +4154,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             if wanted != isOpenAtLoginEnabled() {
                 setOpenAtLogin(wanted)
             }
+        }
+        // Adhkar defaults: feature on, morning follows sunrise, evening follows Asr.
+        if UserDefaults.standard.object(forKey: kAdhkarEnabled) == nil {
+            UserDefaults.standard.set(true, forKey: kAdhkarEnabled)
+        }
+        if UserDefaults.standard.object(forKey: kAdhkarMorningAnchor) == nil {
+            UserDefaults.standard.set("shuruq", forKey: kAdhkarMorningAnchor)
+        }
+        if UserDefaults.standard.object(forKey: kAdhkarEveningAnchor) == nil {
+            UserDefaults.standard.set("asr", forKey: kAdhkarEveningAnchor)
         }
 
         registerCairoFonts()
@@ -3752,6 +4294,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         menu.addItem(NSMenuItem(title: t("menu.choose"),   action: #selector(menuChoose),   keyEquivalent: ""))
         menu.addItem(NSMenuItem(title: t("menu.settings"), action: #selector(menuSettings), keyEquivalent: ","))
 
+        // Adhkar submenu — manual entry to the morning/evening recitations.
+        let adhkarItem = NSMenuItem(title: t("menu.adhkar"), action: nil, keyEquivalent: "")
+        let adhkarSub = NSMenu()
+        adhkarSub.addItem(NSMenuItem(title: t("adhkar.morning_title"),
+                                       action: #selector(menuAdhkarMorning(_:)),
+                                       keyEquivalent: ""))
+        adhkarSub.addItem(NSMenuItem(title: t("adhkar.evening_title"),
+                                       action: #selector(menuAdhkarEvening(_:)),
+                                       keyEquivalent: ""))
+        adhkarItem.submenu = adhkarSub
+        menu.addItem(adhkarItem)
+
         // Favorites submenu
         let favs = loadFavorites()
         if !favs.isEmpty {
@@ -3788,6 +4342,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         if !popover.isShown { togglePopover() }
         showSettings()
     }
+    @objc func menuAdhkarMorning(_ sender: NSMenuItem) { presentAdhkar(set: .morning, autoPlay: true) }
+    @objc func menuAdhkarEvening(_ sender: NSMenuItem) { presentAdhkar(set: .evening, autoPlay: true) }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
         guard favs.indices.contains(sender.tag) else { return }
@@ -4991,6 +5547,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         emphasizeRow(displayRow(for: nextIdx))
 
         checkAdhanTrigger()
+        checkAdhkarTrigger()
     }
 
     func displayRow(for timesIdx: Int) -> Int {
@@ -5325,6 +5882,70 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         // API — on modern macOS it's a no-op for many setups and the UN API
         // handles authorization failures gracefully by silently dropping.
         UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
+    }
+
+    // MARK: - Adhkar (morning / evening) trigger + presentation
+
+    /// Resolve a "HH:mm" string from `info` for the chosen anchor, or nil.
+    /// morningAnchor: "shuruq" → info.shuruq, "fajr" → info.times[0].
+    /// eveningAnchor: "asr" → info.times[2], "maghrib" → info.times[3].
+    private func adhkarAnchorTime(_ anchor: String) -> String? {
+        switch anchor {
+        case "shuruq":  return info.shuruq.isEmpty ? nil : info.shuruq
+        case "fajr":    return info.times.count > 0 ? info.times[0] : nil
+        case "asr":     return info.times.count > 2 ? info.times[2] : nil
+        case "maghrib": return info.times.count > 3 ? info.times[3] : nil
+        default:        return nil
+        }
+    }
+
+    /// Called every tick from `checkAdhanTrigger`-land — fires the matching
+    /// adhkar set once per day when the anchor time is reached, mirroring the
+    /// adhan idempotency pattern (marker "YYYY-MM-DD#morning" / "#evening").
+    func checkAdhkarTrigger() {
+        guard UserDefaults.standard.bool(forKey: kAdhkarEnabled) else { return }
+        let now = Date()
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let fmt = DateFormatter()
+        fmt.dateFormat = "HH:mm"
+        fmt.locale = Locale(identifier: "en_US_POSIX")
+        fmt.timeZone = TimeZone.current
+        let todayStr = todayString()
+
+        func attempt(set: AdhkarSet, anchor: String, key: String) {
+            let marker = "\(todayStr)#\(set.rawValue)"
+            let last = UserDefaults.standard.string(forKey: key) ?? ""
+            // Already fired today?
+            if last == marker { return }
+            if last > marker && last.hasPrefix(todayStr) { return }
+            guard let t = adhkarAnchorTime(anchor),
+                  let d = fmt.date(from: t) else { return }
+            let c = cal.dateComponents([.hour, .minute], from: d)
+            guard let when = cal.date(bySettingHour: c.hour ?? 0,
+                                       minute: c.minute ?? 0, second: 0, of: today) else { return }
+            // Fire window: [anchor, anchor + 60s). One tick-sized edge.
+            let dt = now.timeIntervalSince(when)
+            if dt >= 0 && dt < 60 {
+                presentAdhkar(set: set, autoPlay: true)
+                UserDefaults.standard.set(marker, forKey: key)
+            }
+        }
+
+        attempt(set: .morning,
+                anchor: UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq",
+                key: kLastAdhkarMorning)
+        attempt(set: .evening,
+                anchor: UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr",
+                key: kLastAdhkarEvening)
+    }
+
+    /// Open the adhkar window. `autoPlay` = true on scheduled trigger; false
+    /// when the user opens it manually from the menu (still autoplays because
+    /// that's the point of opening it, but leaves control to the user).
+    func presentAdhkar(set: AdhkarSet, autoPlay: Bool) {
+        if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
+        adhkarPanel?.present(set: set, autoPlay: autoPlay)
     }
 
     func todayString() -> String {

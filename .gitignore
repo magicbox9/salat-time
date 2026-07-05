@@ -25,3 +25,7 @@ DerivedData/
 
 # Logs
 *.log
+
+# Local dev/deploy helpers — machine-specific paths, not for the public repo
+update.sh
+Update.command

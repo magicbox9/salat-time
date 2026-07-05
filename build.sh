@@ -121,6 +121,69 @@ download_font "Cairo-Variable.ttf" \
     "https://raw.githubusercontent.com/google/fonts/main/ofl/cairo/Cairo%5Bslnt%2Cwght%5D.ttf" \
     || echo "  (Cairo-Variable skipped)"
 
+# ---------- adhkar audio + data (morning/evening) --------------------------
+# 27 per-dhikr MP3s sourced from hisnmuslim.com (Hisn al-Muslim) and
+# mp3quran.net (Mishary Al-Afasy for the Qur'anic adhkar — Ayatul Kursi
+# and the three Quls). Each file is one dhikr recitation; the app plays
+# them in order and shows the matching Arabic text in the floating window.
+echo "Fetching adhkar audio..."
+ADHKAR_AUDIO_SUBDIR="adhkar_audio"
+mkdir -p "$RESOURCES_DIR/$ADHKAR_AUDIO_SUBDIR"
+download_adhkar () {
+    local fname="$1"
+    local url="$2"
+    local out="$RESOURCES_DIR/$ADHKAR_AUDIO_SUBDIR/$fname"
+    # Skip if already downloaded (cached from a previous build)
+    if [ -s "$out" ]; then
+        local sz=$(stat -f%z "$out" 2>/dev/null || echo 0)
+        [ "$sz" -gt 10000 ] && return 0
+    fi
+    if curl -sSfL --max-time 45 -A "Mozilla/5.0" -o "$out" "$url"; then
+        local size=$(stat -f%z "$out" 2>/dev/null || echo 0)
+        if [ "$size" -gt 10000 ]; then
+            echo "  $fname  ($size bytes)"
+            return 0
+        fi
+    fi
+    rm -f "$out"
+    echo "  (failed: $fname)"
+    return 1
+}
+
+# hisnmuslim.com hosts most adhkar; mp3quran.net (Mishary Al-Afasy) hosts
+# the three Quls (112/113/114) used as both morning and evening adhkar.
+download_adhkar "75.mp3"   "https://www.hisnmuslim.com/audio/ar/75.mp3"
+download_adhkar "77.mp3"   "https://www.hisnmuslim.com/audio/ar/77.mp3"
+download_adhkar "78.mp3"   "https://www.hisnmuslim.com/audio/ar/78.mp3"
+download_adhkar "79.mp3"   "https://www.hisnmuslim.com/audio/ar/79.mp3"
+download_adhkar "80.mp3"   "https://www.hisnmuslim.com/audio/ar/80.mp3"
+download_adhkar "81.mp3"   "https://www.hisnmuslim.com/audio/ar/81.mp3"
+download_adhkar "82.mp3"   "https://www.hisnmuslim.com/audio/ar/82.mp3"
+download_adhkar "83.mp3"   "https://www.hisnmuslim.com/audio/ar/83.mp3"
+download_adhkar "84.mp3"   "https://www.hisnmuslim.com/audio/ar/84.mp3"
+download_adhkar "85.mp3"   "https://www.hisnmuslim.com/audio/ar/85.mp3"
+download_adhkar "86.mp3"   "https://www.hisnmuslim.com/audio/ar/86.mp3"
+download_adhkar "87.mp3"   "https://www.hisnmuslim.com/audio/ar/87.mp3"
+download_adhkar "88.mp3"   "https://www.hisnmuslim.com/audio/ar/88.mp3"
+download_adhkar "89.mp3"   "https://www.hisnmuslim.com/audio/ar/89.mp3"
+download_adhkar "90.mp3"   "https://www.hisnmuslim.com/audio/ar/90.mp3"
+download_adhkar "91.mp3"   "https://www.hisnmuslim.com/audio/ar/91.mp3"
+download_adhkar "92.mp3"   "https://www.hisnmuslim.com/audio/ar/92.mp3"
+download_adhkar "93.mp3"   "https://www.hisnmuslim.com/audio/ar/93.mp3"
+download_adhkar "94.mp3"   "https://www.hisnmuslim.com/audio/ar/94.mp3"
+download_adhkar "95.mp3"   "https://www.hisnmuslim.com/audio/ar/95.mp3"
+download_adhkar "96.mp3"   "https://www.hisnmuslim.com/audio/ar/96.mp3"
+download_adhkar "97.mp3"   "https://www.hisnmuslim.com/audio/ar/97.mp3"
+download_adhkar "98.mp3"   "https://www.hisnmuslim.com/audio/ar/98.mp3"
+download_adhkar "101.mp3"  "https://www.hisnmuslim.com/audio/ar/101.mp3"
+download_adhkar "112.mp3"  "https://server8.mp3quran.net/afs/112.mp3"
+download_adhkar "113.mp3"  "https://server8.mp3quran.net/afs/113.mp3"
+download_adhkar "114.mp3"  "https://server8.mp3quran.net/afs/114.mp3"
+
+# Bundle the adhkar text/metadata (morning + evening sets, sourced from
+# the open-source Morning and Evening Adhkar DB / Hisn al-Muslim).
+cp adhkar.json "$RESOURCES_DIR/adhkar.json"
+
 # ---------- translations.json (i18n) ---------------------------------------
 echo "Writing translations.json..."
 cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
@@ -220,7 +283,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "Appearance",
     "settings.tab.menu_bar": "Menu bar",
     "settings.tab.sound": "Sound",
-
     "settings.section.startup": "Startup",
     "settings.startup.open_at_login": "Open at login",
     "tooltip.open_at_login_failed": "macOS refused the login-item registration. Try again or enable it in System Settings → General → Login Items.",
@@ -231,7 +293,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "Set as default",
     "picker.status.set_default_prefix": "Set default:",
     "picker.status.added_fav_prefix": "Added to favorites:",
-    "picker.status.removed_fav_prefix": "Removed from favorites:"
+    "picker.status.removed_fav_prefix": "Removed from favorites:",
+    "menu.adhkar": "Adhkar",
+    "adhkar.morning_title": "Adhkar of the Morning",
+    "adhkar.evening_title": "Adhkar of the Evening",
+    "adhkar.play": "Play",
+    "adhkar.pause": "Pause",
+    "adhkar.mute": "Mute",
+    "adhkar.unmute": "Unmute",
+    "adhkar.stop": "Stop",
+    "adhkar.next": "Next dhikr",
+    "adhkar.prev": "Previous dhikr",
+    "settings.section.adhkar": "Adhkar",
+    "settings.adhkar.auto": "Auto-recite morning & evening adhkar"
   },
   "fr": {
     "col.prayer": "Prière",
@@ -328,7 +402,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "Apparence",
     "settings.tab.menu_bar": "Barre de menus",
     "settings.tab.sound": "Son",
-
     "settings.section.startup": "Démarrage",
     "settings.startup.open_at_login": "Ouvrir à la connexion",
     "tooltip.open_at_login_failed": "macOS a refusé l'enregistrement. Réessayez ou activez-le dans Réglages système → Général → Ouverture.",
@@ -339,7 +412,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "Définir par défaut",
     "picker.status.set_default_prefix": "Défini par défaut :",
     "picker.status.added_fav_prefix": "Ajouté aux favoris :",
-    "picker.status.removed_fav_prefix": "Retiré des favoris :"
+    "picker.status.removed_fav_prefix": "Retiré des favoris :",
+    "menu.adhkar": "Adhkār",
+    "adhkar.morning_title": "Adhkār du Matin",
+    "adhkar.evening_title": "Adhkār du Soir",
+    "adhkar.play": "Lire",
+    "adhkar.pause": "Pause",
+    "adhkar.mute": "Couper le son",
+    "adhkar.unmute": "Réactiver le son",
+    "adhkar.stop": "Arrêter",
+    "adhkar.next": "Dhikr suivant",
+    "adhkar.prev": "Dhikr précédent",
+    "settings.section.adhkar": "Adhkār",
+    "settings.adhkar.auto": "Réciter automatiquement les adhkār du matin et du soir"
   },
   "es": {
     "col.prayer": "Oración",
@@ -431,7 +516,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "Apariencia",
     "settings.tab.menu_bar": "Barra de menús",
     "settings.tab.sound": "Sonido",
-
     "settings.section.startup": "Inicio",
     "settings.startup.open_at_login": "Abrir al iniciar sesión",
     "tooltip.open_at_login_failed": "macOS rechazó el registro. Intente de nuevo o actívelo en Configuración → General → Ítems de inicio.",
@@ -442,7 +526,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "Establecer como predeterminada",
     "picker.status.set_default_prefix": "Predeterminada:",
     "picker.status.added_fav_prefix": "Añadido a favoritos:",
-    "picker.status.removed_fav_prefix": "Quitado de favoritos:"
+    "picker.status.removed_fav_prefix": "Quitado de favoritos:",
+    "menu.adhkar": "Adhkār",
+    "adhkar.morning_title": "Adhkār de la Mañana",
+    "adhkar.evening_title": "Adhkār de la Tarde",
+    "adhkar.play": "Reproducir",
+    "adhkar.pause": "Pausa",
+    "adhkar.mute": "Silenciar",
+    "adhkar.unmute": "Activar sonido",
+    "adhkar.stop": "Detener",
+    "adhkar.next": "Dhikr siguiente",
+    "adhkar.prev": "Dhikr anterior",
+    "settings.section.adhkar": "Adhkār",
+    "settings.adhkar.auto": "Recitar automáticamente los adhkār de la mañana y la tarde"
   },
   "ar": {
     "col.prayer": "الصلاة",
@@ -539,7 +635,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "المظهر",
     "settings.tab.menu_bar": "شريط القائمة",
     "settings.tab.sound": "الصوت",
-
     "settings.section.startup": "بدء التشغيل",
     "settings.startup.open_at_login": "فتح عند تسجيل الدخول",
     "tooltip.open_at_login_failed": "رفض النظام تسجيل التطبيق. حاول مرة أخرى أو قم بالتفعيل من الإعدادات → عام → عناصر بدء التشغيل.",
@@ -550,7 +645,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "تعيين كافتراضي",
     "picker.status.set_default_prefix": "تم التعيين كافتراضي:",
     "picker.status.added_fav_prefix": "تمت الإضافة للمفضلة:",
-    "picker.status.removed_fav_prefix": "تمت الإزالة من المفضلة:"
+    "picker.status.removed_fav_prefix": "تمت الإزالة من المفضلة:",
+    "menu.adhkar": "الأذكار",
+    "adhkar.morning_title": "أذكار الصباح",
+    "adhkar.evening_title": "أذكار المساء",
+    "adhkar.play": "تشغيل",
+    "adhkar.pause": "إيقاف مؤقت",
+    "adhkar.mute": "كتم الصوت",
+    "adhkar.unmute": "إلغاء الكتم",
+    "adhkar.stop": "إيقاف",
+    "adhkar.next": "الذكر التالي",
+    "adhkar.prev": "الذكر السابق",
+    "settings.section.adhkar": "الأذكار",
+    "settings.adhkar.auto": "تلاوة أذكار الصباح والمساء تلقائيًا"
   },
   "zh": {
     "col.prayer": "礼拜",
@@ -640,7 +747,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "外观",
     "settings.tab.menu_bar": "菜单栏",
     "settings.tab.sound": "声音",
-
     "settings.section.startup": "启动",
     "settings.startup.open_at_login": "登录时打开",
     "tooltip.open_at_login_failed": "macOS 拒绝注册登录项。请重试,或在 系统设置 → 通用 → 登录项 中启用。",
@@ -651,7 +757,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "设为默认",
     "picker.status.set_default_prefix": "设为默认:",
     "picker.status.added_fav_prefix": "已添加到收藏:",
-    "picker.status.removed_fav_prefix": "已从收藏中移除:"
+    "picker.status.removed_fav_prefix": "已从收藏中移除:",
+    "menu.adhkar": "赞词",
+    "adhkar.morning_title": "晨间赞词",
+    "adhkar.evening_title": "晚间赞词",
+    "adhkar.play": "播放",
+    "adhkar.pause": "暂停",
+    "adhkar.mute": "静音",
+    "adhkar.unmute": "取消静音",
+    "adhkar.stop": "停止",
+    "adhkar.next": "下一条",
+    "adhkar.prev": "上一条",
+    "settings.section.adhkar": "赞词",
+    "settings.adhkar.auto": "自动诵读晨间与晚间赞词"
   },
   "hi": {
     "col.prayer": "नमाज़",
@@ -741,7 +859,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "स्वरूप",
     "settings.tab.menu_bar": "मेनू बार",
     "settings.tab.sound": "ध्वनि",
-
     "settings.section.startup": "प्रारंभ",
     "settings.startup.open_at_login": "लॉगिन पर खोलें",
     "tooltip.open_at_login_failed": "macOS ने पंजीकरण अस्वीकार कर दिया। सिस्टम सेटिंग्स → सामान्य → लॉगिन आइटम से सक्षम करें।",
@@ -752,7 +869,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "डिफ़ॉल्ट बनाएँ",
     "picker.status.set_default_prefix": "डिफ़ॉल्ट बनाया:",
     "picker.status.added_fav_prefix": "पसंदीदा में जोड़ा:",
-    "picker.status.removed_fav_prefix": "पसंदीदा से हटाया:"
+    "picker.status.removed_fav_prefix": "पसंदीदा से हटाया:",
+    "menu.adhkar": "अज़्कार",
+    "adhkar.morning_title": "सुबह के अज़्कार",
+    "adhkar.evening_title": "शाम के अज़्कार",
+    "adhkar.play": "चलाएँ",
+    "adhkar.pause": "रोकें",
+    "adhkar.mute": "मौन करें",
+    "adhkar.unmute": "मौन हटाएँ",
+    "adhkar.stop": "बंद करें",
+    "adhkar.next": "अगला ज़िक्र",
+    "adhkar.prev": "पिछला ज़िक्र",
+    "settings.section.adhkar": "अज़्कार",
+    "settings.adhkar.auto": "सुबह और शाम के अज़्कार स्वतः पढ़ें"
   },
   "bn": {
     "col.prayer": "নামাজ",
@@ -842,7 +971,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "চেহারা",
     "settings.tab.menu_bar": "মেনু বার",
     "settings.tab.sound": "শব্দ",
-
     "settings.section.startup": "শুরু",
     "settings.startup.open_at_login": "লগইনে খুলুন",
     "tooltip.open_at_login_failed": "macOS নিবন্ধন অস্বীকার করেছে। সিস্টেম সেটিংস → সাধারণ → লগইন আইটেম থেকে সক্ষম করুন।",
@@ -853,7 +981,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "ডিফল্ট করুন",
     "picker.status.set_default_prefix": "ডিফল্ট করা হয়েছে:",
     "picker.status.added_fav_prefix": "পছন্দে যুক্ত:",
-    "picker.status.removed_fav_prefix": "পছন্দ থেকে সরানো হয়েছে:"
+    "picker.status.removed_fav_prefix": "পছন্দ থেকে সরানো হয়েছে:",
+    "menu.adhkar": "আজকার",
+    "adhkar.morning_title": "সকালের আজকার",
+    "adhkar.evening_title": "সন্ধ্যার আজকার",
+    "adhkar.play": "চালান",
+    "adhkar.pause": "বিরতি",
+    "adhkar.mute": "শব্দ বন্ধ",
+    "adhkar.unmute": "শব্দ চালু",
+    "adhkar.stop": "বন্ধ করুন",
+    "adhkar.next": "পরবর্তী জিকর",
+    "adhkar.prev": "পূর্ববর্তী জিকর",
+    "settings.section.adhkar": "আজকার",
+    "settings.adhkar.auto": "সকাল ও সন্ধ্যার আজকার স্বয়ংক্রিয়ভাবে পাঠ করুন"
   },
   "ru": {
     "col.prayer": "Молитва",
@@ -943,7 +1083,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "Оформление",
     "settings.tab.menu_bar": "Строка меню",
     "settings.tab.sound": "Звук",
-
     "settings.section.startup": "Запуск",
     "settings.startup.open_at_login": "Открывать при входе",
     "tooltip.open_at_login_failed": "macOS отклонил регистрацию. Включите в Системных настройках → Основные → Объекты входа.",
@@ -954,7 +1093,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "Сделать основной",
     "picker.status.set_default_prefix": "Основная:",
     "picker.status.added_fav_prefix": "Добавлено в избранное:",
-    "picker.status.removed_fav_prefix": "Удалено из избранного:"
+    "picker.status.removed_fav_prefix": "Удалено из избранного:",
+    "menu.adhkar": "Азкар",
+    "adhkar.morning_title": "Утренние азкар",
+    "adhkar.evening_title": "Вечерние азкар",
+    "adhkar.play": "Воспроизвести",
+    "adhkar.pause": "Пауза",
+    "adhkar.mute": "Без звука",
+    "adhkar.unmute": "Включить звук",
+    "adhkar.stop": "Остановить",
+    "adhkar.next": "Следующий зикр",
+    "adhkar.prev": "Предыдущий зикр",
+    "settings.section.adhkar": "Азкар",
+    "settings.adhkar.auto": "Автоматически читать утренние и вечерние азкар"
   },
   "pt": {
     "col.prayer": "Oração",
@@ -1044,7 +1195,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "Aparência",
     "settings.tab.menu_bar": "Barra de menus",
     "settings.tab.sound": "Som",
-
     "settings.section.startup": "Inicialização",
     "settings.startup.open_at_login": "Abrir ao iniciar sessão",
     "tooltip.open_at_login_failed": "O macOS recusou o registro. Ative em Ajustes do Sistema → Geral → Itens de Início.",
@@ -1055,7 +1205,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "Definir como padrão",
     "picker.status.set_default_prefix": "Padrão definida:",
     "picker.status.added_fav_prefix": "Adicionado aos favoritos:",
-    "picker.status.removed_fav_prefix": "Removido dos favoritos:"
+    "picker.status.removed_fav_prefix": "Removido dos favoritos:",
+    "menu.adhkar": "Adhkār",
+    "adhkar.morning_title": "Adhkār da Manhã",
+    "adhkar.evening_title": "Adhkār da Tarde",
+    "adhkar.play": "Reproduzir",
+    "adhkar.pause": "Pausar",
+    "adhkar.mute": "Silenciar",
+    "adhkar.unmute": "Ativar som",
+    "adhkar.stop": "Parar",
+    "adhkar.next": "Dhikr seguinte",
+    "adhkar.prev": "Dhikr anterior",
+    "settings.section.adhkar": "Adhkār",
+    "settings.adhkar.auto": "Recitar automaticamente os adhkār da manhã e da tarde"
   },
   "ur": {
     "col.prayer": "نماز",
@@ -1145,7 +1307,6 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "settings.tab.appearance": "ظاہری شکل",
     "settings.tab.menu_bar": "مینو بار",
     "settings.tab.sound": "آواز",
-
     "settings.section.startup": "آغاز",
     "settings.startup.open_at_login": "لاگ اِن پر کھولیں",
     "tooltip.open_at_login_failed": "macOS نے رجسٹریشن مسترد کر دی۔ سسٹم سیٹنگز → عمومی → لاگ اِن آئٹمز سے فعال کریں۔",
@@ -1156,7 +1317,19 @@ cat > "$RESOURCES_DIR/translations.json" <<'JSON_EOF'
     "picker.tooltip.set_default": "ڈیفالٹ مقرر کریں",
     "picker.status.set_default_prefix": "ڈیفالٹ مقرر:",
     "picker.status.added_fav_prefix": "پسندیدہ میں شامل:",
-    "picker.status.removed_fav_prefix": "پسندیدہ سے خارج:"
+    "picker.status.removed_fav_prefix": "پسندیدہ سے خارج:",
+    "menu.adhkar": "اذکار",
+    "adhkar.morning_title": "اذکارِ صباح",
+    "adhkar.evening_title": "اذکارِ مساء",
+    "adhkar.play": "چلائیں",
+    "adhkar.pause": "روکیں",
+    "adhkar.mute": "آواز بند",
+    "adhkar.unmute": "آواز چالو",
+    "adhkar.stop": "بند کریں",
+    "adhkar.next": "اگلا ذکر",
+    "adhkar.prev": "پچھلا ذکر",
+    "settings.section.adhkar": "اذکار",
+    "settings.adhkar.auto": "اذکارِ صباح و مساء خودکار تلاوت"
   }
 }
 JSON_EOF
