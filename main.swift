@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.1.0"
+let kAppVersion          = "3.1.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4779,7 +4779,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         itemsStack = NSStackView()
         itemsStack.orientation = .vertical
-        itemsStack.alignment = .centerX
+        // Fill width (not centerX) so cards always span the available width
+        // and Arabic text wraps inside the card instead of stretching forever.
+        itemsStack.alignment = .leading
         itemsStack.spacing = 10
         itemsStack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
         itemsStack.translatesAutoresizingMaskIntoConstraints = false
@@ -4789,6 +4791,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         itemsScrollView.hasVerticalScroller = true
         itemsScrollView.drawsBackground = false
         itemsScrollView.translatesAutoresizingMaskIntoConstraints = false
+        // Prevent horizontal scrolling entirely — content must wrap vertically.
+        itemsScrollView.hasHorizontalScroller = false
+        itemsScrollView.autohidesScrollers = true
         itemsContainer.addSubview(itemsScrollView)
 
         emptyStateLabel = NSTextField(labelWithString: t("adhkar.editor.no_collection_selected"))
@@ -4844,6 +4849,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             itemsScrollView.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
             itemsScrollView.trailingAnchor.constraint(equalTo: itemsContainer.trailingAnchor),
             itemsScrollView.bottomAnchor.constraint(equalTo: itemsContainer.bottomAnchor),
+
+            // Pin the stack's width to the scroll view's width so cards never
+            // grow horizontally to fit long text — the Arabic wraps instead.
+            // This is the key constraint that stops the "one long line" bug.
+            itemsStack.widthAnchor.constraint(equalTo: itemsScrollView.widthAnchor),
 
             emptyStateLabel.centerXAnchor.constraint(equalTo: itemsContainer.centerXAnchor),
             emptyStateLabel.centerYAnchor.constraint(equalTo: itemsContainer.centerYAnchor),
@@ -5112,6 +5122,13 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         for (i, entry) in c.items.enumerated() {
             let card = makeItemCard(entry, index: i, collectionIndex: idx)
             itemsStack.addArrangedSubview(card)
+            // Force each card to fill the stack's width so the Arabic wraps
+            // inside the card rather than stretching the card sideways.
+            itemsStack.addConstraint(
+                NSLayoutConstraint(item: card, attribute: .width,
+                                    relatedBy: .equal,
+                                    toItem: itemsStack, attribute: .width,
+                                    multiplier: 1, constant: 0))
         }
     }
 
