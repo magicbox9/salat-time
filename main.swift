@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.0.0-alpha.3"
+let kAppVersion          = "3.0.0-alpha.4"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4506,32 +4506,914 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 }
 
 // ============================================================================
-// MARK: Adhkar editor (stub — full UI arrives in phase 4)
+// MARK: Adhkar editor — two-pane collection manager (phase 4)
 // ============================================================================
-/// Placeholder controller. Phase 4 replaces this with the real two-pane
-/// editor (collection list + items pane). Kept as a thin stub now so the
-/// main window's tab factory has something to instantiate.
+/// Full adhkar editor. Left pane: list of collections (add/select/rename/
+/// delete). Right pane: items in the selected collection (add from library,
+/// add custom, reorder, remove, pick audio per item). All edits persist to
+/// UserDefaults immediately via AdhkarLibrary.save().
 final class AdhkarEditorViewController: NSViewController, MainTabContent {
+
     weak var appDelegate: AppDelegate?
+
+    // Data
+    private var collections: [AdhkarCollection] = []
+    private var selectedCollectionID: UUID?
+
+    // Layout pieces
+    private var collectionView: NSScrollView!
+    private var collectionList: NSStackView!
+    private var itemsContainer: NSView!
+    private var itemsScrollView: NSScrollView!
+    private var itemsStack: NSStackView!
+    private var itemsHeaderLabel: NSTextField!
+    private var emptyStateLabel: NSTextField!
+
+    // Transient preview player for the audio picker's "preview" button.
+    private var previewPlayer: AVAudioPlayer?
+
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
+
     override func loadView() {
         let v = NSView()
-        let l = NSTextField(labelWithString: t("adhkar.editor.coming_soon"))
-        l.font = NSFont.systemFont(ofSize: 16, weight: .medium)
-        l.textColor = .tertiaryLabelColor
-        l.translatesAutoresizingMaskIntoConstraints = false
-        v.addSubview(l)
-        NSLayoutConstraint.activate([
-            l.centerXAnchor.constraint(equalTo: v.centerXAnchor),
-            l.centerYAnchor.constraint(equalTo: v.centerYAnchor),
-        ])
+        buildTwoPaneLayout(into: v)
         self.view = v
     }
-    func tabDidActivate() {}
+
+    func tabDidActivate() {
+        reloadFromStorage()
+    }
+
+    // MARK: - load / save
+
+    private func reloadFromStorage() {
+        collections = AdhkarLibrary.load()
+        if selectedCollectionID == nil || !collections.contains(where: { $0.id == selectedCollectionID }) {
+            selectedCollectionID = collections.first?.id
+        }
+        rebuildCollectionList()
+        rebuildItemsPane()
+    }
+
+    private func persist() {
+        AdhkarLibrary.save(collections)
+    }
+
+    // MARK: - two-pane layout
+
+    private func buildTwoPaneLayout(into root: NSView) {
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+
+        // ---- left pane: collections ----
+        let leftWrap = NSView()
+        leftWrap.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(leftWrap)
+
+        let collectionsTitle = NSTextField(labelWithString: t("adhkar.editor.collections"))
+        collectionsTitle.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        collectionsTitle.textColor = .secondaryLabelColor
+        collectionsTitle.translatesAutoresizingMaskIntoConstraints = false
+        leftWrap.addSubview(collectionsTitle)
+
+        let newBtn = NSButton(title: "+  \(t("adhkar.editor.new_collection"))",
+                               target: self, action: #selector(newCollection))
+        newBtn.bezelStyle = .rounded
+        newBtn.controlSize = .small
+        newBtn.translatesAutoresizingMaskIntoConstraints = false
+        leftWrap.addSubview(newBtn)
+
+        collectionList = NSStackView()
+        collectionList.orientation = .vertical
+        collectionList.alignment = .centerX
+        collectionList.spacing = 4
+        collectionList.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
+        collectionList.translatesAutoresizingMaskIntoConstraints = false
+
+        collectionView = NSScrollView()
+        collectionView.documentView = collectionList
+        collectionView.hasVerticalScroller = true
+        collectionView.drawsBackground = false
+        collectionView.translatesAutoresizingMaskIntoConstraints = false
+        leftWrap.addSubview(collectionView)
+
+        // ---- right pane: items ----
+        itemsContainer = NSView()
+        itemsContainer.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(itemsContainer)
+
+        itemsHeaderLabel = NSTextField(labelWithString: "")
+        itemsHeaderLabel.font = NSFont.systemFont(ofSize: 15, weight: .semibold)
+        itemsHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(itemsHeaderLabel)
+
+        let addLibBtn = NSButton(title: t("adhkar.editor.add_from_library"),
+                                  target: self, action: #selector(addFromLibrary))
+        addLibBtn.bezelStyle = .rounded
+        addLibBtn.controlSize = .small
+        addLibBtn.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(addLibBtn)
+
+        let addCustomBtn = NSButton(title: t("adhkar.editor.add_custom"),
+                                     target: self, action: #selector(addCustom))
+        addCustomBtn.bezelStyle = .rounded
+        addCustomBtn.controlSize = .small
+        addCustomBtn.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(addCustomBtn)
+
+        itemsStack = NSStackView()
+        itemsStack.orientation = .vertical
+        itemsStack.alignment = .centerX
+        itemsStack.spacing = 10
+        itemsStack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        itemsStack.translatesAutoresizingMaskIntoConstraints = false
+
+        itemsScrollView = NSScrollView()
+        itemsScrollView.documentView = itemsStack
+        itemsScrollView.hasVerticalScroller = true
+        itemsScrollView.drawsBackground = false
+        itemsScrollView.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(itemsScrollView)
+
+        emptyStateLabel = NSTextField(labelWithString: t("adhkar.editor.no_collection_selected"))
+        emptyStateLabel.font = NSFont.systemFont(ofSize: 13)
+        emptyStateLabel.textColor = .tertiaryLabelColor
+        emptyStateLabel.alignment = .center
+        emptyStateLabel.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(emptyStateLabel)
+
+        root.addSubview(divider)
+
+        NSLayoutConstraint.activate([
+            // Left pane
+            leftWrap.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+            leftWrap.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+            leftWrap.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+            leftWrap.widthAnchor.constraint(equalToConstant: 220),
+
+            collectionsTitle.topAnchor.constraint(equalTo: leftWrap.topAnchor),
+            collectionsTitle.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
+
+            newBtn.topAnchor.constraint(equalTo: collectionsTitle.bottomAnchor, constant: 8),
+            newBtn.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
+            newBtn.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
+
+            collectionView.topAnchor.constraint(equalTo: newBtn.bottomAnchor, constant: 10),
+            collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
+            collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
+            collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor),
+
+            // Divider
+            divider.leadingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: 12),
+            divider.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+            divider.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+
+            // Right pane
+            itemsContainer.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 16),
+            itemsContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+            itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
+            itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+
+            itemsHeaderLabel.topAnchor.constraint(equalTo: itemsContainer.topAnchor),
+            itemsHeaderLabel.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
+
+            addLibBtn.topAnchor.constraint(equalTo: itemsHeaderLabel.bottomAnchor, constant: 12),
+            addLibBtn.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
+
+            addCustomBtn.topAnchor.constraint(equalTo: itemsHeaderLabel.bottomAnchor, constant: 12),
+            addCustomBtn.leadingAnchor.constraint(equalTo: addLibBtn.trailingAnchor, constant: 8),
+
+            itemsScrollView.topAnchor.constraint(equalTo: addLibBtn.bottomAnchor, constant: 12),
+            itemsScrollView.leadingAnchor.constraint(equalTo: itemsContainer.leadingAnchor),
+            itemsScrollView.trailingAnchor.constraint(equalTo: itemsContainer.trailingAnchor),
+            itemsScrollView.bottomAnchor.constraint(equalTo: itemsContainer.bottomAnchor),
+
+            emptyStateLabel.centerXAnchor.constraint(equalTo: itemsContainer.centerXAnchor),
+            emptyStateLabel.centerYAnchor.constraint(equalTo: itemsContainer.centerYAnchor),
+            emptyStateLabel.leadingAnchor.constraint(greaterThanOrEqualTo: itemsContainer.leadingAnchor, constant: 20),
+        ])
+    }
+
+    // MARK: - collection list (left pane)
+
+    private func rebuildCollectionList() {
+        collectionList.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        for c in collections {
+            let row = makeCollectionRow(c)
+            collectionList.addArrangedSubview(row)
+        }
+    }
+
+    private func makeCollectionRow(_ c: AdhkarCollection) -> NSView {
+        let row = CollectionRowView()
+        row.translatesAutoresizingMaskIntoConstraints = false
+        row.wantsLayer = true
+        row.layer?.cornerRadius = 6
+        row.collectionID = c.id
+        let isSel = (c.id == selectedCollectionID)
+        row.layer?.backgroundColor = isSel
+            ? NSColor.controlAccentColor.withAlphaComponent(0.14).cgColor
+            : NSColor.clear.cgColor
+
+        let nameLbl = NSTextField(labelWithString: c.name)
+        nameLbl.font = NSFont.systemFont(ofSize: 13, weight: isSel ? .semibold : .regular)
+        nameLbl.textColor = isSel ? .controlAccentColor : .labelColor
+        nameLbl.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(nameLbl)
+
+        // Schedule badge
+        let badgeText: String
+        if c.anchorKind == "manual" {
+            badgeText = c.autoPlay ? "●" : ""
+        } else {
+            badgeText = scheduleLabel(c.anchorKind)
+        }
+        let badge = NSTextField(labelWithString: badgeText)
+        badge.font = NSFont.systemFont(ofSize: 10)
+        badge.textColor = .tertiaryLabelColor
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(badge)
+
+        // Select on click
+        let click = NSClickGestureRecognizer(target: self, action: #selector(selectCollection(_:)))
+        row.addGestureRecognizer(click)
+
+        // Double-click = rename
+        let dbl = NSClickGestureRecognizer(target: self, action: #selector(renameCollection(_:)))
+        dbl.numberOfClicksRequired = 2
+        row.addGestureRecognizer(dbl)
+
+        // Right-click = delete menu
+        let menu = NSMenu()
+        let del = NSMenuItem(title: t("adhkar.editor.remove"),
+                              action: #selector(deleteCollection(_:)),
+                              keyEquivalent: "")
+        del.target = self
+        del.representedObject = c.id
+        menu.addItem(del)
+        row.menu = menu
+
+        NSLayoutConstraint.activate([
+            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 38),
+            nameLbl.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 10),
+            nameLbl.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
+            nameLbl.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -10),
+            badge.leadingAnchor.constraint(equalTo: nameLbl.leadingAnchor),
+            badge.topAnchor.constraint(equalTo: nameLbl.bottomAnchor, constant: 2),
+        ])
+        return row
+    }
+
+    private func scheduleLabel(_ kind: String) -> String {
+        switch kind {
+        case "shuruq":  return t("adhkar.editor.schedule.shuruq")
+        case "fajr":    return t("adhkar.editor.schedule.fajr")
+        case "dhuhr":   return t("adhkar.editor.schedule.dhuhr")
+        case "asr":     return t("adhkar.editor.schedule.asr")
+        case "maghrib": return t("adhkar.editor.schedule.maghrib")
+        case "isha":    return t("adhkar.editor.schedule.isha")
+        default:        return t("adhkar.editor.schedule.manual")
+        }
+    }
+
+    @objc private func selectCollection(_ g: NSClickGestureRecognizer) {
+        guard let row = g.view as? CollectionRowView, let id = row.collectionID else { return }
+        selectedCollectionID = id
+        rebuildCollectionList()
+        rebuildItemsPane()
+    }
+
+    @objc private func renameCollection(_ g: NSClickGestureRecognizer) {
+        guard let row = g.view as? CollectionRowView, let id = row.collectionID,
+              let idx = collections.firstIndex(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = t("adhkar.editor.renamed")
+        alert.addButton(withTitle: t("adhkar.editor.save"))
+        alert.addButton(withTitle: t("adhkar.editor.cancel"))
+        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        input.stringValue = collections[idx].name
+        alert.accessoryView = input
+        alert.window.initialFirstResponder = input
+        if alert.runModal() == .alertFirstButtonReturn {
+            let trimmed = input.stringValue.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                collections[idx].name = trimmed
+                persist()
+                rebuildCollectionList()
+                rebuildItemsPane()
+            }
+        }
+    }
+
+    @objc private func deleteCollection(_ mi: NSMenuItem) {
+        guard let id = mi.representedObject as? UUID,
+              let idx = collections.firstIndex(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = t("adhkar.editor.delete_collection")
+        alert.informativeText = t("adhkar.editor.delete_collection_msg")
+        alert.addButton(withTitle: t("adhkar.editor.remove"))
+        alert.addButton(withTitle: t("adhkar.editor.cancel"))
+        alert.alertStyle = .warning
+        if alert.runModal() == .alertFirstButtonReturn {
+            collections.remove(at: idx)
+            if selectedCollectionID == id { selectedCollectionID = collections.first?.id }
+            persist()
+            rebuildCollectionList()
+            rebuildItemsPane()
+        }
+    }
+
+    @objc private func newCollection() {
+        let c = AdhkarCollection(name: t("adhkar.editor.untitled"))
+        collections.append(c)
+        selectedCollectionID = c.id
+        persist()
+        rebuildCollectionList()
+        rebuildItemsPane()
+        // Prompt rename immediately
+        if let idx = collections.firstIndex(where: { $0.id == c.id }) {
+            let alert = NSAlert()
+            alert.messageText = t("adhkar.editor.renamed")
+            alert.addButton(withTitle: t("adhkar.editor.save"))
+            alert.addButton(withTitle: t("adhkar.editor.cancel"))
+            let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+            input.stringValue = c.name
+            alert.accessoryView = input
+            alert.window.initialFirstResponder = input
+            if alert.runModal() == .alertFirstButtonReturn {
+                let trimmed = input.stringValue.trimmingCharacters(in: .whitespaces)
+                if !trimmed.isEmpty {
+                    collections[idx].name = trimmed
+                    persist()
+                    rebuildCollectionList()
+                    rebuildItemsPane()
+                }
+            }
+        }
+    }
+
+    // MARK: - items pane (right)
+
+    private func rebuildItemsPane() {
+        itemsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        guard let id = selectedCollectionID,
+              let idx = collections.firstIndex(where: { $0.id == id }) else {
+            itemsHeaderLabel.stringValue = ""
+            emptyStateLabel.isHidden = false
+            itemsScrollView.isHidden = true
+            return
+        }
+        let c = collections[idx]
+        itemsHeaderLabel.stringValue = String(format: t("adhkar.editor.items_in"), c.name)
+        emptyStateLabel.isHidden = !c.items.isEmpty
+        itemsScrollView.isHidden = c.items.isEmpty
+        if c.items.isEmpty {
+            emptyStateLabel.stringValue = t("adhkar.editor.empty_collection")
+        }
+        for (i, entry) in c.items.enumerated() {
+            let card = makeItemCard(entry, index: i, collectionIndex: idx)
+            itemsStack.addArrangedSubview(card)
+        }
+    }
+
+    private func makeItemCard(_ entry: AdhkarEntry, index: Int, collectionIndex: Int) -> NSView {
+        let card = NSView()
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        card.layer?.cornerRadius = 8
+        card.translatesAutoresizingMaskIntoConstraints = false
+
+        let arabic = NSTextField(wrappingLabelWithString: entry.arabic)
+        arabic.font = Localizer.shared.font(size: 16, weight: .medium)
+        arabic.alignment = .right
+        arabic.baseWritingDirection = .rightToLeft
+        arabic.textColor = .labelColor
+        arabic.translatesAutoresizingMaskIntoConstraints = false
+
+        let meta = NSTextField(labelWithString: "↻ \(entry.count)×   ·   \(audioDisplayName(entry.audioRef))")
+        meta.font = NSFont.systemFont(ofSize: 11)
+        meta.textColor = .tertiaryLabelColor
+        meta.translatesAutoresizingMaskIntoConstraints = false
+
+        // Up / down / remove buttons
+        let upBtn = HoverIconButton(symbol: "chevron.up", toolTip: t("adhkar.editor.move_up"),
+                                     target: self, action: #selector(itemMoveUp(_:)),
+                                     pointSize: 11, size: NSSize(width: 22, height: 22))
+        upBtn.tag = index
+        let downBtn = HoverIconButton(symbol: "chevron.down", toolTip: t("adhkar.editor.move_down"),
+                                       target: self, action: #selector(itemMoveDown(_:)),
+                                       pointSize: 11, size: NSSize(width: 22, height: 22))
+        downBtn.tag = index
+        let removeBtn = HoverIconButton(symbol: "trash", toolTip: t("adhkar.editor.remove"),
+                                         target: self, action: #selector(removeItem(_:)),
+                                         pointSize: 11, size: NSSize(width: 22, height: 22))
+        removeBtn.tag = index
+        removeBtn.idleTint = .systemRed
+
+        // Audio popup + edit button
+        let audioBtn = NSButton(title: t("adhkar.editor.audio"), target: self,
+                                 action: #selector(pickAudio(_:)))
+        audioBtn.bezelStyle = .rounded
+        audioBtn.controlSize = .small
+        audioBtn.tag = index
+        audioBtn.translatesAutoresizingMaskIntoConstraints = false
+
+        let editBtn = NSButton(title: t("adhkar.editor.repeat"), target: self,
+                                action: #selector(editItem(_:)))
+        editBtn.bezelStyle = .rounded
+        editBtn.controlSize = .small
+        editBtn.tag = index
+        editBtn.translatesAutoresizingMaskIntoConstraints = false
+
+        let buttonsRow = NSStackView()
+        buttonsRow.orientation = .horizontal
+        buttonsRow.spacing = 6
+        buttonsRow.alignment = .centerY
+        buttonsRow.translatesAutoresizingMaskIntoConstraints = false
+        for b in [upBtn, downBtn, removeBtn, audioBtn, editBtn] {
+            buttonsRow.addArrangedSubview(b)
+        }
+
+        card.addSubview(arabic)
+        card.addSubview(meta)
+        card.addSubview(buttonsRow)
+
+        NSLayoutConstraint.activate([
+            card.heightAnchor.constraint(greaterThanOrEqualToConstant: 90),
+            arabic.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
+            arabic.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            arabic.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+            meta.topAnchor.constraint(equalTo: arabic.bottomAnchor, constant: 8),
+            meta.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            buttonsRow.topAnchor.constraint(equalTo: meta.bottomAnchor, constant: 6),
+            buttonsRow.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 10),
+            buttonsRow.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -10),
+            buttonsRow.trailingAnchor.constraint(lessThanOrEqualTo: card.trailingAnchor, constant: -10),
+        ])
+        return card
+    }
+
+    private func audioDisplayName(_ ref: String) -> String {
+        if ref.hasPrefix("bundled:") {
+            return "Bundled · " + String(ref.dropFirst("bundled:".count))
+        }
+        if ref.hasPrefix("imported:") {
+            return "Imported · " + String(ref.dropFirst("imported:".count))
+        }
+        return t("adhkar.editor.audio.none")
+    }
+
+    // MARK: - item actions
+
+    private func selectedCollectionIndex() -> Int? {
+        guard let id = selectedCollectionID else { return nil }
+        return collections.firstIndex(where: { $0.id == id })
+    }
+
+    @objc private func itemMoveUp(_ sender: NSButton) {
+        guard let ci = selectedCollectionIndex(), ci >= 0 else { return }
+        let i = sender.tag
+        guard i > 0, i < collections[ci].items.count else { return }
+        collections[ci].items.swapAt(i, i - 1)
+        persist(); rebuildItemsPane()
+    }
+    @objc private func itemMoveDown(_ sender: NSButton) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = sender.tag
+        guard i >= 0, i + 1 < collections[ci].items.count else { return }
+        collections[ci].items.swapAt(i, i + 1)
+        persist(); rebuildItemsPane()
+    }
+    @objc private func removeItem(_ sender: NSButton) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = sender.tag
+        guard i >= 0, i < collections[ci].items.count else { return }
+        let alert = NSAlert()
+        alert.messageText = t("adhkar.editor.delete_item")
+        alert.addButton(withTitle: t("adhkar.editor.remove"))
+        alert.addButton(withTitle: t("adhkar.editor.cancel"))
+        if alert.runModal() == .alertFirstButtonReturn {
+            collections[ci].items.remove(at: i)
+            persist(); rebuildItemsPane()
+        }
+    }
+
+    @objc private func pickAudio(_ sender: NSButton) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = sender.tag
+        guard i >= 0, i < collections[ci].items.count else { return }
+        let menu = NSMenu()
+        let opts = adhkarAudioOptions()
+        for opt in opts {
+            let mi = NSMenuItem(title: opt.displayName, action: #selector(audioChosen(_:)),
+                                 keyEquivalent: "")
+            mi.target = self
+            mi.representedObject = ["i": i, "ref": opt.id] as [String: Any]
+            if opt.id == collections[ci].items[i].audioRef { mi.state = .on }
+            menu.addItem(mi)
+        }
+        menu.addItem(.separator())
+        let imp = NSMenuItem(title: t("adhkar.editor.audio.import"),
+                              action: #selector(importAudio(_:)), keyEquivalent: "")
+        imp.target = self
+        imp.tag = i
+        menu.addItem(imp)
+        menu.addItem(.separator())
+        let prev = NSMenuItem(title: t("adhkar.editor.play_preview"),
+                               action: #selector(previewAudio(_:)), keyEquivalent: "")
+        prev.target = self
+        prev.tag = i
+        menu.addItem(prev)
+        if let event = NSApp.currentEvent {
+            NSMenu.popUpContextMenu(menu, with: event, for: sender)
+        }
+    }
+
+    @objc private func audioChosen(_ mi: NSMenuItem) {
+        guard let ci = selectedCollectionIndex(),
+              let dict = mi.representedObject as? [String: Any],
+              let i = dict["i"] as? Int,
+              let ref = dict["ref"] as? String else { return }
+        guard i >= 0, i < collections[ci].items.count else { return }
+        collections[ci].items[i].audioRef = ref
+        persist(); rebuildItemsPane()
+    }
+
+    @objc private func importAudio(_ mi: NSMenuItem) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = mi.tag
+        guard i >= 0, i < collections[ci].items.count else { return }
+        guard let ref = presentAudioImportPanel() else { return }
+        collections[ci].items[i].audioRef = ref
+        persist(); rebuildItemsPane()
+    }
+
+    @objc private func previewAudio(_ mi: NSMenuItem) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = mi.tag
+        guard i >= 0, i < collections[ci].items.count else { return }
+        let ref = collections[ci].items[i].audioRef
+        guard let url = resolveAdhkarAudio(ref),
+              let p = try? AVAudioPlayer(contentsOf: url) else { return }
+        previewPlayer?.stop()
+        previewPlayer = p
+        p.play()
+    }
+
+    @objc private func editItem(_ sender: NSButton) {
+        guard let ci = selectedCollectionIndex() else { return }
+        let i = sender.tag
+        guard i >= 0, i < collections[ci].items.count else { return }
+        let entry = collections[ci].items[i]
+        let sheet = AdhkarItemEditSheet(arabic: entry.arabic, count: entry.count,
+                                         virtue: entry.virtue, source: entry.source)
+        sheet.onSave = { [weak self] newArabic, newCount, newVirtue, newSource in
+            guard let self = self,
+                  let ci = self.selectedCollectionIndex(),
+                  i < self.collections[ci].items.count else { return }
+            self.collections[ci].items[i].arabic = newArabic
+            self.collections[ci].items[i].count  = newCount
+            self.collections[ci].items[i].virtue = newVirtue
+            self.collections[ci].items[i].source = newSource
+            self.persist(); self.rebuildItemsPane()
+        }
+        if let window = view.window {
+            sheet.beginSheetModal(for: window)
+        }
+    }
+
+    // MARK: - add (library / custom)
+
+    @objc private func addFromLibrary() {
+        guard let ci = selectedCollectionIndex() else { return }
+        let allItems = AdhkarData.items(for: .morning) + AdhkarData.items(for: .evening)
+        // Dedupe by arabic text
+        var seen = Set<String>()
+        let unique = allItems.filter { seen.insert($0.arabic).inserted }
+        let sheet = AdhkarLibraryPickerSheet(items: unique)
+        sheet.onAdd = { [weak self] picked in
+            guard let self = self,
+                  let ci = self.selectedCollectionIndex() else { return }
+            for item in picked {
+                self.collections[ci].items.append(AdhkarEntry(from: item))
+            }
+            self.persist(); self.rebuildItemsPane()
+        }
+        if let window = view.window {
+            sheet.beginSheetModal(for: window)
+        }
+    }
+
+    @objc private func addCustom() {
+        guard let ci = selectedCollectionIndex() else { return }
+        let sheet = AdhkarItemEditSheet(arabic: "", count: 1, virtue: "", source: "")
+        sheet.onSave = { [weak self] arabic, count, virtue, source in
+            guard let self = self,
+                  let ci = self.selectedCollectionIndex(),
+                  !arabic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+            let entry = AdhkarEntry(arabic: arabic, count: count,
+                                     virtue: virtue, source: source,
+                                     audioRef: "")
+            self.collections[ci].items.append(entry)
+            self.persist(); self.rebuildItemsPane()
+        }
+        if let window = view.window {
+            sheet.beginSheetModal(for: window)
+        }
+    }
+}
+
+/// Custom row view that carries its collection UUID via the recognizer target.
+final class CollectionRowView: NSView {
+    var collectionID: UUID?
+}
+
+// ----------------------------------------------------------------------------
+// MARK: Adhkar item edit sheet — Arabic text + count + virtue + source
+// ----------------------------------------------------------------------------
+final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
+                                  NSTextFieldDelegate {
+
+    private var arabicField: NSTextField!
+    private var countField:  NSTextField!
+    private var countStepper: NSStepper!
+    private var virtueField: NSTextField!
+    private var sourceField: NSTextField!
+
+    /// (arabic, count, virtue, source)
+    var onSave: ((String, Int, String, String) -> Void)?
+
+    init(arabic: String, count: Int, virtue: String, source: String) {
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 360),
+                         styleMask: [.titled, .closable],
+                         backing: .buffered, defer: false)
+        w.title = t("adhkar.editor.custom_title")
+        w.center()
+        super.init(window: w)
+        w.delegate = self
+        build(arabic: arabic, count: count, virtue: virtue, source: source)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func beginSheetModal(for parent: NSWindow) {
+        parent.beginSheet(window!) { _ in self.commitIfOK() }
+    }
+
+    private func commitIfOK() {
+        // The sheet's Save button sets isOK=true before closing.
+        if isOK { onSave?(arabicField.stringValue, countStepper.integerValue,
+                          virtueField.stringValue, sourceField.stringValue) }
+    }
+    private var isOK = false
+
+    private func build(arabic: String, count: Int, virtue: String, source: String) {
+        guard let w = window else { return }
+        let c = NSView(frame: w.contentLayoutRect)
+        w.contentView = c
+
+        let hint = NSTextField(wrappingLabelWithString: t("adhkar.editor.custom_hint"))
+        hint.font = NSFont.systemFont(ofSize: 11)
+        hint.textColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(hint)
+
+        let arabicLbl = makeLabel(t("adhkar.editor.arabic"))
+        c.addSubview(arabicLbl)
+        arabicField = NSTextField(wrappingLabelWithString: arabic)
+        arabicField.font = Localizer.shared.font(size: 16, weight: .medium)
+        arabicField.alignment = .right
+        arabicField.baseWritingDirection = .rightToLeft
+        arabicField.isEditable = true
+        arabicField.isBordered = true
+        arabicField.drawsBackground = true
+        arabicField.translatesAutoresizingMaskIntoConstraints = false
+        arabicField.heightAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
+        c.addSubview(arabicField)
+
+        let countLbl = makeLabel(t("adhkar.editor.repeat"))
+        c.addSubview(countLbl)
+        countStepper = NSStepper()
+        countStepper.minValue = 1
+        countStepper.maxValue = 1000
+        countStepper.integerValue = max(1, count)
+        countStepper.valueWraps = false
+        countStepper.target = self
+        countStepper.action = #selector(stepperChanged)
+        countStepper.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(countStepper)
+        countField = NSTextField(labelWithString: String(format: t("adhkar.editor.count_times"),
+                                                          countStepper.integerValue))
+        countField.font = NSFont.systemFont(ofSize: 12)
+        countField.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(countField)
+
+        let virtueLbl = makeLabel(t("adhkar.editor.virtue"))
+        c.addSubview(virtueLbl)
+        virtueField = NSTextField(wrappingLabelWithString: virtue)
+        virtueField.isEditable = true
+        virtueField.isBordered = true
+        virtueField.drawsBackground = true
+        virtueField.font = NSFont.systemFont(ofSize: 12)
+        virtueField.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(virtueField)
+
+        let sourceLbl = makeLabel(t("adhkar.editor.source"))
+        c.addSubview(sourceLbl)
+        sourceField = NSTextField(wrappingLabelWithString: source)
+        sourceField.isEditable = true
+        sourceField.isBordered = true
+        sourceField.drawsBackground = true
+        sourceField.font = NSFont.systemFont(ofSize: 12)
+        sourceField.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(sourceField)
+
+        let saveBtn = NSButton(title: t("adhkar.editor.save"), target: self,
+                                action: #selector(saveTapped))
+        saveBtn.keyEquivalent = "\r"
+        saveBtn.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(saveBtn)
+        let cancelBtn = NSButton(title: t("adhkar.editor.cancel"), target: self,
+                                   action: #selector(cancelTapped))
+        cancelBtn.keyEquivalent = "\u{1b}"
+        cancelBtn.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(cancelBtn)
+
+        NSLayoutConstraint.activate([
+            hint.topAnchor.constraint(equalTo: c.topAnchor, constant: 12),
+            hint.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            hint.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+
+            arabicLbl.topAnchor.constraint(equalTo: hint.bottomAnchor, constant: 12),
+            arabicLbl.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            arabicField.topAnchor.constraint(equalTo: arabicLbl.bottomAnchor, constant: 4),
+            arabicField.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            arabicField.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+
+            countLbl.topAnchor.constraint(equalTo: arabicField.bottomAnchor, constant: 12),
+            countLbl.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            countStepper.topAnchor.constraint(equalTo: countLbl.bottomAnchor, constant: 4),
+            countStepper.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            countField.leadingAnchor.constraint(equalTo: countStepper.trailingAnchor, constant: 8),
+            countField.centerYAnchor.constraint(equalTo: countStepper.centerYAnchor),
+
+            virtueLbl.topAnchor.constraint(equalTo: countStepper.bottomAnchor, constant: 12),
+            virtueLbl.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            virtueField.topAnchor.constraint(equalTo: virtueLbl.bottomAnchor, constant: 4),
+            virtueField.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            virtueField.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+
+            sourceLbl.topAnchor.constraint(equalTo: virtueField.bottomAnchor, constant: 12),
+            sourceLbl.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            sourceField.topAnchor.constraint(equalTo: sourceLbl.bottomAnchor, constant: 4),
+            sourceField.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            sourceField.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+
+            cancelBtn.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -12),
+            cancelBtn.trailingAnchor.constraint(equalTo: saveBtn.leadingAnchor, constant: -8),
+            saveBtn.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -12),
+            saveBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+        ])
+    }
+
+    private func makeLabel(_ s: String) -> NSTextField {
+        let l = NSTextField(labelWithString: s)
+        l.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        l.textColor = .secondaryLabelColor
+        l.translatesAutoresizingMaskIntoConstraints = false
+        return l
+    }
+
+    @objc private func stepperChanged() {
+        countField.stringValue = String(format: t("adhkar.editor.count_times"),
+                                         countStepper.integerValue)
+    }
+    @objc private func saveTapped() {
+        isOK = true
+        window?.sheetParent?.endSheet(window!)
+    }
+    @objc private func cancelTapped() {
+        isOK = false
+        window?.sheetParent?.endSheet(window!)
+    }
+}
+
+// ----------------------------------------------------------------------------
+// MARK: Library picker sheet — multi-select adhkar from the bundled library
+// ----------------------------------------------------------------------------
+final class AdhkarLibraryPickerSheet: NSWindowController, NSWindowDelegate,
+                                       NSTableViewDelegate, NSTableViewDataSource {
+
+    private let items: [AdhkarItem]
+    private var selected = Set<Int>()   // indices into items
+    var onAdd: (([AdhkarItem]) -> Void)?
+
+    init(items: [AdhkarItem]) {
+        self.items = items
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 480),
+                         styleMask: [.titled, .closable],
+                         backing: .buffered, defer: false)
+        w.title = t("adhkar.editor.library_title")
+        w.center()
+        super.init(window: w)
+        w.delegate = self
+        build()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func beginSheetModal(for parent: NSWindow) {
+        parent.beginSheet(window!) { _ in
+            if !self.selected.isEmpty {
+                let picked = self.selected.compactMap { i -> AdhkarItem? in
+                    self.items.indices.contains(i) ? self.items[i] : nil
+                }
+                self.onAdd?(picked)
+            }
+        }
+    }
+
+    private var tableView: NSTableView!
+
+    private func build() {
+        guard let w = window else { return }
+        let c = NSView(frame: w.contentLayoutRect)
+        w.contentView = c
+
+        let hint = NSTextField(labelWithString: t("adhkar.editor.library_pick"))
+        hint.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        hint.textColor = .secondaryLabelColor
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(hint)
+
+        tableView = NSTableView()
+        tableView.delegate = self
+        tableView.dataSource = self
+        tableView.headerView = nil
+        tableView.allowsMultipleSelection = true
+        tableView.rowSizeStyle = .large
+        let col = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("adhkar"))
+        tableView.addTableColumn(col)
+        let scroll = NSScrollView()
+        scroll.documentView = tableView
+        scroll.hasVerticalScroller = true
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(scroll)
+
+        let addBtn = NSButton(title: t("adhkar.editor.library_add_selected"),
+                               target: self, action: #selector(addTapped))
+        addBtn.keyEquivalent = "\r"
+        addBtn.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(addBtn)
+        let cancelBtn = NSButton(title: t("adhkar.editor.cancel"),
+                                  target: self, action: #selector(cancelTapped))
+        cancelBtn.keyEquivalent = "\u{1b}"
+        cancelBtn.translatesAutoresizingMaskIntoConstraints = false
+        c.addSubview(cancelBtn)
+
+        NSLayoutConstraint.activate([
+            hint.topAnchor.constraint(equalTo: c.topAnchor, constant: 12),
+            hint.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            scroll.topAnchor.constraint(equalTo: hint.bottomAnchor, constant: 8),
+            scroll.leadingAnchor.constraint(equalTo: c.leadingAnchor, constant: 16),
+            scroll.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+            scroll.bottomAnchor.constraint(equalTo: addBtn.topAnchor, constant: -12),
+            cancelBtn.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -12),
+            cancelBtn.trailingAnchor.constraint(equalTo: addBtn.leadingAnchor, constant: -8),
+            addBtn.bottomAnchor.constraint(equalTo: c.bottomAnchor, constant: -12),
+            addBtn.trailingAnchor.constraint(equalTo: c.trailingAnchor, constant: -16),
+        ])
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int { items.count }
+    func tableView(_ tableView: NSTableView, objectValueFor tableColumn: NSTableColumn?,
+                   row: Int) -> Any? { items[row] }
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?,
+                   row: Int) -> NSView? {
+        let id = NSUserInterfaceItemIdentifier("cell")
+        let cell = (tableView.makeView(withIdentifier: id, owner: nil) as? NSTableCellView)
+                   ?? NSTableCellView()
+        cell.identifier = id
+        let label = cell.textField ?? NSTextField(labelWithString: "")
+        label.font = Localizer.shared.font(size: 14, weight: .regular)
+        label.alignment = .right
+        label.baseWritingDirection = .rightToLeft
+        label.stringValue = items[row].arabic
+        cell.textField = label
+        return cell
+    }
+
+    @objc private func addTapped() {
+        selected = Set(tableView.selectedRowIndexes.map { $0 })
+        window?.sheetParent?.endSheet(window!)
+    }
+    @objc private func cancelTapped() {
+        selected.removeAll()
+        window?.sheetParent?.endSheet(window!)
+    }
 }
 
 // ============================================================================
