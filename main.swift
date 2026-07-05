@@ -63,7 +63,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.5.0"
+let kAppVersion          = "3.6.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4443,6 +4443,8 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 
     private var contentContainer: NSView!
     private var editorVC: AdhkarEditorViewController?
+    private var settingsVC: AdhkarSettingsViewController?
+    private var viewSwitcher: NSSegmentedControl!
 
     init() {
         let frame = NSRect(x: 0, y: 0, width: 960, height: 640)
@@ -4467,6 +4469,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         editorVC?.tabDidActivate()
+        settingsVC?.tabDidActivate()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -4474,9 +4477,6 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     }
 
     private func buildShell() {
-        // Liquid Glass background: NSVisualEffectView gives the frosted,
-        // translucent look that modern macOS apps use. .hudWindow material
-        // is dark and elegant; the window floats above the desktop.
         let glass = NSVisualEffectView(frame: self.contentLayoutRect)
         glass.material = .hudWindow
         glass.blendingMode = .behindWindow
@@ -4484,22 +4484,47 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         glass.wantsLayer = true
         contentView = glass
 
+        // Segmented control for switching between Library and Settings.
+        viewSwitcher = NSSegmentedControl()
+        viewSwitcher.segmentCount = 2
+        viewSwitcher.setLabel(t("adhkar.tab.library"), forSegment: 0)
+        viewSwitcher.setLabel(t("adhkar.tab.settings"), forSegment: 1)
+        viewSwitcher.segmentStyle = .texturedRounded
+        viewSwitcher.selectedSegment = 0
+        viewSwitcher.target = self
+        viewSwitcher.action = #selector(viewSwitched(_:))
+        viewSwitcher.translatesAutoresizingMaskIntoConstraints = false
+        glass.addSubview(viewSwitcher)
+
         contentContainer = NSView()
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
         glass.addSubview(contentContainer)
+
         NSLayoutConstraint.activate([
+            viewSwitcher.topAnchor.constraint(equalTo: glass.topAnchor, constant: 8),
+            viewSwitcher.centerXAnchor.constraint(equalTo: glass.centerXAnchor),
+            viewSwitcher.heightAnchor.constraint(equalToConstant: 24),
+
             contentContainer.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
             contentContainer.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
-            // Leave space at the top for the transparent title bar (drag area).
-            contentContainer.topAnchor.constraint(equalTo: glass.topAnchor, constant: 28),
+            contentContainer.topAnchor.constraint(equalTo: viewSwitcher.bottomAnchor, constant: 8),
             contentContainer.bottomAnchor.constraint(equalTo: glass.bottomAnchor),
         ])
     }
 
-    func setEditor(_ vc: AdhkarEditorViewController) {
-        editorVC = vc
-        vc.view.translatesAutoresizingMaskIntoConstraints = false
+    @objc private func viewSwitched(_ sender: NSSegmentedControl) {
+        let showSettings = sender.selectedSegment == 1
         contentContainer.subviews.forEach { $0.removeFromSuperview() }
+        // For settings: create lazily if needed. For editor: must already exist.
+        guard showSettings || editorVC != nil else { return }
+        let vc: NSViewController
+        if showSettings {
+            if settingsVC == nil { settingsVC = AdhkarSettingsViewController() }
+            vc = settingsVC!
+        } else {
+            vc = editorVC!
+        }
+        vc.view.translatesAutoresizingMaskIntoConstraints = false
         contentContainer.addSubview(vc.view)
         NSLayoutConstraint.activate([
             vc.view.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
@@ -4507,6 +4532,287 @@ final class MainWindow: NSWindow, NSWindowDelegate {
             vc.view.topAnchor.constraint(equalTo: contentContainer.topAnchor),
             vc.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
         ])
+        if let activatable = vc as? MainTabContent { activatable.tabDidActivate() }
+    }
+
+    func setEditor(_ vc: AdhkarEditorViewController) {
+        editorVC = vc
+        // Show the editor immediately.
+        contentContainer.subviews.forEach { $0.removeFromSuperview() }
+        vc.view.translatesAutoresizingMaskIntoConstraints = false
+        contentContainer.addSubview(vc.view)
+        NSLayoutConstraint.activate([
+            vc.view.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
+            vc.view.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+            vc.view.topAnchor.constraint(equalTo: contentContainer.topAnchor),
+            vc.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+        ])
+    }
+}
+
+// ============================================================================
+// MARK: Adhkar settings — dedicated settings panel for the adhkar manager
+// ============================================================================
+/// Scrollable settings panel with sections for Sound (volume, output device,
+/// test), Schedule (auto-play, morning/evening anchors), Appearance (accent
+/// swatches, material toggle), and About. Mirrors SettingsView's pattern
+/// but is specific to adhkar — no prayer-times or adhan settings here.
+final class AdhkarSettingsViewController: NSViewController, MainTabContent {
+
+    private var volumeSlider: NSSlider!
+    private var outputPopup: NSPopUpButton!
+    private var outputDevices: [AudioOutputDevice] = []
+    private var autoPlayCheck: NSButton!
+    private var morningPopup: NSPopUpButton!
+    private var eveningPopup: NSPopUpButton!
+    private var materialSeg: NSSegmentedControl!
+    private var accentSwatches: [AccentSwatchButton] = []
+
+    init() {
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func loadView() {
+        let scroll = NSScrollView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+
+        let body = FlippedView()
+        body.translatesAutoresizingMaskIntoConstraints = false
+        let W: CGFloat = 460
+        var y: CGFloat = 24
+
+        // ---- Sound section ----
+        body.addSubview(makeSectionLabel(t("adhkar.settings.sound"), y: y, width: W)); y += 22
+
+        // Volume slider
+        let volLbl = makeLabel(t("adhkar.settings.volume"), width: 80)
+        volLbl.frame = NSRect(x: 24, y: y + 4, width: 80, height: 18)
+        body.addSubview(volLbl)
+        volumeSlider = NSSlider(value: Double(UserDefaults.standard.float(forKey: kAdhkarVolume)),
+                                 minValue: 0, maxValue: 1,
+                                 target: self, action: #selector(volumeChanged(_:)))
+        volumeSlider.frame = NSRect(x: 110, y: y, width: W - 140, height: 24)
+        body.addSubview(volumeSlider)
+        y += 34
+
+        // Output device
+        let outLbl = makeLabel(t("adhkar.settings.output_device"), width: 80)
+        outLbl.frame = NSRect(x: 24, y: y + 4, width: 80, height: 18)
+        body.addSubview(outLbl)
+        outputPopup = NSPopUpButton(frame: NSRect(x: 110, y: y, width: W - 140, height: 26), pullsDown: false)
+        outputPopup.addItem(withTitle: t("settings.adhan.output.default"))
+        outputDevices = listAudioOutputDevices()
+        let curUID = UserDefaults.standard.string(forKey: kAdhkarAudioDevice) ?? ""
+        for dev in outputDevices {
+            outputPopup.addItem(withTitle: dev.name)
+            if dev.uid == curUID { outputPopup.selectItem(at: outputPopup.numberOfItems - 1) }
+        }
+        if curUID.isEmpty { outputPopup.selectItem(at: 0) }
+        outputPopup.target = self
+        outputPopup.action = #selector(outputChanged(_:))
+        body.addSubview(outputPopup)
+        y += 34
+
+        // Test button
+        let testBtn = NSButton(title: t("adhkar.settings.test"), target: self,
+                                action: #selector(testPlayback))
+        testBtn.bezelStyle = .rounded
+        testBtn.controlSize = .small
+        testBtn.frame = NSRect(x: 110, y: y, width: 120, height: 24)
+        body.addSubview(testBtn)
+        y += 30
+
+        body.addSubview(makeDivider(y: y, width: W)); y += 16
+
+        // ---- Schedule section ----
+        body.addSubview(makeSectionLabel(t("adhkar.settings.schedule"), y: y, width: W)); y += 22
+
+        autoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
+                                  target: self, action: #selector(autoPlayChanged(_:)))
+        autoPlayCheck.state = UserDefaults.standard.bool(forKey: kAdhkarEnabled) ? .on : .off
+        autoPlayCheck.frame = NSRect(x: 24, y: y, width: W - 48, height: 22)
+        body.addSubview(autoPlayCheck)
+        y += 30
+
+        // Morning anchor
+        let mornLbl = makeLabel(t("adhkar.settings.morning_anchor"), width: 80)
+        mornLbl.frame = NSRect(x: 24, y: y + 4, width: 80, height: 18)
+        body.addSubview(mornLbl)
+        morningPopup = NSPopUpButton(frame: NSRect(x: 110, y: y, width: W - 140, height: 26), pullsDown: false)
+        morningPopup.addItem(withTitle: t("adhkar.editor.schedule.shuruq"))
+        morningPopup.addItem(withTitle: t("adhkar.editor.schedule.fajr"))
+        let mAnchor = UserDefaults.standard.string(forKey: kAdhkarMorningAnchor) ?? "shuruq"
+        morningPopup.selectItem(at: mAnchor == "fajr" ? 1 : 0)
+        morningPopup.target = self
+        morningPopup.action = #selector(morningAnchorChanged(_:))
+        body.addSubview(morningPopup)
+        y += 34
+
+        // Evening anchor
+        let eveLbl = makeLabel(t("adhkar.settings.evening_anchor"), width: 80)
+        eveLbl.frame = NSRect(x: 24, y: y + 4, width: 80, height: 18)
+        body.addSubview(eveLbl)
+        eveningPopup = NSPopUpButton(frame: NSRect(x: 110, y: y, width: W - 140, height: 26), pullsDown: false)
+        eveningPopup.addItem(withTitle: t("adhkar.editor.schedule.asr"))
+        eveningPopup.addItem(withTitle: t("adhkar.editor.schedule.maghrib"))
+        let eAnchor = UserDefaults.standard.string(forKey: kAdhkarEveningAnchor) ?? "asr"
+        eveningPopup.selectItem(at: eAnchor == "maghrib" ? 1 : 0)
+        eveningPopup.target = self
+        eveningPopup.action = #selector(eveningAnchorChanged(_:))
+        body.addSubview(eveningPopup)
+        y += 34
+
+        body.addSubview(makeDivider(y: y, width: W)); y += 16
+
+        // ---- Appearance section ----
+        body.addSubview(makeSectionLabel(t("adhkar.settings.appearance"), y: y, width: W)); y += 22
+
+        // Accent swatches
+        let accentLbl = makeLabel(t("adhkar.settings.accent"), width: 80)
+        accentLbl.frame = NSRect(x: 24, y: y + 4, width: 80, height: 18)
+        body.addSubview(accentLbl)
+        var sx: CGFloat = 110
+        let curAccent = currentAccentKey()
+        for key in kAccentOrder {
+            let swatch = AccentSwatchButton(key: key, diameter: 28, target: self, action: #selector(accentTapped(_:)))
+            swatch.frame = NSRect(x: sx, y: y, width: 28, height: 28)
+            swatch.target = self
+            swatch.action = #selector(accentTapped(_:))
+            if key == curAccent { swatch.isSelectedSwatch = true }
+            accentSwatches.append(swatch)
+            body.addSubview(swatch)
+            sx += 34
+        }
+        y += 38
+
+        // Material toggle
+        let matLbl = makeLabel(t("adhkar.settings.material"), width: 80)
+        matLbl.frame = NSRect(x: 24, y: y + 4, width: 80, height: 18)
+        body.addSubview(matLbl)
+        materialSeg = NSSegmentedControl()
+        materialSeg.segmentCount = 2
+        materialSeg.setLabel(t("menu.theme.material.opaque"), forSegment: 0)
+        materialSeg.setLabel(t("menu.theme.material.glass"), forSegment: 1)
+        materialSeg.segmentStyle = .texturedRounded
+        materialSeg.selectedSegment = isGlassMaterial() ? 1 : 0
+        materialSeg.target = self
+        materialSeg.action = #selector(materialChanged(_:))
+        materialSeg.frame = NSRect(x: 110, y: y, width: 200, height: 24)
+        body.addSubview(materialSeg)
+        y += 34
+
+        body.addSubview(makeDivider(y: y, width: W)); y += 16
+
+        // ---- About section ----
+        body.addSubview(makeSectionLabel(t("adhkar.settings.about"), y: y, width: W)); y += 22
+        let about = NSTextField(labelWithString: "Salat Time v\(kAppVersion) · Hisn al-Muslim")
+        about.font = Localizer.shared.font(size: 12)
+        about.textColor = .tertiaryLabelColor
+        about.frame = NSRect(x: 24, y: y, width: W - 48, height: 18)
+        body.addSubview(about)
+        y += 30
+
+        body.frame = NSRect(x: 0, y: 0, width: W, height: y)
+        scroll.documentView = body
+        scroll.frame = NSRect(x: 0, y: 0, width: W + 40, height: 600)
+
+        let container = NSView()
+        container.translatesAutoresizingMaskIntoConstraints = false
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(scroll)
+        self.view = container
+        NSLayoutConstraint.activate([
+            scroll.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: container.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+    }
+
+    func tabDidActivate() {
+        // Refresh device list in case headphones were plugged in.
+        outputPopup.removeAllItems()
+        outputPopup.addItem(withTitle: t("settings.adhan.output.default"))
+        outputDevices = listAudioOutputDevices()
+        let curUID = UserDefaults.standard.string(forKey: kAdhkarAudioDevice) ?? ""
+        for dev in outputDevices {
+            outputPopup.addItem(withTitle: dev.name)
+            if dev.uid == curUID { outputPopup.selectItem(at: outputPopup.numberOfItems - 1) }
+        }
+        if curUID.isEmpty { outputPopup.selectItem(at: 0) }
+    }
+
+    // MARK: - helpers
+
+    private func makeSectionLabel(_ text: String, y: CGFloat, width: CGFloat) -> NSTextField {
+        let l = NSTextField(labelWithString: text.uppercased())
+        l.font = Localizer.shared.font(size: 11, weight: .bold)
+        l.textColor = .tertiaryLabelColor
+        l.frame = NSRect(x: 24, y: y, width: width - 48, height: 16)
+        l.drawsBackground = false
+        return l
+    }
+    private func makeDivider(y: CGFloat, width: CGFloat) -> NSBox {
+        let b = NSBox(frame: NSRect(x: 24, y: y, width: width - 48, height: 1))
+        b.boxType = .separator
+        return b
+    }
+    private func makeLabel(_ text: String, width: CGFloat) -> NSTextField {
+        let l = NSTextField(labelWithString: text)
+        l.font = Localizer.shared.font(size: 12)
+        l.textColor = .secondaryLabelColor
+        l.drawsBackground = false
+        return l
+    }
+
+    // MARK: - handlers
+
+    @objc private func volumeChanged(_ sender: NSSlider) {
+        UserDefaults.standard.set(Float(sender.floatValue), forKey: kAdhkarVolume)
+    }
+    @objc private func outputChanged(_ sender: NSPopUpButton) {
+        let idx = sender.indexOfSelectedItem
+        if idx == 0 {
+            UserDefaults.standard.set("", forKey: kAdhkarAudioDevice)
+        } else if outputDevices.indices.contains(idx - 1) {
+            UserDefaults.standard.set(outputDevices[idx - 1].uid, forKey: kAdhkarAudioDevice)
+        }
+    }
+    @objc private func testPlayback() {
+        // Play the first dhikr of the first collection as a test.
+        let cols = AdhkarLibrary.load()
+        guard let first = cols.first, let firstItem = first.items.first else { return }
+        guard let url = resolveAdhkarAudio(firstItem.audioRef),
+              let p = try? AVAudioPlayer(contentsOf: url) else { return }
+        let vol = UserDefaults.standard.float(forKey: kAdhkarVolume)
+        p.volume = vol > 0 ? vol : 1.0
+        let uid = UserDefaults.standard.string(forKey: kAdhkarAudioDevice) ?? ""
+        if !uid.isEmpty { p.currentDevice = uid }
+        p.play()
+    }
+    @objc private func autoPlayChanged(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: kAdhkarEnabled)
+    }
+    @objc private func morningAnchorChanged(_ sender: NSPopUpButton) {
+        UserDefaults.standard.set(sender.indexOfSelectedItem == 1 ? "fajr" : "shuruq",
+                                  forKey: kAdhkarMorningAnchor)
+    }
+    @objc private func eveningAnchorChanged(_ sender: NSPopUpButton) {
+        UserDefaults.standard.set(sender.indexOfSelectedItem == 1 ? "maghrib" : "asr",
+                                  forKey: kAdhkarEveningAnchor)
+    }
+    @objc private func accentTapped(_ sender: AccentSwatchButton) {
+        UserDefaults.standard.set(sender.accentKey, forKey: kAccentPref)
+        for s in accentSwatches { s.isSelectedSwatch = (s === sender) }
+        NSApp.windows.forEach { $0.contentView?.needsDisplay = true }
+    }
+    @objc private func materialChanged(_ sender: NSSegmentedControl) {
+        UserDefaults.standard.set(sender.selectedSegment == 1 ? "glass" : "opaque",
+                                  forKey: kMaterialPref)
+        NSApp.windows.forEach { $0.contentView?.needsDisplay = true }
     }
 }
 
