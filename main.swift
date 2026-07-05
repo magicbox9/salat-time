@@ -58,7 +58,7 @@ let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
 
-let kAppVersion          = "3.5.0-alpha.2"
+let kAppVersion          = "3.5.0-beta.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4522,9 +4522,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         let v = NSView()
         buildTwoPaneLayout(into: v)
         self.view = v
-        // Arabic-first: mirror the whole editor for RTL when the active
-        // language is right-to-left (Arabic / Urdu).
-        if Localizer.shared.isRTL { applyRTL(v) }
+        // Note: we do NOT call applyRTL here. It mirrors frames AND swaps
+        // .right↔.left text alignment, which fights with the explicit
+        // alignment = isRTL ? .right : .left we set on every field. The
+        // buildTwoPaneLayout already handles RTL via leading/trailing
+        // constraint branches and explicit text alignment.
     }
 
     func tabDidActivate() {
