@@ -63,7 +63,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.5.0-beta.2"
+let kAppVersion          = "3.5.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4447,12 +4447,17 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     init() {
         let frame = NSRect(x: 0, y: 0, width: 960, height: 640)
         super.init(contentRect: frame,
-                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                   styleMask: [.titled, .closable, .miniaturizable, .resizable,
+                               .fullSizeContentView, .texturedBackground],
                    backing: .buffered, defer: false)
         self.title = t("adhkar.editor.title")
+        self.titleVisibility = .hidden
+        self.titlebarAppearsTransparent = true
+        self.isMovableByWindowBackground = true
         self.center()
         self.isReleasedWhenClosed = false
         self.minSize = NSSize(width: 700, height: 480)
+        self.appearance = NSAppearance(named: .vibrantDark)
         self.delegate = self
         buildShell()
     }
@@ -4469,16 +4474,25 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     }
 
     private func buildShell() {
-        let content = NSView(frame: self.contentLayoutRect)
-        contentView = content
+        // Liquid Glass background: NSVisualEffectView gives the frosted,
+        // translucent look that modern macOS apps use. .hudWindow material
+        // is dark and elegant; the window floats above the desktop.
+        let glass = NSVisualEffectView(frame: self.contentLayoutRect)
+        glass.material = .hudWindow
+        glass.blendingMode = .behindWindow
+        glass.state = .active
+        glass.wantsLayer = true
+        contentView = glass
+
         contentContainer = NSView()
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
-        content.addSubview(contentContainer)
+        glass.addSubview(contentContainer)
         NSLayoutConstraint.activate([
-            contentContainer.leadingAnchor.constraint(equalTo: content.leadingAnchor),
-            contentContainer.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            contentContainer.topAnchor.constraint(equalTo: content.topAnchor),
-            contentContainer.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            contentContainer.leadingAnchor.constraint(equalTo: glass.leadingAnchor),
+            contentContainer.trailingAnchor.constraint(equalTo: glass.trailingAnchor),
+            // Leave space at the top for the transparent title bar (drag area).
+            contentContainer.topAnchor.constraint(equalTo: glass.topAnchor, constant: 28),
+            contentContainer.bottomAnchor.constraint(equalTo: glass.bottomAnchor),
         ])
     }
 
@@ -4672,16 +4686,19 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         let isRTL = Localizer.shared.isRTL
 
         // ---- collections sidebar ----
-        let leftWrap = NSView()
+        // Subtle visual-effect panel for the collections list — gives depth
+        // separation from the items pane without being heavy.
+        let leftWrap = NSVisualEffectView()
+        leftWrap.material = .sidebar
+        leftWrap.blendingMode = .withinWindow
+        leftWrap.state = .active
         leftWrap.translatesAutoresizingMaskIntoConstraints = false
-        // Set RTL layout direction so leadingAnchor/trailingAnchor auto-flip
-        // for Arabic. This makes bullet points, titles, and rows respect RTL.
         if isRTL { leftWrap.userInterfaceLayoutDirection = .rightToLeft }
         root.addSubview(leftWrap)
 
         let collectionsTitle = NSTextField(labelWithString: t("adhkar.editor.collections"))
-        collectionsTitle.font = Localizer.shared.font(size: 13, weight: .semibold)
-        collectionsTitle.textColor = .secondaryLabelColor
+        collectionsTitle.font = Localizer.shared.font(size: 11, weight: .semibold)
+        collectionsTitle.textColor = .tertiaryLabelColor
         collectionsTitle.alignment = isRTL ? .right : .left
         collectionsTitle.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
         collectionsTitle.translatesAutoresizingMaskIntoConstraints = false
@@ -4722,10 +4739,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         root.addSubview(itemsContainer)
 
         itemsHeaderLabel = NSTextField(labelWithString: "")
-        itemsHeaderLabel.font = Localizer.shared.font(size: 17, weight: .semibold)
+        itemsHeaderLabel.font = Localizer.shared.font(size: 18, weight: .bold)
         itemsHeaderLabel.alignment = isRTL ? .right : .left
         itemsHeaderLabel.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
         itemsHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
+        itemsHeaderLabel.textColor = .labelColor
         itemsContainer.addSubview(itemsHeaderLabel)
 
         let addLibBtn = NSButton(title: t("adhkar.editor.add_from_library"),
@@ -4761,10 +4779,19 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // ---- inline player bar ----
         // Sits between the add-buttons and the scroll view. Shows play/pause,
         // prev/next, position, volume slider, and a settings gear.
-        playerBar = NSView()
+        // Player bar — translucent "pill" shape with a subtle border, sitting
+        // on the glass background. Vibrant-dark styling for elegance.
+        playerBar = NSVisualEffectView()
         playerBar.wantsLayer = true
-        playerBar.layer?.cornerRadius = 8
-        playerBar.layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.1).cgColor
+        playerBar.layer?.cornerRadius = 10
+        if let pv = playerBar as? NSVisualEffectView {
+            pv.material = .sidebar
+            pv.blendingMode = .withinWindow
+            pv.state = .active
+        }
+        // Subtle top border for depth.
+        playerBar.layer?.borderWidth = 0.5
+        playerBar.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
         playerBar.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(playerBar)
 
@@ -5258,14 +5285,23 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     }
 
     private func makeItemCard(_ entry: AdhkarEntry, index: Int, collectionIndex: Int) -> NSView {
-        // Card background using the app's AdaptiveBackgroundView (same pattern
-        // as the mosque-picker rows), not raw controlBackgroundColor.
+        // Card: translucent "frosted" background with subtle border — looks
+        // elegant on the Liquid Glass window. Slightly brighter than the
+        // window background so cards stand out.
         let card = AdaptiveBackgroundView(
             frame: NSRect(x: 0, y: 0, width: 100, height: 100),
-            light: NSColor(white: 0, alpha: 0.05),
-            dark:  NSColor(white: 1, alpha: 0.07),
-            radius: 10)
+            light: NSColor(white: 1, alpha: 0.65),
+            dark:  NSColor(white: 1, alpha: 0.08),
+            radius: 12)
         card.translatesAutoresizingMaskIntoConstraints = false
+        card.wantsLayer = true
+        card.layer?.borderWidth = 0.5
+        card.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        // Subtle shadow for depth.
+        card.layer?.shadowOpacity = 0.15
+        card.layer?.shadowRadius = 4
+        card.layer?.shadowOffset = NSSize(width: 0, height: -1)
+        card.layer?.masksToBounds = false
 
         let arabic = NSTextField(wrappingLabelWithString: entry.arabic)
         arabic.font = Localizer.shared.font(size: 18, weight: .medium)
@@ -5273,10 +5309,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         arabic.baseWritingDirection = .rightToLeft
         arabic.textColor = .labelColor
         arabic.translatesAutoresizingMaskIntoConstraints = false
-        // Critical for wrapping: low horizontal resistance so the field
-        // shrinks/wraps instead of forcing the card wider. Without this,
-        // long Arabic text pushes the card to its intrinsic width and the
-        // text never wraps.
+        arabic.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        arabic.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        arabic.cell?.truncatesLastVisibleLine = false
+        arabic.cell?.wraps = true
+        arabic.maximumNumberOfLines = 0
         arabic.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         arabic.setContentHuggingPriority(.defaultLow, for: .horizontal)
         arabic.cell?.truncatesLastVisibleLine = false
