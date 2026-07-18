@@ -106,7 +106,7 @@ let kQuranLastWarshPage          = "quranLastWarshPage"
 let kQuranViewMode               = "quranOfflineViewMode"
 let kQuranSidebarVisible         = "quranOfflineSidebarVisible"
 
-let kAppVersion          = "3.17.0"
+let kAppVersion          = "3.17.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2839,6 +2839,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "Prayer time enters at %@. Pray before the Fard; no iqama end time is published.",
         "rawatib.after.iqama": "After the obligatory prayer beginning at iqama %@; this is a marker, not a timed window.",
         "rawatib.after.no_iqama": "After the obligatory prayer whose time enters at %@; no iqama is published.",
+        "rawatib.before": "Before Fard", "rawatib.after": "After Fard",
         "rawatib.how": "Pray in units of two. Keep the two before Fajr brief.",
         "rawatib.why": "Keeping twelve Rawatib daily is a means to a house in Paradise.",
         "nawafil.rawatib.fajr.count": "2 rak‘ahs",
@@ -2876,6 +2877,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "L’heure entre à %@. Priez avant le Fard ; aucune fin par iqama n’est publiée.",
         "rawatib.after.iqama": "Après la prière obligatoire commençant à l’iqama de %@ ; c’est un repère, pas une plage chronométrée.",
         "rawatib.after.no_iqama": "Après la prière obligatoire dont l’heure entre à %@ ; aucune iqama n’est publiée.",
+        "rawatib.before": "Avant le Fard", "rawatib.after": "Après le Fard",
         "rawatib.how": "Priez par unités de deux. Gardez brèves les deux rak‘āt avant Fajr.",
         "rawatib.why": "La régularité dans les douze Rawatib est une cause d’une demeure au Paradis.",
         "nawafil.rawatib.fajr.count": "2 rak‘āt", "nawafil.rawatib.dhuhr.before.count": "4 rak‘āt",
@@ -2912,6 +2914,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "El tiempo entra a las %@. Reza antes del Fard; no hay una hora de iqama publicada que cierre el intervalo.",
         "rawatib.after.iqama": "Después de la oración obligatoria que comienza con el iqama de las %@; es una referencia, no un intervalo cronometrado.",
         "rawatib.after.no_iqama": "Después de la oración obligatoria cuyo tiempo entra a las %@; no hay iqama publicado.",
+        "rawatib.before": "Antes del Fard", "rawatib.after": "Después del Fard",
         "rawatib.how": "Reza de dos en dos. Haz breves las dos rak‘āt anteriores al Fajr.",
         "rawatib.why": "Mantener doce Rawatib diarios es causa de una casa en el Paraíso.",
         "nawafil.rawatib.fajr.count": "2 rak‘āt", "nawafil.rawatib.dhuhr.before.count": "4 rak‘āt",
@@ -2948,6 +2951,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "يدخل الوقت عند %@. صلِّها قبل الفرض؛ لا يوجد وقت إقامة منشور لنهاية المدة.",
         "rawatib.after.iqama": "بعد الفريضة التي تبدأ بإقامة %@؛ هذه علامة إرشادية وليست مدة محددة.",
         "rawatib.after.no_iqama": "بعد الفريضة التي يدخل وقتها عند %@؛ لا يوجد وقت إقامة منشور.",
+        "rawatib.before": "قبل الفرض", "rawatib.after": "بعد الفرض",
         "rawatib.how": "تُصلّى ركعتين ركعتين، وتُخفف ركعتا سنة الفجر.",
         "rawatib.why": "المحافظة على اثنتي عشرة ركعة من الرواتب سبب لبيت في الجنة.",
         "nawafil.rawatib.fajr.count": "ركعتان", "nawafil.rawatib.dhuhr.before.count": "أربع ركعات",
@@ -2984,6 +2988,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "礼拜时间于 %@ 进入。请在主命拜前礼；因未公布成拜时间，无法给出结束点。",
         "rawatib.after.iqama": "在 %@ 成拜开始的主命拜结束后；这是提示点，不是固定时段。",
         "rawatib.after.no_iqama": "在 %@ 进入时间的主命拜结束后；未公布成拜时间。",
+        "rawatib.before": "主命拜前", "rawatib.after": "主命拜后",
         "rawatib.how": "每两拜一组。晨礼前的两拜宜简短。",
         "rawatib.why": "坚持每日十二拜常行圣行拜，是获得乐园住宅的善因。",
         "nawafil.rawatib.fajr.count": "2拜", "nawafil.rawatib.dhuhr.before.count": "4拜",
@@ -3020,6 +3025,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "वक़्त %@ पर शुरू होता है। फ़र्ज़ से पहले पढ़ें; अंत बताने वाली इक़ामत प्रकाशित नहीं है।",
         "rawatib.after.iqama": "%@ की इक़ामत से शुरू होने वाली फ़र्ज़ नमाज़ के बाद; यह संकेत है, तय अवधि नहीं।",
         "rawatib.after.no_iqama": "उस फ़र्ज़ नमाज़ के बाद जिसका वक़्त %@ पर शुरू होता है; इक़ामत प्रकाशित नहीं है।",
+        "rawatib.before": "फ़र्ज़ से पहले", "rawatib.after": "फ़र्ज़ के बाद",
         "rawatib.how": "दो-दो रकअत पढ़ें। फ़ज्र से पहले की दो रकअत हल्की रखें।",
         "rawatib.why": "रोज़ बारह रावतिब की पाबंदी जन्नत में घर का सबब है।",
         "nawafil.rawatib.fajr.count": "2 रकअत", "nawafil.rawatib.dhuhr.before.count": "4 रकअत",
@@ -3056,6 +3062,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "ওয়াক্ত %@-এ শুরু হয়। ফরজের আগে পড়ুন; শেষ নির্ধারণের ইকামত প্রকাশিত নেই।",
         "rawatib.after.iqama": "%@-এর ইকামতে শুরু হওয়া ফরজ নামাজের পরে; এটি নির্দেশক, নির্দিষ্ট সময়সীমা নয়।",
         "rawatib.after.no_iqama": "যে ফরজের ওয়াক্ত %@-এ শুরু হয়, তা শেষ হওয়ার পরে; ইকামত প্রকাশিত নেই।",
+        "rawatib.before": "ফরজের আগে", "rawatib.after": "ফরজের পরে",
         "rawatib.how": "দুই রাকাত করে পড়ুন। ফজরের আগের দুই রাকাত সংক্ষিপ্ত রাখুন।",
         "rawatib.why": "দৈনিক বারো রাকাত রাওয়াতিব নিয়মিত পড়া জান্নাতে ঘরের কারণ।",
         "nawafil.rawatib.fajr.count": "২ রাকাত", "nawafil.rawatib.dhuhr.before.count": "৪ রাকাত",
@@ -3092,6 +3099,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "Время наступает в %@. Совершите до фарда; время икамы для конца интервала не опубликовано.",
         "rawatib.after.iqama": "После обязательной молитвы, начинающейся с икамы в %@; это ориентир, а не точный интервал.",
         "rawatib.after.no_iqama": "После обязательной молитвы, время которой наступает в %@; икама не опубликована.",
+        "rawatib.before": "До фарда", "rawatib.after": "После фарда",
         "rawatib.how": "Совершайте по два ракаата. Два ракаата перед Фаджром делайте краткими.",
         "rawatib.why": "Постоянство в двенадцати рауатиб ежедневно — причина дома в Раю.",
         "nawafil.rawatib.fajr.count": "2 ракаата", "nawafil.rawatib.dhuhr.before.count": "4 ракаата",
@@ -3128,6 +3136,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "O tempo entra às %@. Ore antes do Fard; não há iqama publicado para indicar o fim.",
         "rawatib.after.iqama": "Depois da oração obrigatória iniciada pelo iqama das %@; é um marco, não um intervalo cronometrado.",
         "rawatib.after.no_iqama": "Depois da oração obrigatória cujo tempo entra às %@; não há iqama publicado.",
+        "rawatib.before": "Antes do Fard", "rawatib.after": "Depois do Fard",
         "rawatib.how": "Ore de duas em duas. Mantenha breves as duas rak‘āt antes do Fajr.",
         "rawatib.why": "Manter doze Rawatib diariamente é causa de uma casa no Paraíso.",
         "nawafil.rawatib.fajr.count": "2 rak‘āt", "nawafil.rawatib.dhuhr.before.count": "4 rak‘āt",
@@ -3164,6 +3173,7 @@ private let prayerInfoTranslations: [String: [String: String]] = [
         "rawatib.before.marker": "وقت %@ پر شروع ہوتا ہے۔ فرض سے پہلے پڑھیں؛ اختتام کے لیے اقامت شائع نہیں۔",
         "rawatib.after.iqama": "%@ کی اقامت سے شروع ہونے والی فرض نماز کے بعد؛ یہ رہنما نشان ہے، مقررہ دورانیہ نہیں۔",
         "rawatib.after.no_iqama": "اس فرض نماز کے بعد جس کا وقت %@ پر شروع ہوتا ہے؛ اقامت شائع نہیں۔",
+        "rawatib.before": "فرض سے پہلے", "rawatib.after": "فرض کے بعد",
         "rawatib.how": "دو دو رکعت پڑھیں۔ فجر سے پہلے کی دو رکعتیں مختصر رکھیں۔",
         "rawatib.why": "روزانہ بارہ رواتب کی پابندی جنت میں گھر کا سبب ہے۔",
         "nawafil.rawatib.fajr.count": "۲ رکعت", "nawafil.rawatib.dhuhr.before.count": "۴ رکعت",
@@ -6920,6 +6930,31 @@ final class PrayerDayTimelineView: NSControl {
     }
 }
 
+/// An actionable virtual button for events drawn inside a custom prayer view.
+/// The owner keeps these elements alive so VoiceOver can enumerate prayers
+/// and invoke the same info action as a pointer click.
+final class PrayerEventAccessibilityElement: NSAccessibilityElement {
+    private let pressHandler: () -> Void
+
+    init(parent: NSView, frame: NSRect, label: String, help: String,
+         pressHandler: @escaping () -> Void) {
+        self.pressHandler = pressHandler
+        super.init()
+        setAccessibilityRole(.button)
+        setAccessibilityParent(parent)
+        setAccessibilityFrameInParentSpace(frame)
+        setAccessibilityLabel(label)
+        setAccessibilityHelp(help)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func accessibilityPerformPress() -> Bool {
+        pressHandler()
+        return true
+    }
+}
+
 /// Interactive, zoomable prayer-day instrument. It deliberately renders only
 /// `PrayerScheduleEvent` values from the shared builder: no visual-only prayer
 /// windows or guessed Rawatib offsets are introduced here.
@@ -6929,6 +6964,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
     private let showsNawafil: Bool
     private let events: [PrayerScheduleEvent]
     var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
+    var onStateChange: ((CGFloat, CGFloat, String?) -> Void)?
 
     private var controlRail: NSStackView!
     private var trackingAreaRef: NSTrackingArea?
@@ -6940,6 +6976,8 @@ final class InteractivePrayerDayTimelineView: NSControl {
     private var dragOriginX: CGFloat?
     private var dragStartMinute: CGFloat = 0
     private var minuteTimer: Timer?
+    private var accessibilityEventElements: [PrayerEventAccessibilityElement] = []
+    private var accessibilityGeometrySignature = ""
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -6950,11 +6988,23 @@ final class InteractivePrayerDayTimelineView: NSControl {
 
     init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
          showsNawafil: Bool, events: [PrayerScheduleEvent],
+         initialVisibleStart: CGFloat = 0,
+         initialVisibleDuration: CGFloat = 1440,
+         initialSelectedEventID: String? = nil,
+         onStateChange: ((CGFloat, CGFloat, String?) -> Void)? = nil,
          onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
         self.info = info
         self.prayerNames = prayerNames
         self.showsNawafil = showsNawafil
         self.events = events
+        let duration = max(240, min(1440, initialVisibleDuration))
+        self.visibleDuration = duration
+        self.visibleStart = max(0, min(1440 - duration, initialVisibleStart))
+        self.selectedEventID = events.contains {
+            $0.id == initialSelectedEventID
+                && (showsNawafil || $0.kind == .obligatory)
+        } ? initialSelectedEventID : nil
+        self.onStateChange = onStateChange
         self.onSelectEvent = onSelectEvent
         super.init(frame: frame)
 
@@ -7048,6 +7098,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
         // Motion users and keeps trackpad gestures tightly coupled to input.
         visibleDuration = nextDuration
         visibleStart = nextStart
+        onStateChange?(visibleStart, visibleDuration, selectedEventID)
         needsDisplay = true
     }
 
@@ -7087,7 +7138,10 @@ final class InteractivePrayerDayTimelineView: NSControl {
     }
 
     private func target(at point: NSPoint) -> PrayerScheduleEvent? {
-        eventTargets.last(where: { $0.rect.contains(point) })?.event
+        eventTargets.filter { $0.rect.contains(point) }.min {
+            hypot($0.rect.midX - point.x, $0.rect.midY - point.y)
+                < hypot($1.rect.midX - point.x, $1.rect.midY - point.y)
+        }?.event
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -7106,6 +7160,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
         if let item = target(at: point) {
             selectedEventID = item.id
             updateAccessibilityValue()
+            onStateChange?(visibleStart, visibleDuration, selectedEventID)
             onSelectEvent?(item, self)
         } else {
             dragOriginX = point.x
@@ -7141,6 +7196,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
                         duration: visibleDuration)
         }
         updateAccessibilityValue()
+        onStateChange?(visibleStart, visibleDuration, selectedEventID)
         needsDisplay = true
     }
 
@@ -7232,6 +7288,44 @@ final class InteractivePrayerDayTimelineView: NSControl {
         case .rawatib: return 1
         case .duha, .qiyam, .witr: return 2
         }
+    }
+
+    private func minimumHitRect(for rect: NSRect) -> NSRect {
+        let width = max(44, rect.width)
+        let height = max(44, rect.height)
+        return NSRect(x: rect.midX - width / 2, y: rect.midY - height / 2,
+                      width: width, height: height)
+    }
+
+    private func activateEvent(_ id: String) {
+        guard let event = displayedEvents.first(where: { $0.id == id }) else { return }
+        selectedEventID = id
+        updateAccessibilityValue()
+        onStateChange?(visibleStart, visibleDuration, selectedEventID)
+        onSelectEvent?(event, self)
+        needsDisplay = true
+    }
+
+    private func updateAccessibilityEventChildren() {
+        let geometry = eventTargets.enumerated().map { index, target in
+            "\(index):\(target.event.id):\(Int(target.rect.minX)):\(Int(target.rect.minY)):"
+                + "\(Int(target.rect.width)):\(Int(target.rect.height))"
+        }.joined(separator: "|")
+        let signature = "\(Int(bounds.width))x\(Int(bounds.height))@"
+            + "\(Int(visibleStart))/\(Int(visibleDuration))|\(geometry)"
+        guard signature != accessibilityGeometrySignature else { return }
+        accessibilityGeometrySignature = signature
+        accessibilityEventElements = eventTargets.map { target in
+            let event = target.event
+            return PrayerEventAccessibilityElement(
+                parent: self, frame: target.rect,
+                label: "\(event.knowledge.title). \(event.knowledge.whenText)",
+                help: prayerInfoText("info.open"),
+                pressHandler: { [weak self] in self?.activateEvent(event.id) })
+        }
+        let children: [Any] = [controlRail as Any]
+            + accessibilityEventElements.map { $0 as Any }
+        setAccessibilityChildren(children)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -7372,7 +7466,14 @@ final class InteractivePrayerDayTimelineView: NSControl {
                 let height: CGFloat
                 switch event.kind {
                 case .obligatory: baseY = laneY + laneHeight * 0.30; height = 24
-                case .rawatib: baseY = laneY + laneHeight * 0.36; height = 16
+                case .rawatib:
+                    // Before/after markers may share the same published entry
+                    // when a mosque has no iqama. Separate tracks keep both
+                    // events visible and independently actionable.
+                    baseY = event.id.hasSuffix(".before")
+                        ? laneY + laneHeight * 0.20
+                        : laneY + laneHeight * 0.62
+                    height = 16
                 case .duha: baseY = laneY + 8; height = 20
                 case .qiyam: baseY = laneY + laneHeight * 0.38; height = 20
                 case .witr: baseY = laneY + laneHeight - 23; height = 12
@@ -7400,14 +7501,23 @@ final class InteractivePrayerDayTimelineView: NSControl {
                                  color: dark ? .white : .labelColor,
                                  alignment: .center)
                     }
-                    eventTargets.append((rect.insetBy(dx: -8,
-                        dy: -(max(44, rect.height) - rect.height) / 2), event))
+                    eventTargets.append((minimumHitRect(for: rect), event))
                 } else {
                     let markerRect = NSRect(x: x1 - 7, y: baseY - 2,
                                             width: 14, height: 14)
                     color.setFill()
                     let shape = NSBezierPath()
-                    if event.kind == .witr || event.kind == .rawatib {
+                    if event.kind == .rawatib && event.id.hasSuffix(".before") {
+                        shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
+                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.maxY))
+                        shape.line(to: NSPoint(x: markerRect.minX, y: markerRect.maxY))
+                        shape.close()
+                    } else if event.kind == .rawatib {
+                        shape.move(to: NSPoint(x: markerRect.minX, y: markerRect.minY))
+                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.minY))
+                        shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
+                        shape.close()
+                    } else if event.kind == .witr {
                         shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
                         shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.midY))
                         shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
@@ -7428,6 +7538,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
                 }
             }
         }
+        updateAccessibilityEventChildren()
 
         let calendar = Calendar.current
         let nowMinute = calendar.component(.hour, from: Date()) * 60
@@ -7734,29 +7845,41 @@ final class PrayerRingClockView: NSControl {
     private let showsNawafil: Bool
     private let events: [PrayerScheduleEvent]
     var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
+    var onStateChange: ((String?) -> Void)?
 
     private var controlRail: NSStackView!
     private var infoButton: HoverIconButton!
+    private var legendButtons: [NSButton] = []
+    private var legendEvents: [PrayerScheduleEvent] = []
     private var trackingAreaRef: NSTrackingArea?
     private var timer: Timer?
     private var eventTargets: [(rect: NSRect, event: PrayerScheduleEvent)] = []
     private var selectedEventID: String?
     private var hoveredEventID: String?
+    private var accessibilityEventElements: [PrayerEventAccessibilityElement] = []
+    private var accessibilityGeometrySignature = ""
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
 
     static func preferredHeight(for width: CGFloat) -> CGFloat {
-        max(540, min(650, width * 0.72))
+        max(600, min(680, width * 0.74))
     }
 
     init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
          showsNawafil: Bool, events: [PrayerScheduleEvent],
+         initialSelectedEventID: String? = nil,
+         onStateChange: ((String?) -> Void)? = nil,
          onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
         self.info = info
         self.prayerNames = prayerNames
         self.showsNawafil = showsNawafil
         self.events = events
+        self.selectedEventID = events.contains {
+            $0.id == initialSelectedEventID
+                && (showsNawafil || $0.kind == .obligatory)
+        } ? initialSelectedEventID : nil
+        self.onStateChange = onStateChange
         self.onSelectEvent = onSelectEvent
         super.init(frame: frame)
 
@@ -7786,6 +7909,35 @@ final class PrayerRingClockView: NSControl {
             ? .rightToLeft : .leftToRight
         addSubview(controlRail)
 
+        legendEvents = showsNawafil ? events.filter { $0.kind != .obligatory } : []
+        for (index, event) in legendEvents.enumerated() {
+            let button = NSButton(title: legendTitle(for: event), target: self,
+                                  action: #selector(legendEventTapped(_:)))
+            button.tag = index
+            button.isBordered = false
+            button.bezelStyle = .recessed
+            button.setButtonType(.momentaryChange)
+            button.font = Localizer.shared.font(size: 11.5, weight: .semibold)
+            button.alignment = Localizer.shared.isRTL ? .right : .left
+            button.userInterfaceLayoutDirection = Localizer.shared.isRTL
+                ? .rightToLeft : .leftToRight
+            button.image = templateSymbol(legendSymbol(for: event), pointSize: 13,
+                                          weight: .semibold)
+            button.imagePosition = Localizer.shared.isRTL ? .imageRight : .imageLeft
+            button.contentTintColor = color(for: event.kind)
+            button.toolTip = event.knowledge.whenText
+            button.lineBreakMode = .byWordWrapping
+            button.cell?.wraps = true
+            button.setAccessibilityLabel(
+                "\(legendTitle(for: event)). \(event.knowledge.whenText)")
+            button.setAccessibilityHelp(prayerInfoText("info.open"))
+            button.wantsLayer = true
+            button.layer?.cornerRadius = 8
+            addSubview(button)
+            legendButtons.append(button)
+        }
+        infoButton.isEnabled = selectedEventID != nil
+
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(featureText("full.clock.accessibility"))
@@ -7802,6 +7954,16 @@ final class PrayerRingClockView: NSControl {
         controlRail.frame = NSRect(
             x: Localizer.shared.isRTL ? 16 : bounds.width - width - 16,
             y: 10, width: width, height: 44)
+        guard !legendButtons.isEmpty else { return }
+        let legend = legendRect()
+        let rowHeight: CGFloat = 44
+        let gap: CGFloat = 3
+        for (index, button) in legendButtons.enumerated() {
+            button.frame = NSRect(x: legend.minX + 8,
+                                  y: legend.minY + 34
+                                     + CGFloat(index) * (rowHeight + gap),
+                                  width: legend.width - 16, height: rowHeight)
+        }
     }
 
     override func viewDidMoveToWindow() {
@@ -7840,6 +8002,55 @@ final class PrayerRingClockView: NSControl {
         }
     }
 
+    private func legendRect() -> NSRect {
+        guard !legendButtons.isEmpty else { return .zero }
+        let width = min(270, max(230, bounds.width * 0.29))
+        let height = 42 + CGFloat(legendButtons.count) * 47
+        return NSRect(x: Localizer.shared.isRTL ? 16 : bounds.width - width - 16,
+                      y: 72, width: width,
+                      height: min(bounds.height - 142, height))
+    }
+
+    private func formattedMinute(_ minute: Int) -> String {
+        let normalized = (minute % 1440 + 1440) % 1440
+        return displayTime(String(format: "%02d:%02d", normalized / 60,
+                                  normalized % 60))
+    }
+
+    private func eventTimeText(_ event: PrayerScheduleEvent) -> String {
+        let start = formattedMinute(event.startMinute)
+        if let end = event.endMinute {
+            return "\(start) – \(formattedMinute(end))"
+        }
+        return "◇ \(start)"
+    }
+
+    private func legendTitle(for event: PrayerScheduleEvent) -> String {
+        var name = event.knowledge.title
+        if event.kind == .rawatib {
+            let prayer = event.prayerIndex.flatMap {
+                prayerNames.indices.contains($0) ? prayerNames[$0] : nil
+            } ?? ""
+            let relation = event.id.hasSuffix(".before")
+                ? prayerInfoText("rawatib.before") : prayerInfoText("rawatib.after")
+            name = [name, prayer, relation].filter { !$0.isEmpty }
+                .joined(separator: " · ")
+        }
+        return "\(name)\n\(eventTimeText(event))"
+    }
+
+    private func legendSymbol(for event: PrayerScheduleEvent) -> String {
+        switch event.kind {
+        case .obligatory: return "circle.fill"
+        case .rawatib:
+            return event.id.hasSuffix(".before") ? "arrow.up.to.line"
+                                                  : "arrow.down.to.line"
+        case .duha: return "sun.max.fill"
+        case .qiyam: return "moon.stars.fill"
+        case .witr: return "diamond.fill"
+        }
+    }
+
     private func updateAccessibilityValue() {
         if let selected = displayedEvents.first(where: { $0.id == selectedEventID }) {
             setAccessibilityValue("\(selected.knowledge.title). \(selected.knowledge.whenText)")
@@ -7861,12 +8072,24 @@ final class PrayerRingClockView: NSControl {
         selectedEventID = items[index].id
         infoButton.isEnabled = true
         updateAccessibilityValue()
+        onStateChange?(selectedEventID)
         needsDisplay = true
     }
 
     @objc private func selectPrevious(_ sender: Any?) { moveSelection(-1) }
     @objc private func selectNext(_ sender: Any?) { moveSelection(1) }
     @objc private func inspectSelection(_ sender: Any?) { _ = inspectSelected() }
+
+    @objc private func legendEventTapped(_ sender: NSButton) {
+        guard legendEvents.indices.contains(sender.tag) else { return }
+        let event = legendEvents[sender.tag]
+        selectedEventID = event.id
+        infoButton.isEnabled = true
+        updateAccessibilityValue()
+        onStateChange?(selectedEventID)
+        onSelectEvent?(event, sender)
+        needsDisplay = true
+    }
 
     private func inspectSelected() -> Bool {
         guard let selected = displayedEvents.first(where: { $0.id == selectedEventID })
@@ -7876,7 +8099,10 @@ final class PrayerRingClockView: NSControl {
     }
 
     private func target(at point: NSPoint) -> PrayerScheduleEvent? {
-        eventTargets.last(where: { $0.rect.contains(point) })?.event
+        eventTargets.filter { $0.rect.contains(point) }.min {
+            hypot($0.rect.midX - point.x, $0.rect.midY - point.y)
+                < hypot($1.rect.midX - point.x, $1.rect.midY - point.y)
+        }?.event
     }
 
     override func mouseMoved(with event: NSEvent) {
@@ -7897,6 +8123,7 @@ final class PrayerRingClockView: NSControl {
         selectedEventID = item.id
         infoButton.isEnabled = true
         updateAccessibilityValue()
+        onStateChange?(selectedEventID)
         onSelectEvent?(item, self)
         needsDisplay = true
     }
@@ -7937,10 +8164,13 @@ final class PrayerRingClockView: NSControl {
         }
     }
 
-    private func radialOffset(for kind: PrayerScheduleKind, isAM: Bool) -> CGFloat {
-        switch kind {
+    private func radialOffset(for event: PrayerScheduleEvent,
+                              isAM: Bool) -> CGFloat {
+        switch event.kind {
         case .obligatory: return 0
-        case .rawatib: return isAM ? 15 : -15
+        case .rawatib:
+            let distance: CGFloat = event.id.hasSuffix(".before") ? 15 : 39
+            return isAM ? distance : -distance
         case .duha: return 29
         case .qiyam: return isAM ? -19 : 19
         case .witr: return isAM ? -35 : 35
@@ -8004,6 +8234,43 @@ final class PrayerRingClockView: NSControl {
         path.stroke()
     }
 
+    private func activateEvent(_ id: String) {
+        guard let event = displayedEvents.first(where: { $0.id == id }) else { return }
+        selectedEventID = id
+        infoButton.isEnabled = true
+        updateAccessibilityValue()
+        onStateChange?(selectedEventID)
+        onSelectEvent?(event, self)
+        needsDisplay = true
+    }
+
+    private func updateAccessibilityEventChildren() {
+        let obligatory = orderedEvents.filter { $0.kind == .obligatory }
+        var geometryParts: [String] = []
+        var elements: [PrayerEventAccessibilityElement] = []
+        for event in obligatory {
+            let rects = eventTargets.filter { $0.event.id == event.id }.map(\.rect)
+            guard var frame = rects.first else { continue }
+            for rect in rects.dropFirst() { frame = frame.union(rect) }
+            geometryParts.append("\(event.id):\(Int(frame.minX)):\(Int(frame.minY)):"
+                + "\(Int(frame.width)):\(Int(frame.height))")
+            elements.append(PrayerEventAccessibilityElement(
+                parent: self, frame: frame,
+                label: "\(event.knowledge.title). \(event.knowledge.whenText)",
+                help: prayerInfoText("info.open"),
+                pressHandler: { [weak self] in self?.activateEvent(event.id) }))
+        }
+        let signature = "\(Int(bounds.width))x\(Int(bounds.height))|"
+            + geometryParts.joined(separator: "|")
+        guard signature != accessibilityGeometrySignature else { return }
+        accessibilityGeometrySignature = signature
+        accessibilityEventElements = elements
+        let children: [Any] = [controlRail as Any]
+            + legendButtons.map { $0 as Any }
+            + accessibilityEventElements.map { $0 as Any }
+        setAccessibilityChildren(children)
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
@@ -8026,8 +8293,40 @@ final class PrayerRingClockView: NSControl {
                  in: NSRect(x: 20, y: 43, width: bounds.width - 190, height: 18),
                  size: 10.5, color: .secondaryLabelColor, alignment: leading)
 
-        let center = NSPoint(x: bounds.midX, y: bounds.midY + 12)
-        let outer = min(bounds.width * 0.31, (bounds.height - 116) * 0.48)
+        let legend = legendRect()
+        if !legend.isEmpty {
+            (dark ? NSColor.white.withAlphaComponent(0.045)
+                  : NSColor.black.withAlphaComponent(0.035)).setFill()
+            NSBezierPath(roundedRect: legend, xRadius: 13, yRadius: 13).fill()
+            drawText(featureText("full.nawafil"),
+                     in: NSRect(x: legend.minX + 12, y: legend.minY + 9,
+                                width: legend.width - 24, height: 20),
+                     size: 13, weight: .bold, color: .secondaryLabelColor,
+                     alignment: leading)
+            for (index, button) in legendButtons.enumerated() {
+                let selected = legendEvents.indices.contains(index)
+                    && legendEvents[index].id == selectedEventID
+                button.layer?.backgroundColor = (selected
+                    ? NSColor.appAccent.withAlphaComponent(dark ? 0.24 : 0.13)
+                    : NSColor.clear).cgColor
+            }
+        }
+
+        let clockArea: NSRect
+        if legend.isEmpty {
+            clockArea = NSRect(x: 20, y: 70, width: bounds.width - 40,
+                               height: bounds.height - 127)
+        } else if rtl {
+            clockArea = NSRect(x: legend.maxX + 56, y: 70,
+                               width: bounds.width - legend.maxX - 76,
+                               height: bounds.height - 127)
+        } else {
+            clockArea = NSRect(x: 20, y: 70,
+                               width: legend.minX - 76,
+                               height: bounds.height - 127)
+        }
+        let center = NSPoint(x: clockArea.midX, y: clockArea.midY + 3)
+        let outer = min(clockArea.width * 0.40, clockArea.height * 0.45)
         let inner = outer * 0.66
 
         // Soft concentric surfaces make AM/PM separation visible in both
@@ -8081,7 +8380,7 @@ final class PrayerRingClockView: NSControl {
             for segment in segments(for: event) {
                 let isAM = segment.0 < 720
                 let baseRadius = radius(for: segment.0, outer: outer, inner: inner)
-                let radius = baseRadius + radialOffset(for: event.kind, isAM: isAM)
+                let radius = baseRadius + radialOffset(for: event, isAM: isAM)
                 let width: CGFloat
                 switch event.kind {
                 case .obligatory: width = 12
@@ -8095,10 +8394,19 @@ final class PrayerRingClockView: NSControl {
                                 selected ? 1 : (hovered ? 0.88 : 0.64)),
                             width: selected ? width + 4 : width,
                             instructional: event.precision == .instructionalMarker)
-                    let midpoint = segment.0 + (end - segment.0) / 2
-                    let marker = point(center: center, radius: radius, minute: midpoint)
-                    eventTargets.append((NSRect(x: marker.x - 22, y: marker.y - 22,
-                                                width: 44, height: 44), event))
+                    // Sample the complete visible arc so every painted point
+                    // sits inside a 44pt target, not just the midpoint.
+                    let arcLength = radius * (end - segment.0) / 720 * 2 * .pi
+                    let steps = max(1, Int(ceil(arcLength / 28)))
+                    for step in 0...steps {
+                        let fraction = CGFloat(step) / CGFloat(steps)
+                        let value = segment.0 + (end - segment.0) * fraction
+                        let marker = point(center: center, radius: radius,
+                                           minute: value)
+                        eventTargets.append((NSRect(x: marker.x - 22,
+                                                    y: marker.y - 22,
+                                                    width: 44, height: 44), event))
+                    }
                 } else {
                     let marker = point(center: center, radius: radius,
                                        minute: segment.0)
@@ -8106,7 +8414,17 @@ final class PrayerRingClockView: NSControl {
                                             width: 14, height: 14)
                     color.setFill()
                     let shape = NSBezierPath()
-                    if event.kind == .rawatib || event.kind == .witr {
+                    if event.kind == .rawatib && event.id.hasSuffix(".before") {
+                        shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
+                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.maxY))
+                        shape.line(to: NSPoint(x: markerRect.minX, y: markerRect.maxY))
+                        shape.close()
+                    } else if event.kind == .rawatib {
+                        shape.move(to: NSPoint(x: markerRect.minX, y: markerRect.minY))
+                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.minY))
+                        shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
+                        shape.close()
+                    } else if event.kind == .witr {
                         shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
                         shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.midY))
                         shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
@@ -8128,6 +8446,7 @@ final class PrayerRingClockView: NSControl {
                 }
             }
         }
+        updateAccessibilityEventChildren()
 
         // Obligatory labels remain larger than auxiliary markers and sit on
         // their AM/PM ring, so the clock can be read without a legend hunt.
@@ -8235,6 +8554,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     }()
     private var lastRenderedWidth: CGFloat = 0
     private var didSetInitialScrollPosition = false
+    private var timelineVisibleStart: CGFloat = 0
+    private var timelineVisibleDuration: CGFloat = 1440
+    private var timelineSelectedEventID: String?
+    private var clockSelectedEventID: String?
 
     private struct NawafilData {
         let title: String
@@ -8447,8 +8770,9 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         if let previous = lastCountdownPrayerIndex, previous != next.index {
             lastCountdownPrayerIndex = next.index
             // The Overview hero and active prayer cards are document content;
-            // refresh them once at the boundary, never on each one-second tick.
-            rebuild()
+            // refresh them once at the boundary. Other modes keep their zoom,
+            // selection, and document scroll uninterrupted.
+            if displayMode == 0 { rebuild() }
         } else {
             lastCountdownPrayerIndex = next.index
         }
@@ -8874,6 +9198,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             frame: NSRect(x: x, y: 84, width: width, height: timelineHeight),
             info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
             events: scheduleEvents,
+            initialVisibleStart: timelineVisibleStart,
+            initialVisibleDuration: timelineVisibleDuration,
+            initialSelectedEventID: timelineSelectedEventID,
+            onStateChange: { [weak self] start, duration, selectedID in
+                self?.timelineVisibleStart = start
+                self?.timelineVisibleDuration = duration
+                self?.timelineSelectedEventID = selectedID
+            },
             onSelectEvent: { [weak self] event, source in
                 self?.showPrayerInfo(event.knowledge, from: source)
             })
@@ -9105,6 +9437,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             frame: NSRect(x: x, y: 84, width: width, height: clockHeight),
             info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
             events: scheduleEvents,
+            initialSelectedEventID: clockSelectedEventID,
+            onStateChange: { [weak self] selectedID in
+                self?.clockSelectedEventID = selectedID
+            },
             onSelectEvent: { [weak self] event, source in
                 self?.showPrayerInfo(event.knowledge, from: source)
             })
