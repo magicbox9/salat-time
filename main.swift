@@ -106,7 +106,7 @@ let kQuranLastWarshPage          = "quranLastWarshPage"
 let kQuranViewMode               = "quranOfflineViewMode"
 let kQuranSidebarVisible         = "quranOfflineSidebarVisible"
 
-let kAppVersion          = "3.17.1"
+let kAppVersion          = "3.17.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -9886,6 +9886,7 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var loadedEdition = "hafs"
     private var suppressPagePersistence = false
     private var isLoadingEdition = false
+    private var pageRestorationWorkItem: DispatchWorkItem?
 
     private var edition: String {
         editionControl?.selectedSegment == 1 ? "warsh" : "hafs"
@@ -9898,6 +9899,7 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     deinit {
+        pageRestorationWorkItem?.cancel()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -10355,6 +10357,8 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     private func loadEdition(targetPage: Int?) {
+        pageRestorationWorkItem?.cancel()
+        pageRestorationWorkItem = nil
         if !isLoadingEdition, pdfView.document != nil, !suppressPagePersistence {
             UserDefaults.standard.set(currentPageNumber, forKey: lastPageKey(for: loadedEdition))
         }
@@ -10402,14 +10406,12 @@ final class QuranViewController: NSViewController, MainTabContent,
         sourceLabel.stringValue = "\(offlineQuranText("offline")) · King Fahd Complex · "
             + (selectedEdition == "warsh" ? "Warsh v2.1" : "Hafs v2.0")
 
-        goToPage(targetPage ?? restoredPage(for: selectedEdition),
-                 clearReference: false, persist: false)
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.dataGeneration == generation else { return }
-            self.pdfView.autoScales = true
-            self.suppressPagePersistence = false
-            self.isLoadingEdition = false
-        }
+        let requestedPage = min(max(targetPage ?? restoredPage(for: selectedEdition), 1),
+                                document.pageCount)
+        beginPageRestoration(targetPage: requestedPage,
+                             generation: generation,
+                             edition: selectedEdition,
+                             document: document)
 
         let meaningsURL = quranResourceURL(["MuyassarGhareeb", "muyassar_ghareeb_1.json"])
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -10454,6 +10456,8 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     private func showUnavailable(detail: String? = nil) {
+        pageRestorationWorkItem?.cancel()
+        pageRestorationWorkItem = nil
         pdfView.document = nil
         thumbnailView.pdfView = nil
         sourceLabel.stringValue = offlineQuranText("resource.missing")
@@ -10464,6 +10468,69 @@ final class QuranViewController: NSViewController, MainTabContent,
         nextButton.isEnabled = false
         isLoadingEdition = false
         suppressPagePersistence = false
+    }
+
+    /// PDFKit posts page-change notifications while it finishes laying out a newly
+    /// assigned document. Keep persistence closed until the requested page survives
+    /// several layout passes so those transient pages never replace the saved page.
+    private func beginPageRestoration(targetPage: Int, generation: UUID,
+                                      edition: String, document: PDFDocument) {
+        pageRestorationWorkItem?.cancel()
+        pdfView.autoScales = true
+        view.layoutSubtreeIfNeeded()
+        pdfView.layoutSubtreeIfNeeded()
+        goToPage(targetPage, clearReference: false, persist: false)
+        schedulePageRestorationCheck(targetPage: targetPage,
+                                     generation: generation,
+                                     edition: edition,
+                                     document: document,
+                                     stableChecks: 0,
+                                     attempt: 0)
+    }
+
+    private func schedulePageRestorationCheck(targetPage: Int, generation: UUID,
+                                               edition: String, document: PDFDocument,
+                                               stableChecks: Int, attempt: Int) {
+        let delay: TimeInterval = attempt < 4 ? 0.06 : 0.12
+        let item = DispatchWorkItem { [weak self] in
+            guard let self,
+                  self.dataGeneration == generation,
+                  self.edition == edition,
+                  self.loadedEdition == edition,
+                  self.pdfView.document === document,
+                  self.isLoadingEdition,
+                  self.suppressPagePersistence else { return }
+
+            self.view.layoutSubtreeIfNeeded()
+            self.pdfView.layoutSubtreeIfNeeded()
+
+            let nextStableChecks: Int
+            if self.currentPageNumber == targetPage {
+                nextStableChecks = stableChecks + 1
+            } else {
+                nextStableChecks = 0
+                self.goToPage(targetPage, clearReference: false, persist: false)
+                self.view.layoutSubtreeIfNeeded()
+                self.pdfView.layoutSubtreeIfNeeded()
+            }
+
+            guard nextStableChecks < 3 || self.currentPageNumber != targetPage else {
+                self.pageRestorationWorkItem = nil
+                self.suppressPagePersistence = false
+                self.isLoadingEdition = false
+                self.updatePageState()
+                return
+            }
+
+            self.schedulePageRestorationCheck(targetPage: targetPage,
+                                              generation: generation,
+                                              edition: edition,
+                                              document: document,
+                                              stableChecks: nextStableChecks,
+                                              attempt: attempt + 1)
+        }
+        pageRestorationWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
     }
 
     @objc private func editionChanged(_ sender: NSSegmentedControl) {
@@ -10515,8 +10582,11 @@ final class QuranViewController: NSViewController, MainTabContent,
         let text = localizedInterfaceDigits("\(page)")
         pageField?.stringValue = text
         pageStepper?.integerValue = page
-        previousButton?.isEnabled = pdfView?.document != nil && page > 1
-        nextButton?.isEnabled = pdfView?.document != nil
+        let canNavigate = pdfView?.document != nil && !isLoadingEdition
+        pageField?.isEnabled = canNavigate
+        pageStepper?.isEnabled = canNavigate
+        previousButton?.isEnabled = canNavigate && page > 1
+        nextButton?.isEnabled = canNavigate
             && page < (pdfView?.document?.pageCount ?? 0)
         removeBookmarkButton?.isEnabled = loadBookmarks().contains {
             $0.edition == loadedEdition && $0.page == page
