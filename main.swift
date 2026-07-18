@@ -106,7 +106,7 @@ let kQuranLastWarshPage          = "quranLastWarshPage"
 let kQuranViewMode               = "quranOfflineViewMode"
 let kQuranSidebarVisible         = "quranOfflineSidebarVisible"
 
-let kAppVersion          = "3.17.4"
+let kAppVersion          = "3.18.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -6960,6 +6960,12 @@ final class PrayerEventAccessibilityElement: NSAccessibilityElement {
 /// `PrayerScheduleEvent` values from the shared builder: no visual-only prayer
 /// windows or guessed Rawatib offsets are introduced here.
 final class InteractivePrayerDayTimelineView: NSControl {
+    private struct EventTarget {
+        let visualRect: NSRect
+        let hitRect: NSRect
+        let event: PrayerScheduleEvent
+    }
+
     private let info: MosqueInfo
     private let prayerNames: [String]
     private let showsNawafil: Bool
@@ -6969,16 +6975,30 @@ final class InteractivePrayerDayTimelineView: NSControl {
 
     private var controlRail: NSStackView!
     private var trackingAreaRef: NSTrackingArea?
-    private var eventTargets: [(rect: NSRect, event: PrayerScheduleEvent)] = []
+    private var eventTargets: [EventTarget] = []
     private var selectedEventID: String?
     private var hoveredEventID: String?
+    private var hoverMinute: CGFloat?
+    private var hoverFocusStartedAt: TimeInterval = 0
+    private var selectionPulseStartedAt: TimeInterval?
+    private var plotRect: NSRect = .zero
     private var visibleStart: CGFloat = 0
     private var visibleDuration: CGFloat = 1440
     private var dragOriginX: CGFloat?
+    private var mouseDownPoint: NSPoint?
     private var dragStartMinute: CGFloat = 0
-    private var minuteTimer: Timer?
+    private var pendingTarget: EventTarget?
+    private var didDrag = false
+    private var liveTimer: Timer?
     private var accessibilityEventElements: [PrayerEventAccessibilityElement] = []
     private var accessibilityGeometrySignature = ""
+    private lazy var nowText: String = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = preferredInterfaceLocale()
+        formatter.dateTimeStyle = .named
+        formatter.unitsStyle = .full
+        return formatter.localizedString(fromTimeInterval: 0)
+    }()
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { true }
@@ -7015,6 +7035,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
             (earlierSymbol, prayerInfoText("timeline.earlier"), #selector(showEarlier(_:))),
             ("minus.magnifyingglass", prayerInfoText("timeline.zoom_out"), #selector(zoomOut(_:))),
             ("arrow.left.and.right", prayerInfoText("timeline.fit"), #selector(fitDay(_:))),
+            ("scope", nowText, #selector(showNow(_:))),
             ("plus.magnifyingglass", prayerInfoText("timeline.zoom_in"), #selector(zoomIn(_:))),
             (laterSymbol, prayerInfoText("timeline.later"), #selector(showLater(_:))),
         ]
@@ -7043,11 +7064,11 @@ final class InteractivePrayerDayTimelineView: NSControl {
     }
 
     required init?(coder: NSCoder) { fatalError() }
-    deinit { minuteTimer?.invalidate() }
+    deinit { liveTimer?.invalidate() }
 
     override func layout() {
         super.layout()
-        let railWidth: CGFloat = 44 * 5 + 2 * 4
+        let railWidth: CGFloat = 44 * 6 + 2 * 5
         controlRail.frame = NSRect(
             x: Localizer.shared.isRTL ? 16 : bounds.width - railWidth - 16,
             y: 10, width: railWidth, height: 44)
@@ -7055,14 +7076,19 @@ final class InteractivePrayerDayTimelineView: NSControl {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        minuteTimer?.invalidate()
+        liveTimer?.invalidate()
         guard window != nil else { return }
         window?.acceptsMouseMovedEvents = true
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            self?.needsDisplay = true
+        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let interval: TimeInterval = reduced ? 30 : (1.0 / 12.0)
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            guard let self, let window = self.window,
+                  window.occlusionState.contains(.visible) else { return }
+            self.needsDisplay = true
         }
+        timer.tolerance = reduced ? 1 : 0.015
         RunLoop.main.add(timer, forMode: .common)
-        minuteTimer = timer
+        liveTimer = timer
     }
 
     override func updateTrackingAreas() {
@@ -7095,18 +7121,17 @@ final class InteractivePrayerDayTimelineView: NSControl {
     private func setViewport(start: CGFloat, duration: CGFloat) {
         let nextDuration = max(240, min(1440, duration))
         let nextStart = max(0, min(1440 - nextDuration, start))
-        // Viewport changes are immediate, which is comfortable for Reduce
-        // Motion users and keeps trackpad gestures tightly coupled to input.
         visibleDuration = nextDuration
         visibleStart = nextStart
         onStateChange?(visibleStart, visibleDuration, selectedEventID)
         needsDisplay = true
     }
 
-    private func zoom(by factor: CGFloat) {
-        let center = visibleStart + visibleDuration / 2
+    private func zoom(by factor: CGFloat, anchoredAt anchor: CGFloat? = nil) {
+        let focus = anchor ?? (visibleStart + visibleDuration / 2)
+        let fraction = max(0, min(1, (focus - visibleStart) / visibleDuration))
         let duration = max(240, min(1440, visibleDuration * factor))
-        setViewport(start: center - duration / 2, duration: duration)
+        setViewport(start: focus - duration * fraction, duration: duration)
     }
 
     private func pan(minutes: CGFloat) {
@@ -7116,12 +7141,18 @@ final class InteractivePrayerDayTimelineView: NSControl {
     @objc private func zoomIn(_ sender: Any?) { zoom(by: 0.72) }
     @objc private func zoomOut(_ sender: Any?) { zoom(by: 1.38) }
     @objc private func fitDay(_ sender: Any?) { setViewport(start: 0, duration: 1440) }
+    @objc private func showNow(_ sender: Any?) {
+        let minute = currentMinute()
+        let duration = visibleDuration >= 1439 ? 720 : visibleDuration
+        setViewport(start: minute - duration / 2, duration: duration)
+    }
     @objc private func showEarlier(_ sender: Any?) { pan(minutes: -visibleDuration * 0.22) }
     @objc private func showLater(_ sender: Any?) { pan(minutes: visibleDuration * 0.22) }
 
     override func magnify(with event: NSEvent) {
         let factor = max(0.55, min(1.45, 1 - event.magnification))
-        zoom(by: factor)
+        let point = convert(event.locationInWindow, from: nil)
+        zoom(by: factor, anchoredAt: minute(at: point))
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -7138,48 +7169,98 @@ final class InteractivePrayerDayTimelineView: NSControl {
         pan(minutes: raw * visibleDuration / 90 * direction)
     }
 
-    private func target(at point: NSPoint) -> PrayerScheduleEvent? {
-        eventTargets.filter { $0.rect.contains(point) }.min {
-            hypot($0.rect.midX - point.x, $0.rect.midY - point.y)
-                < hypot($1.rect.midX - point.x, $1.rect.midY - point.y)
-        }?.event
+    private func target(at point: NSPoint) -> EventTarget? {
+        eventTargets.filter { $0.hitRect.contains(point) }.min {
+            hypot($0.visualRect.midX - point.x, $0.visualRect.midY - point.y)
+                < hypot($1.visualRect.midX - point.x, $1.visualRect.midY - point.y)
+        }
+    }
+
+    private func minute(at point: NSPoint) -> CGFloat? {
+        guard !plotRect.isEmpty, plotRect.contains(point) else { return nil }
+        let fraction = Localizer.shared.isRTL
+            ? (plotRect.maxX - point.x) / plotRect.width
+            : (point.x - plotRect.minX) / plotRect.width
+        return max(0, min(1440, visibleStart + fraction * visibleDuration))
     }
 
     override func mouseMoved(with event: NSEvent) {
-        hoveredEventID = target(at: convert(event.locationInWindow, from: nil))?.id
+        let point = convert(event.locationInWindow, from: nil)
+        let nextTarget = target(at: point)
+        let nextID = nextTarget?.event.id
+        if nextID != hoveredEventID {
+            hoveredEventID = nextID
+            hoverFocusStartedAt = ProcessInfo.processInfo.systemUptime
+        }
+        hoverMinute = minute(at: point)
+        if nextTarget != nil {
+            NSCursor.pointingHand.set()
+        } else if hoverMinute != nil {
+            NSCursor.crosshair.set()
+        } else {
+            NSCursor.arrow.set()
+        }
         needsDisplay = true
     }
 
     override func mouseExited(with event: NSEvent) {
         hoveredEventID = nil
+        hoverMinute = nil
+        NSCursor.arrow.set()
         needsDisplay = true
     }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let point = convert(event.locationInWindow, from: nil)
-        if let item = target(at: point) {
-            selectedEventID = item.id
-            updateAccessibilityValue()
-            onStateChange?(visibleStart, visibleDuration, selectedEventID)
-            onSelectEvent?(item, self)
-        } else {
-            dragOriginX = point.x
-            dragStartMinute = visibleStart
-        }
+        guard plotRect.contains(point) else { return }
+        dragOriginX = point.x
+        mouseDownPoint = point
+        dragStartMinute = visibleStart
+        pendingTarget = target(at: point)
+        didDrag = false
+        NSCursor.closedHand.set()
         needsDisplay = true
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let dragOriginX else { return }
+        guard let dragOriginX, let mouseDownPoint else { return }
         let point = convert(event.locationInWindow, from: nil)
-        let usableWidth = max(1, bounds.width - 150)
+        if hypot(point.x - mouseDownPoint.x, point.y - mouseDownPoint.y) >= 4 {
+            didDrag = true
+            pendingTarget = nil
+        }
+        guard didDrag else { return }
+        NSCursor.closedHand.set()
+        let usableWidth = max(1, plotRect.width)
         let rtl: CGFloat = Localizer.shared.isRTL ? -1 : 1
         let minutes = -(point.x - dragOriginX) / usableWidth * visibleDuration * rtl
         setViewport(start: dragStartMinute + minutes, duration: visibleDuration)
     }
 
-    override func mouseUp(with event: NSEvent) { dragOriginX = nil }
+    override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if !didDrag, let target = pendingTarget {
+            selectedEventID = target.event.id
+            selectionPulseStartedAt = ProcessInfo.processInfo.systemUptime
+            updateAccessibilityValue()
+            onStateChange?(visibleStart, visibleDuration, selectedEventID)
+            onSelectEvent?(target.event, self)
+        }
+        dragOriginX = nil
+        mouseDownPoint = nil
+        pendingTarget = nil
+        didDrag = false
+        hoverMinute = minute(at: point)
+        if target(at: point) != nil {
+            NSCursor.pointingHand.set()
+        } else if minute(at: point) != nil {
+            NSCursor.crosshair.set()
+        } else {
+            NSCursor.arrow.set()
+        }
+        needsDisplay = true
+    }
 
     private func moveSelection(_ delta: Int) {
         let ordered = displayedEvents.sorted {
@@ -7191,6 +7272,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
         let index = ((current ?? (delta > 0 ? -1 : 0)) + delta + ordered.count)
                   % ordered.count
         selectedEventID = ordered[index].id
+        selectionPulseStartedAt = ProcessInfo.processInfo.systemUptime
         let minute = CGFloat(ordered[index].startMinute % 1440)
         if minute < visibleStart || minute > visibleStart + visibleDuration {
             setViewport(start: minute - visibleDuration / 2,
@@ -7224,6 +7306,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
             case "+", "=": zoom(by: 0.72)
             case "-", "_": zoom(by: 1.38)
             case "0": setViewport(start: 0, duration: 1440)
+            case "n", "N": showNow(nil)
             default: super.keyDown(with: event)
             }
         }
@@ -7240,9 +7323,24 @@ final class InteractivePrayerDayTimelineView: NSControl {
 
     private func timeLabel(_ value: Int) -> String {
         let normalized = (value % 1440 + 1440) % 1440
-        return localizedInterfaceDigits(String(format: "%02d:%02d",
-                                                normalized / 60,
-                                                normalized % 60))
+        return displayTime(String(format: "%02d:%02d",
+                                  normalized / 60, normalized % 60))
+    }
+
+    private func currentMinute(at date: Date = Date()) -> CGFloat {
+        let calendar = Calendar.current
+        let parts = calendar.dateComponents([.hour, .minute, .second, .nanosecond],
+                                            from: date)
+        return CGFloat(parts.hour ?? 0) * 60
+            + CGFloat(parts.minute ?? 0)
+            + CGFloat(parts.second ?? 0) / 60
+            + CGFloat(parts.nanosecond ?? 0) / 60_000_000_000
+    }
+
+    private func eventTimeText(_ event: PrayerScheduleEvent) -> String {
+        let start = timeLabel(event.startMinute)
+        guard let end = event.endMinute else { return start }
+        return "\(start) – \(timeLabel(end))"
     }
 
     private func drawText(_ value: String, in rect: NSRect, size: CGFloat,
@@ -7301,6 +7399,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
     private func activateEvent(_ id: String) {
         guard let event = displayedEvents.first(where: { $0.id == id }) else { return }
         selectedEventID = id
+        selectionPulseStartedAt = ProcessInfo.processInfo.systemUptime
         updateAccessibilityValue()
         onStateChange?(visibleStart, visibleDuration, selectedEventID)
         onSelectEvent?(event, self)
@@ -7308,19 +7407,27 @@ final class InteractivePrayerDayTimelineView: NSControl {
     }
 
     private func updateAccessibilityEventChildren() {
-        let geometry = eventTargets.enumerated().map { index, target in
-            "\(index):\(target.event.id):\(Int(target.rect.minX)):\(Int(target.rect.minY)):"
-                + "\(Int(target.rect.width)):\(Int(target.rect.height))"
+        var unioned: [(event: PrayerScheduleEvent, rect: NSRect)] = []
+        for event in displayedEvents {
+            let rects = eventTargets.filter { $0.event.id == event.id }.map(\.hitRect)
+            guard var frame = rects.first else { continue }
+            for rect in rects.dropFirst() { frame = frame.union(rect) }
+            unioned.append((event, frame))
+        }
+        let geometry = unioned.map { item in
+            "\(item.event.id):\(Int(item.rect.minX)):\(Int(item.rect.minY)):"
+                + "\(Int(item.rect.width)):\(Int(item.rect.height))"
         }.joined(separator: "|")
         let signature = "\(Int(bounds.width))x\(Int(bounds.height))@"
             + "\(Int(visibleStart))/\(Int(visibleDuration))|\(geometry)"
         guard signature != accessibilityGeometrySignature else { return }
         accessibilityGeometrySignature = signature
-        accessibilityEventElements = eventTargets.map { target in
-            let event = target.event
+        accessibilityEventElements = unioned.map { item in
+            let event = item.event
             return PrayerEventAccessibilityElement(
-                parent: self, frame: target.rect,
-                label: "\(event.knowledge.title). \(event.knowledge.whenText)",
+                parent: self, frame: item.rect,
+                label: "\(event.knowledge.title). \(eventTimeText(event)). "
+                    + event.knowledge.whenText,
                 help: prayerInfoText("info.open"),
                 pressHandler: { [weak self] in self?.activateEvent(event.id) })
         }
@@ -7332,6 +7439,12 @@ final class InteractivePrayerDayTimelineView: NSControl {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let animationTime = ProcessInfo.processInfo.systemUptime
+        if let started = selectionPulseStartedAt,
+           animationTime - started > 0.42 {
+            selectionPulseStartedAt = nil
+        }
         let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
                                 xRadius: 18, yRadius: 18)
         (dark ? NSColor(white: 0.08, alpha: 0.96)
@@ -7344,7 +7457,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
 
         let rtl = Localizer.shared.isRTL
         let leading: NSTextAlignment = rtl ? .right : .left
-        let titleWidth = max(180, bounds.width - 290)
+        let titleWidth = max(180, bounds.width - 330)
         drawText(featureText("full.timeline.title"),
                  in: NSRect(x: rtl ? bounds.width - titleWidth - 20 : 20,
                             y: 14, width: titleWidth, height: 28),
@@ -7359,7 +7472,11 @@ final class InteractivePrayerDayTimelineView: NSControl {
                           y: 86,
                           width: bounds.width - labelWidth - 48,
                           height: bounds.height - 166)
-        guard plot.width > 80, plot.height > 150 else { return }
+        plotRect = plot
+        guard plot.width > 80, plot.height > 150 else {
+            plotRect = .zero
+            return
+        }
 
         func xFor(_ minute: CGFloat) -> CGFloat {
             let fraction = (minute - visibleStart) / visibleDuration
@@ -7367,16 +7484,26 @@ final class InteractivePrayerDayTimelineView: NSControl {
                        : plot.minX + plot.width * fraction
         }
 
-        // Time-of-day color layers give the chart depth without competing
-        // with event colors. Boundaries come from the same mosque data.
-        let sunrise = minute(info.shuruq) ?? 6 * 60
-        let dhuhr = info.times.indices.contains(1) ? minute(info.times[1]) ?? 12 * 60 : 12 * 60
-        let maghrib = info.times.indices.contains(3) ? minute(info.times[3]) ?? 18 * 60 : 18 * 60
+        let nowMinute = currentMinute()
+
+        // A six-part sky follows the mosque's own day landmarks. It gives
+        // panning a spatial rhythm without adding or guessing prayer windows.
+        let fajr = info.times.indices.contains(0)
+            ? minute(info.times[0]) ?? 5 * 60 : 5 * 60
+        let sunrise = max(fajr, minute(info.shuruq) ?? 6 * 60)
+        let dhuhr = max(sunrise, info.times.indices.contains(1)
+            ? minute(info.times[1]) ?? 12 * 60 : 12 * 60)
+        let maghrib = max(dhuhr, info.times.indices.contains(3)
+            ? minute(info.times[3]) ?? 18 * 60 : 18 * 60)
+        let isha = max(maghrib, info.times.indices.contains(4)
+            ? minute(info.times[4]) ?? 21 * 60 : 21 * 60)
         let phases: [(Int, Int, NSColor)] = [
-            (0, sunrise, .systemIndigo),
-            (sunrise, dhuhr, .systemOrange),
-            (dhuhr, maghrib, .systemTeal),
-            (maghrib, 1440, .systemPurple),
+            (0, fajr, NSColor(red: 0.19, green: 0.22, blue: 0.48, alpha: 1)),
+            (fajr, sunrise, NSColor(red: 0.91, green: 0.50, blue: 0.25, alpha: 1)),
+            (sunrise, dhuhr, NSColor(red: 0.91, green: 0.68, blue: 0.25, alpha: 1)),
+            (dhuhr, maghrib, NSColor(red: 0.18, green: 0.63, blue: 0.61, alpha: 1)),
+            (maghrib, isha, NSColor(red: 0.75, green: 0.34, blue: 0.31, alpha: 1)),
+            (isha, 1440, NSColor(red: 0.27, green: 0.22, blue: 0.49, alpha: 1)),
         ]
         for (start, end, color) in phases {
             let a = max(CGFloat(start), visibleStart)
@@ -7385,8 +7512,18 @@ final class InteractivePrayerDayTimelineView: NSControl {
             let x1 = xFor(a), x2 = xFor(b)
             let rect = NSRect(x: min(x1, x2), y: plot.minY,
                               width: abs(x2 - x1), height: plot.height)
-            color.withAlphaComponent(dark ? 0.075 : 0.055).setFill()
-            rect.fill()
+            let isCurrent = nowMinute >= CGFloat(start) && nowMinute < CGFloat(end)
+            let alpha: CGFloat = dark
+                ? (isCurrent ? 0.145 : 0.090)
+                : (isCurrent ? 0.125 : 0.075)
+            let first = color.withAlphaComponent(alpha * 0.70)
+            let second = color.withAlphaComponent(alpha)
+            if let gradient = NSGradient(starting: first, ending: second) {
+                gradient.draw(in: rect, angle: rtl ? 180 : 0)
+            } else {
+                second.setFill()
+                rect.fill()
+            }
         }
 
         // Quiet zellige diamonds connect the visualization to the Moroccan
@@ -7419,7 +7556,7 @@ final class InteractivePrayerDayTimelineView: NSControl {
             let lane = NSRect(x: plot.minX, y: y, width: plot.width,
                               height: laneHeight)
             (dark ? NSColor.white.withAlphaComponent(0.045)
-                  : NSColor.white.withAlphaComponent(0.58)).setFill()
+                  : NSColor.white.withAlphaComponent(0.38)).setFill()
             NSBezierPath(roundedRect: lane, xRadius: 10, yRadius: 10).fill()
             let labelRect = NSRect(x: rtl ? plot.maxX + 8 : 14, y: y,
                                    width: labelWidth - 18, height: laneHeight)
@@ -7441,10 +7578,87 @@ final class InteractivePrayerDayTimelineView: NSControl {
             NSColor.secondaryLabelColor.withAlphaComponent(0.20).setStroke()
             path.lineWidth = 0.7
             path.stroke()
+            let labelWidth: CGFloat = is12HourFormat() ? 82 : 58
             drawText(timeLabel(value),
-                     in: NSRect(x: x - 28, y: plot.minY - 25,
-                                width: 56, height: 18),
+                     in: NSRect(x: x - labelWidth / 2, y: plot.minY - 25,
+                                width: labelWidth, height: 18),
                      size: 10, color: .secondaryLabelColor, alignment: .center)
+        }
+
+        func easedHoverProgress(for eventID: String) -> CGFloat {
+            guard eventID == hoveredEventID else { return 0 }
+            guard !reducedMotion else { return 1 }
+            let raw = max(0, min(1,
+                CGFloat((animationTime - hoverFocusStartedAt) / 0.16)))
+            return raw * raw * (3 - 2 * raw)
+        }
+
+        func selectionPulseProgress(for eventID: String) -> CGFloat? {
+            guard eventID == selectedEventID,
+                  !reducedMotion,
+                  let started = selectionPulseStartedAt else { return nil }
+            return max(0, min(1, CGFloat((animationTime - started) / 0.42)))
+        }
+
+        func drawRoundedFocus(_ rect: NSRect, radius: CGFloat,
+                              color: NSColor, selected: Bool,
+                              hoverProgress: CGFloat,
+                              pulseProgress: CGFloat?) {
+            guard selected || hoverProgress > 0 else { return }
+            let focusRect = rect.insetBy(dx: -2, dy: -2)
+            if selected {
+                let underlay = NSBezierPath(roundedRect: focusRect,
+                                             xRadius: radius + 2,
+                                             yRadius: radius + 2)
+                (dark ? NSColor.white.withAlphaComponent(0.28)
+                      : NSColor.black.withAlphaComponent(0.22)).setStroke()
+                underlay.lineWidth = 4.5
+                underlay.stroke()
+            }
+            let outline = NSBezierPath(roundedRect: focusRect,
+                                       xRadius: radius + 2,
+                                       yRadius: radius + 2)
+            color.withAlphaComponent(selected ? 0.96 : 0.35 + 0.48 * hoverProgress)
+                .setStroke()
+            outline.lineWidth = selected ? 2.6 : 1.2 + hoverProgress
+            outline.stroke()
+            if let pulseProgress {
+                let expansion = 4 + 8 * pulseProgress
+                let pulse = NSBezierPath(roundedRect: rect.insetBy(dx: -expansion,
+                                                                   dy: -expansion),
+                                         xRadius: radius + expansion,
+                                         yRadius: radius + expansion)
+                color.withAlphaComponent(0.34 * (1 - pulseProgress)).setStroke()
+                pulse.lineWidth = 2.2
+                pulse.stroke()
+            }
+        }
+
+        func drawMarkerFocus(_ rect: NSRect, color: NSColor,
+                             selected: Bool, hoverProgress: CGFloat,
+                             pulseProgress: CGFloat?) {
+            guard selected || hoverProgress > 0 else { return }
+            let focusRect = rect.insetBy(dx: -5, dy: -5)
+            if selected {
+                let underlay = NSBezierPath(ovalIn: focusRect)
+                (dark ? NSColor.white.withAlphaComponent(0.28)
+                      : NSColor.black.withAlphaComponent(0.22)).setStroke()
+                underlay.lineWidth = 5
+                underlay.stroke()
+            }
+            let outline = NSBezierPath(ovalIn: focusRect)
+            color.withAlphaComponent(selected ? 0.96 : 0.35 + 0.48 * hoverProgress)
+                .setStroke()
+            outline.lineWidth = selected ? 3 : 1.5 + hoverProgress
+            outline.stroke()
+            if let pulseProgress {
+                let expansion = 8 + 8 * pulseProgress
+                let pulse = NSBezierPath(ovalIn: rect.insetBy(dx: -expansion,
+                                                              dy: -expansion))
+                color.withAlphaComponent(0.34 * (1 - pulseProgress)).setStroke()
+                pulse.lineWidth = 2.2
+                pulse.stroke()
+            }
         }
 
         eventTargets.removeAll(keepingCapacity: true)
@@ -7454,6 +7668,8 @@ final class InteractivePrayerDayTimelineView: NSControl {
             let color = color(for: event.kind)
             let selected = event.id == selectedEventID
             let hovered = event.id == hoveredEventID
+            let hoverProgress = easedHoverProgress(for: event.id)
+            let pulseProgress = selectionPulseProgress(for: event.id)
             for segment in segments(for: event) {
                 let start = max(segment.0, visibleStart)
                 let segmentEnd = segment.1.map {
@@ -7484,7 +7700,9 @@ final class InteractivePrayerDayTimelineView: NSControl {
                     let x2 = xFor(segmentEnd)
                     let rect = NSRect(x: min(x1, x2), y: baseY,
                                       width: max(5, abs(x2 - x1)), height: height)
-                    color.withAlphaComponent(selected ? 0.95 : (hovered ? 0.82 : 0.60)).setFill()
+                    let opacity: CGFloat = selected ? 0.92
+                        : (hovered ? 0.60 + 0.22 * hoverProgress : 0.60)
+                    color.withAlphaComponent(opacity).setFill()
                     NSBezierPath(roundedRect: rect, xRadius: height / 2,
                                  yRadius: height / 2).fill()
                     if event.precision == .instructionalMarker {
@@ -7495,6 +7713,10 @@ final class InteractivePrayerDayTimelineView: NSControl {
                         outline.lineWidth = selected ? 2.5 : 1.2
                         outline.stroke()
                     }
+                    drawRoundedFocus(rect, radius: height / 2,
+                                     color: color, selected: selected,
+                                     hoverProgress: hoverProgress,
+                                     pulseProgress: pulseProgress)
                     if rect.width > 76 {
                         drawText(event.knowledge.title,
                                  in: rect.insetBy(dx: 8, dy: 1), size: 10,
@@ -7502,7 +7724,10 @@ final class InteractivePrayerDayTimelineView: NSControl {
                                  color: dark ? .white : .labelColor,
                                  alignment: .center)
                     }
-                    eventTargets.append((minimumHitRect(for: rect), event))
+                    eventTargets.append(EventTarget(
+                        visualRect: rect,
+                        hitRect: minimumHitRect(for: rect).intersection(plot),
+                        event: event))
                 } else {
                     let markerRect = NSRect(x: x1 - 7, y: baseY - 2,
                                             width: 14, height: 14)
@@ -7528,43 +7753,122 @@ final class InteractivePrayerDayTimelineView: NSControl {
                         shape.appendOval(in: markerRect)
                     }
                     shape.fill()
-                    if selected {
-                        color.withAlphaComponent(0.34).setStroke()
-                        let focus = NSBezierPath(ovalIn: markerRect.insetBy(dx: -5, dy: -5))
-                        focus.lineWidth = 3
-                        focus.stroke()
-                    }
-                    eventTargets.append((NSRect(x: x1 - 22, y: baseY - 17,
-                                                width: 44, height: 44), event))
+                    drawMarkerFocus(markerRect, color: color,
+                                    selected: selected,
+                                    hoverProgress: hoverProgress,
+                                    pulseProgress: pulseProgress)
+                    let hit = NSRect(x: x1 - 22, y: baseY - 17,
+                                     width: 44, height: 44).intersection(plot)
+                    eventTargets.append(EventTarget(visualRect: markerRect,
+                                                    hitRect: hit,
+                                                    event: event))
                 }
             }
         }
         updateAccessibilityEventChildren()
 
-        let calendar = Calendar.current
-        let nowMinute = calendar.component(.hour, from: Date()) * 60
-                      + calendar.component(.minute, from: Date())
-        if CGFloat(nowMinute) >= visibleStart,
-           CGFloat(nowMinute) <= visibleStart + visibleDuration {
-            let x = xFor(CGFloat(nowMinute))
+        func drawPill(_ text: String, centerX: CGFloat, y: CGFloat,
+                      background: NSColor, foreground: NSColor) {
+            let font = Localizer.shared.font(size: 10.5, weight: .semibold)
+            let measured = (text as NSString).size(withAttributes: [.font: font])
+            let width = min(plot.width - 12, max(72, ceil(measured.width) + 22))
+            let rect = NSRect(x: max(plot.minX + 6,
+                                     min(plot.maxX - width - 6,
+                                         centerX - width / 2)),
+                              y: y, width: width, height: 24)
+            background.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12).fill()
+            drawText(text, in: rect.insetBy(dx: 10, dy: 4), size: 10.5,
+                     weight: .semibold, color: foreground, alignment: .center)
+        }
+
+        // The day-progress rail and fractional-minute cursor make the chart a
+        // live instrument. Reduce Motion keeps the same information but uses
+        // a static orb and the slower lifecycle timer configured above.
+        let railY = plot.minY + 2
+        let rail = NSBezierPath()
+        rail.move(to: NSPoint(x: plot.minX, y: railY))
+        rail.line(to: NSPoint(x: plot.maxX, y: railY))
+        NSColor.secondaryLabelColor.withAlphaComponent(dark ? 0.24 : 0.18).setStroke()
+        rail.lineWidth = 3
+        rail.lineCapStyle = .round
+        rail.stroke()
+
+        if nowMinute > visibleStart {
+            let progressMinute = min(nowMinute, visibleStart + visibleDuration)
+            let x1 = xFor(visibleStart)
+            let x2 = xFor(progressMinute)
+            let progress = NSBezierPath()
+            progress.move(to: NSPoint(x: x1, y: railY))
+            progress.line(to: NSPoint(x: x2, y: railY))
+            NSColor.appAccent.withAlphaComponent(0.74).setStroke()
+            progress.lineWidth = 3.4
+            progress.lineCapStyle = .round
+            progress.stroke()
+        }
+
+        if nowMinute >= visibleStart,
+           nowMinute <= visibleStart + visibleDuration {
+            let x = xFor(nowMinute)
+            let gold = NSColor(red: 0.92, green: 0.64, blue: 0.20, alpha: 1)
             let cursor = NSBezierPath()
-            cursor.move(to: NSPoint(x: x, y: plot.minY - 7))
+            cursor.move(to: NSPoint(x: x, y: railY))
             cursor.line(to: NSPoint(x: x, y: plot.maxY))
-            NSColor.systemRed.withAlphaComponent(0.82).setStroke()
-            cursor.lineWidth = 2
+            gold.withAlphaComponent(0.70).setStroke()
+            cursor.lineWidth = 1.8
             cursor.stroke()
+
+            let pulse = reducedMotion ? 0 : CGFloat(
+                (sin(animationTime * 2 * Double.pi / 1.8) + 1) / 2)
+            let haloRadius = 9 + 4 * pulse
+            gold.withAlphaComponent(reducedMotion ? 0.20 : 0.10 + 0.12 * (1 - pulse))
+                .setFill()
+            NSBezierPath(ovalIn: NSRect(x: x - haloRadius,
+                                        y: railY - haloRadius,
+                                        width: haloRadius * 2,
+                                        height: haloRadius * 2)).fill()
+            gold.setFill()
+            NSBezierPath(ovalIn: NSRect(x: x - 5.5, y: railY - 5.5,
+                                        width: 11, height: 11)).fill()
+            let label = "\(nowText) · \(timeLabel(Int(floor(nowMinute))))"
+            drawPill(label, centerX: x, y: plot.minY + 9,
+                     background: gold.withAlphaComponent(dark ? 0.92 : 0.96),
+                     foreground: NSColor.black.withAlphaComponent(0.82))
+        }
+
+        if let hoverMinute, dragOriginX == nil {
+            let x = xFor(hoverMinute)
+            let guide = NSBezierPath()
+            guide.move(to: NSPoint(x: x, y: plot.minY + 4))
+            guide.line(to: NSPoint(x: x, y: plot.maxY))
+            guide.setLineDash([3, 4], count: 2, phase: 0)
+            NSColor.labelColor.withAlphaComponent(dark ? 0.38 : 0.28).setStroke()
+            guide.lineWidth = 1
+            guide.stroke()
+            drawPill(timeLabel(Int(floor(hoverMinute))), centerX: x,
+                     y: plot.maxY - 29,
+                     background: dark
+                        ? NSColor(white: 0.15, alpha: 0.96)
+                        : NSColor(white: 1, alpha: 0.96),
+                     foreground: .labelColor)
         }
 
         if let id = hoveredEventID ?? selectedEventID,
            let event = displayedEvents.first(where: { $0.id == id }) {
-            let ribbon = NSRect(x: 20, y: bounds.height - 58,
-                                width: bounds.width - 40, height: 42)
+            let ribbon = NSRect(x: 20, y: bounds.height - 66,
+                                width: bounds.width - 40, height: 50)
             (dark ? NSColor.white.withAlphaComponent(0.09)
                   : NSColor.black.withAlphaComponent(0.045)).setFill()
             NSBezierPath(roundedRect: ribbon, xRadius: 10, yRadius: 10).fill()
-            let text = "\(event.knowledge.title) · \(event.knowledge.whenText)"
-            drawText(text, in: ribbon.insetBy(dx: 12, dy: 10), size: 12,
-                     weight: .semibold, alignment: leading)
+            drawText("\(event.knowledge.title) · \(eventTimeText(event))",
+                     in: NSRect(x: ribbon.minX + 12, y: ribbon.minY + 5,
+                                width: ribbon.width - 24, height: 18),
+                     size: 12, weight: .semibold, alignment: leading)
+            drawText(event.knowledge.whenText,
+                     in: NSRect(x: ribbon.minX + 12, y: ribbon.minY + 25,
+                                width: ribbon.width - 24, height: 17),
+                     size: 10.5, color: .secondaryLabelColor,
+                     alignment: leading)
         }
     }
 
@@ -8526,11 +8830,242 @@ final class PrayerRingClockView: NSControl {
     }
 }
 
+/// Icon-led presentation picker for the four prayer-time views.  Each mode is
+/// still a native NSButton (rather than a drawn hit region), so keyboard focus,
+/// VoiceOver actions, and the 48-point targets remain first-class AppKit
+/// behavior while the surrounding capsule follows the visual language of the
+/// reference control.
+final class PrayerDisplayModeButton: NSButton {
+    let modeIndex: Int
+    private var trackingAreaRef: NSTrackingArea?
+    private var isHovering = false
+    var onVisualArrow: ((Int) -> Void)?
+
+    var isModeSelected = false {
+        didSet {
+            state = isModeSelected ? .on : .off
+            setAccessibilityValue(NSNumber(value: isModeSelected))
+            updateModeAppearance()
+        }
+    }
+
+    init(modeIndex: Int, symbol: String, label: String,
+         target: AnyObject?, action: Selector) {
+        self.modeIndex = modeIndex
+        super.init(frame: NSRect(x: 0, y: 0, width: 48, height: 48))
+        self.target = target
+        self.action = action
+        self.tag = modeIndex
+        self.title = ""
+        self.toolTip = label
+        self.isBordered = false
+        self.bezelStyle = .regularSquare
+        self.imagePosition = .imageOnly
+        self.imageScaling = .scaleProportionallyDown
+        self.focusRingType = .default
+        self.setButtonType(.toggle)
+        self.image = templateSymbol(symbol, pointSize: 17, weight: .semibold)
+        self.translatesAutoresizingMaskIntoConstraints = false
+        self.wantsLayer = true
+        self.layer?.cornerRadius = 24
+        self.layer?.masksToBounds = true
+        self.setAccessibilityRole(.radioButton)
+        self.setAccessibilityLabel(label)
+        self.setAccessibilityHelp("\(t("main.tab.prayer_times")) · \(label)")
+        updateModeAppearance()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func updateLocalization(_ label: String) {
+        toolTip = label
+        setAccessibilityLabel(label)
+        setAccessibilityHelp("\(t("main.tab.prayer_times")) · \(label)")
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited,
+                                            .activeInActiveApp, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        trackingAreaRef = area
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        updateModeAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        updateModeAppearance()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 123 || event.keyCode == 124 {
+            onVisualArrow?(event.keyCode == 123 ? -1 : 1)
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateModeAppearance()
+    }
+
+    private func updateModeAppearance() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        contentTintColor = isModeSelected ? .appAccent : .secondaryLabelColor
+        layer?.borderWidth = isModeSelected ? 2 : 1
+        layer?.borderColor = (isModeSelected
+            ? NSColor.appAccent
+            : NSColor.separatorColor.withAlphaComponent(dark ? 0.58 : 0.42)).cgColor
+        let background: NSColor
+        if isModeSelected {
+            background = NSColor.appAccent.withAlphaComponent(dark ? 0.18 : 0.09)
+        } else if isHovering {
+            background = NSColor.labelColor.withAlphaComponent(dark ? 0.10 : 0.055)
+        } else {
+            background = .clear
+        }
+        layer?.backgroundColor = background.cgColor
+    }
+}
+
+final class PrayerDisplayModeRail: NSControl {
+    private static let definitions: [(key: String, symbol: String)] = [
+        ("full.view.overview", "square.grid.2x2"),
+        ("full.view.list", "list.bullet"),
+        ("full.view.timeline", "chart.xyaxis.line"),
+        ("full.view.clock", "clock"),
+    ]
+
+    private var buttonsByMode: [Int: PrayerDisplayModeButton] = [:]
+    private var visuallyOrderedButtons: [PrayerDisplayModeButton] = []
+    private let buttonStack = NSStackView()
+    private(set) var selectedMode: Int
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: 232, height: 60)
+    }
+
+    init(selectedMode: Int, target: AnyObject?, action: Selector) {
+        self.selectedMode = max(0, min(3, selectedMode))
+        super.init(frame: NSRect(x: 0, y: 0, width: 232, height: 60))
+        self.target = target
+        self.action = action
+        self.translatesAutoresizingMaskIntoConstraints = false
+        self.wantsLayer = true
+        self.layer?.cornerRadius = 30
+        self.layer?.masksToBounds = false
+        self.setAccessibilityElement(true)
+        self.setAccessibilityRole(.radioGroup)
+        self.setAccessibilityLabel(t("main.tab.prayer_times"))
+
+        buttonStack.orientation = .horizontal
+        buttonStack.alignment = .centerY
+        buttonStack.spacing = 8
+        // The logical tags never change; only the visual order mirrors.
+        buttonStack.userInterfaceLayoutDirection = .leftToRight
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(buttonStack)
+
+        let logical = Self.definitions.enumerated().map { index, definition in
+            PrayerDisplayModeButton(
+                modeIndex: index,
+                symbol: definition.symbol,
+                label: featureText(definition.key),
+                target: self,
+                action: #selector(modePressed(_:)))
+        }
+        visuallyOrderedButtons = Localizer.shared.isRTL ? Array(logical.reversed()) : logical
+        for button in logical {
+            buttonsByMode[button.modeIndex] = button
+            button.onVisualArrow = { [weak self, weak button] delta in
+                guard let self, let button else { return }
+                self.moveSelectionVisually(from: button, delta: delta)
+            }
+            NSLayoutConstraint.activate([
+                button.widthAnchor.constraint(equalToConstant: 48),
+                button.heightAnchor.constraint(equalToConstant: 48),
+            ])
+        }
+        visuallyOrderedButtons.forEach { buttonStack.addArrangedSubview($0) }
+        NSLayoutConstraint.activate([
+            buttonStack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            buttonStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        updateSelectionAppearance()
+        updateRailAppearance()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    func setSelectedMode(_ mode: Int, notify: Bool = false) {
+        selectedMode = max(0, min(3, mode))
+        updateSelectionAppearance()
+        if notify { _ = sendAction(action, to: target) }
+    }
+
+    func refreshLocalization() {
+        setAccessibilityLabel(t("main.tab.prayer_times"))
+        for (index, definition) in Self.definitions.enumerated() {
+            buttonsByMode[index]?.updateLocalization(featureText(definition.key))
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateRailAppearance()
+    }
+
+    @objc private func modePressed(_ sender: PrayerDisplayModeButton) {
+        setSelectedMode(sender.modeIndex, notify: true)
+    }
+
+    private func moveSelectionVisually(from button: PrayerDisplayModeButton,
+                                       delta: Int) {
+        guard let current = visuallyOrderedButtons.firstIndex(where: { $0 === button }) else {
+            return
+        }
+        let next = max(0, min(visuallyOrderedButtons.count - 1, current + delta))
+        let nextButton = visuallyOrderedButtons[next]
+        setSelectedMode(nextButton.modeIndex, notify: true)
+        window?.makeFirstResponder(nextButton)
+    }
+
+    private func updateSelectionAppearance() {
+        for (mode, button) in buttonsByMode {
+            button.isModeSelected = mode == selectedMode
+        }
+        setAccessibilityValue(featureText(Self.definitions[selectedMode].key))
+    }
+
+    private func updateRailAppearance() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        layer?.backgroundColor = (dark
+            ? NSColor.white.withAlphaComponent(0.055)
+            : NSColor.white.withAlphaComponent(0.68)).cgColor
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor.separatorColor.withAlphaComponent(dark ? 0.55 : 0.32).cgColor
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = dark ? 0.14 : 0.08
+        layer?.shadowRadius = 9
+        layer?.shadowOffset = NSSize(width: 0, height: -2)
+    }
+}
+
 final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private weak var appDelegate: AppDelegate?
     private var scrollView: NSScrollView!
-    private var modeControl: NSSegmentedControl!
-    private var nawafilControl: NSSegmentedControl!
+    private var modeControl: PrayerDisplayModeRail!
+    private var nawafilSwitch: NSSwitch!
+    private var nawafilSwitchLabel: NSTextField!
+    private var nawafilPlacementButton: NSPopUpButton!
     private var mosqueSettingsButton: HoverIconButton!
     private var countdownCard: AdaptiveCardView!
     private var countdownTitleLabel: NSTextField!
@@ -8552,6 +9087,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private var nawafilMode: Int = {
         guard UserDefaults.standard.object(forKey: kPrayerNawafilMode) != nil else { return 2 }
         return max(0, min(2, UserDefaults.standard.integer(forKey: kPrayerNawafilMode)))
+    }()
+    private static let lastVisibleNawafilModeKey = "prayerNawafilLastVisibleMode"
+    private var lastVisibleNawafilMode: Int = {
+        let defaults = UserDefaults.standard
+        let remembered = defaults.integer(forKey: "prayerNawafilLastVisibleMode")
+        if (1...2).contains(remembered) { return remembered }
+        let current = defaults.integer(forKey: kPrayerNawafilMode)
+        return (1...2).contains(current) ? current : 2
     }()
     private var lastRenderedWidth: CGFloat = 0
     private var didSetInitialScrollPosition = false
@@ -8579,30 +9122,51 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     override func loadView() {
         let root = NSView()
         root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        modeControl = NSSegmentedControl(labels: [featureText("full.view.overview"),
-                                                  featureText("full.view.list"),
-                                                  featureText("full.view.timeline"),
-                                                  featureText("full.view.clock")],
-                                         trackingMode: .selectOne,
-                                         target: self,
-                                         action: #selector(modeChanged(_:)))
-        modeControl.segmentStyle = .texturedRounded
-        modeControl.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        modeControl.selectedSegment = displayMode
-        modeControl.translatesAutoresizingMaskIntoConstraints = false
-        modeControl.setAccessibilityLabel(t("main.tab.prayer_times"))
+        modeControl = PrayerDisplayModeRail(
+            selectedMode: displayMode,
+            target: self,
+            action: #selector(modeChanged(_:)))
 
-        nawafilControl = NSSegmentedControl(labels: [featureText("full.nawafil.hide"),
-                                                     featureText("full.nawafil.integrated"),
-                                                     featureText("full.nawafil.separate")],
-                                            trackingMode: .selectOne,
-                                            target: self,
-                                            action: #selector(nawafilModeChanged(_:)))
-        nawafilControl.segmentStyle = .texturedRounded
-        nawafilControl.selectedSegment = nawafilMode
-        nawafilControl.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        nawafilControl.translatesAutoresizingMaskIntoConstraints = false
-        nawafilControl.setAccessibilityLabel(featureText("full.nawafil"))
+        nawafilSwitchLabel = NSTextField(labelWithString: featureText("full.nawafil"))
+        nawafilSwitchLabel.font = Localizer.shared.font(size: 12.5, weight: .semibold)
+        nawafilSwitchLabel.alignment = Localizer.shared.leadingAlignment
+        nawafilSwitchLabel.baseWritingDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        nawafilSwitchLabel.lineBreakMode = .byTruncatingTail
+        nawafilSwitchLabel.translatesAutoresizingMaskIntoConstraints = false
+        nawafilSwitchLabel.setAccessibilityElement(false)
+        nawafilSwitchLabel.toolTip = featureText("full.nawafil")
+        nawafilSwitchLabel.setContentCompressionResistancePriority(.defaultLow,
+                                                                    for: .horizontal)
+
+        nawafilSwitch = NSSwitch()
+        nawafilSwitch.state = nawafilMode == 0 ? .off : .on
+        nawafilSwitch.target = self
+        nawafilSwitch.action = #selector(nawafilVisibilityChanged(_:))
+        nawafilSwitch.toolTip = featureText("full.nawafil")
+        nawafilSwitch.setAccessibilityLabel(featureText("full.nawafil"))
+        nawafilSwitch.setAccessibilityHelp(featureText("full.nawafil.integrated"))
+        nawafilSwitch.translatesAutoresizingMaskIntoConstraints = false
+
+        nawafilPlacementButton = NSPopUpButton(frame: .zero, pullsDown: false)
+        nawafilPlacementButton.addItems(withTitles: [
+            featureText("full.nawafil.integrated"),
+            featureText("full.nawafil.separate"),
+        ])
+        nawafilPlacementButton.selectItem(at: max(0, lastVisibleNawafilMode - 1))
+        nawafilPlacementButton.target = self
+        nawafilPlacementButton.action = #selector(nawafilPlacementChanged(_:))
+        nawafilPlacementButton.image = templateSymbol("slider.horizontal.3",
+                                                       pointSize: 14,
+                                                       weight: .semibold)
+        nawafilPlacementButton.imagePosition = .imageOnly
+        nawafilPlacementButton.bezelStyle = .texturedRounded
+        nawafilPlacementButton.focusRingType = .default
+        nawafilPlacementButton.toolTip = selectedNawafilPlacementTitle()
+        nawafilPlacementButton.setAccessibilityLabel(featureText("full.nawafil"))
+        nawafilPlacementButton.setAccessibilityValue(selectedNawafilPlacementTitle())
+        nawafilPlacementButton.translatesAutoresizingMaskIntoConstraints = false
+        nawafilPlacementButton.isEnabled = nawafilMode != 0
 
         mosqueSettingsButton = HoverIconButton(
             symbol: "mappin.and.ellipse",
@@ -8615,14 +9179,18 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         mosqueSettingsButton.setAccessibilityHelp(t("settings.mosque.change"))
         mosqueSettingsButton.translatesAutoresizingMaskIntoConstraints = false
 
-        let controlRail = NSStackView(views: [modeControl, nawafilControl,
-                                              mosqueSettingsButton])
-        controlRail.orientation = .horizontal
-        controlRail.alignment = .centerY
-        controlRail.spacing = 12
-        controlRail.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        controlRail.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(controlRail)
+        let nawafilControls = NSStackView(views: [nawafilSwitchLabel,
+                                                  nawafilSwitch,
+                                                  nawafilPlacementButton])
+        nawafilControls.orientation = .horizontal
+        nawafilControls.alignment = .centerY
+        nawafilControls.spacing = 7
+        nawafilControls.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
+        nawafilControls.translatesAutoresizingMaskIntoConstraints = false
+        nawafilControls.setAccessibilityElement(false)
+        root.addSubview(modeControl)
+        root.addSubview(nawafilControls)
+        root.addSubview(mosqueSettingsButton)
 
         countdownCard = AdaptiveCardView()
         countdownCard.cornerRadius = 12
@@ -8687,20 +9255,29 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         root.addSubview(scrollView)
         countdownHeightConstraint = countdownCard.heightAnchor.constraint(equalToConstant: 46)
         NSLayoutConstraint.activate([
-            controlRail.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-            controlRail.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            controlRail.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor,
-                                                 constant: 20),
-            controlRail.trailingAnchor.constraint(lessThanOrEqualTo: root.trailingAnchor,
-                                                   constant: -20),
-            modeControl.widthAnchor.constraint(equalToConstant: 420),
-            modeControl.heightAnchor.constraint(equalToConstant: 30),
-            nawafilControl.widthAnchor.constraint(equalToConstant: 280),
-            nawafilControl.heightAnchor.constraint(equalToConstant: 30),
+            modeControl.topAnchor.constraint(equalTo: root.topAnchor, constant: 10),
+            modeControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            modeControl.widthAnchor.constraint(equalToConstant: 232),
+            modeControl.heightAnchor.constraint(equalToConstant: 60),
+
+            mosqueSettingsButton.leadingAnchor.constraint(equalTo: root.leadingAnchor,
+                                                           constant: 20),
+            mosqueSettingsButton.centerYAnchor.constraint(equalTo: modeControl.centerYAnchor),
             mosqueSettingsButton.widthAnchor.constraint(equalToConstant: 44),
             mosqueSettingsButton.heightAnchor.constraint(equalToConstant: 44),
 
-            countdownCard.topAnchor.constraint(equalTo: controlRail.bottomAnchor,
+            nawafilControls.trailingAnchor.constraint(equalTo: root.trailingAnchor,
+                                                       constant: -20),
+            nawafilControls.centerYAnchor.constraint(equalTo: modeControl.centerYAnchor),
+            nawafilControls.leadingAnchor.constraint(greaterThanOrEqualTo:
+                modeControl.trailingAnchor, constant: 18),
+            nawafilSwitch.widthAnchor.constraint(equalToConstant: 44),
+            nawafilSwitch.heightAnchor.constraint(equalToConstant: 44),
+            nawafilSwitchLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 130),
+            nawafilPlacementButton.widthAnchor.constraint(equalToConstant: 44),
+            nawafilPlacementButton.heightAnchor.constraint(equalToConstant: 44),
+
+            countdownCard.topAnchor.constraint(equalTo: modeControl.bottomAnchor,
                                                 constant: 6),
             countdownCard.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             countdownCard.widthAnchor.constraint(equalToConstant: 540),
@@ -8724,13 +9301,9 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     }
 
     func tabDidActivate() {
-        modeControl?.setLabel(featureText("full.view.overview"), forSegment: 0)
-        modeControl?.setLabel(featureText("full.view.list"), forSegment: 1)
-        modeControl?.setLabel(featureText("full.view.timeline"), forSegment: 2)
-        modeControl?.setLabel(featureText("full.view.clock"), forSegment: 3)
-        nawafilControl?.setLabel(featureText("full.nawafil.hide"), forSegment: 0)
-        nawafilControl?.setLabel(featureText("full.nawafil.integrated"), forSegment: 1)
-        nawafilControl?.setLabel(featureText("full.nawafil.separate"), forSegment: 2)
+        modeControl?.setSelectedMode(displayMode)
+        modeControl?.refreshLocalization()
+        refreshNawafilControlCopy()
         rebuild()
         refreshLiveState()
     }
@@ -8794,17 +9367,87 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         countdownValueLabel.setAccessibilityValue(remaining)
     }
 
-    @objc private func modeChanged(_ sender: NSSegmentedControl) {
-        displayMode = max(0, min(3, sender.selectedSegment))
+    @objc private func modeChanged(_ sender: PrayerDisplayModeRail) {
+        displayMode = max(0, min(3, sender.selectedMode))
         UserDefaults.standard.set(displayMode, forKey: kPrayerDashboardMode)
         rebuild()
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
-    @objc private func nawafilModeChanged(_ sender: NSSegmentedControl) {
-        nawafilMode = max(0, min(2, sender.selectedSegment))
+    private func selectedNawafilPlacementTitle() -> String {
+        featureText(lastVisibleNawafilMode == 1
+                    ? "full.nawafil.integrated" : "full.nawafil.separate")
+    }
+
+    private func refreshNawafilControlCopy() {
+        guard nawafilSwitch != nil, nawafilPlacementButton != nil else { return }
+        nawafilSwitchLabel.stringValue = featureText("full.nawafil")
+        nawafilSwitchLabel.font = Localizer.shared.font(size: 12.5, weight: .semibold)
+        nawafilSwitchLabel.alignment = Localizer.shared.leadingAlignment
+        nawafilSwitchLabel.baseWritingDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        nawafilSwitchLabel.toolTip = featureText("full.nawafil")
+        nawafilSwitch.toolTip = featureText("full.nawafil")
+        nawafilSwitch.setAccessibilityLabel(featureText("full.nawafil"))
+        nawafilSwitch.setAccessibilityHelp(selectedNawafilPlacementTitle())
+
+        nawafilPlacementButton.removeAllItems()
+        nawafilPlacementButton.addItems(withTitles: [
+            featureText("full.nawafil.integrated"),
+            featureText("full.nawafil.separate"),
+        ])
+        nawafilPlacementButton.image = templateSymbol("slider.horizontal.3",
+                                                       pointSize: 14,
+                                                       weight: .semibold)
+        updateNawafilControlState()
+    }
+
+    private func updateNawafilControlState() {
+        nawafilSwitch.state = nawafilMode == 0 ? .off : .on
+        nawafilPlacementButton.selectItem(at: max(0, lastVisibleNawafilMode - 1))
+        nawafilPlacementButton.image = templateSymbol("slider.horizontal.3",
+                                                       pointSize: 14,
+                                                       weight: .semibold)
+        nawafilPlacementButton.imagePosition = .imageOnly
+        nawafilPlacementButton.isEnabled = nawafilMode != 0
+        let placement = selectedNawafilPlacementTitle()
+        nawafilSwitch.setAccessibilityHelp(placement)
+        nawafilPlacementButton.toolTip = placement
+        nawafilPlacementButton.setAccessibilityLabel(featureText("full.nawafil"))
+        nawafilPlacementButton.setAccessibilityValue(placement)
+        nawafilPlacementButton.setAccessibilityHelp(placement)
+    }
+
+    @objc private func nawafilVisibilityChanged(_ sender: NSSwitch) {
+        if sender.state == .on {
+            nawafilMode = lastVisibleNawafilMode
+        } else {
+            if (1...2).contains(nawafilMode) {
+                lastVisibleNawafilMode = nawafilMode
+                UserDefaults.standard.set(lastVisibleNawafilMode,
+                                          forKey: Self.lastVisibleNawafilModeKey)
+            }
+            nawafilMode = 0
+        }
         UserDefaults.standard.set(nawafilMode, forKey: kPrayerNawafilMode)
+        updateNawafilControlState()
+        rebuild()
+        scrollView.contentView.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    @objc private func nawafilPlacementChanged(_ sender: NSPopUpButton) {
+        lastVisibleNawafilMode = max(1, min(2, sender.indexOfSelectedItem + 1))
+        UserDefaults.standard.set(lastVisibleNawafilMode,
+                                  forKey: Self.lastVisibleNawafilModeKey)
+        guard nawafilSwitch.state == .on else {
+            updateNawafilControlState()
+            return
+        }
+        nawafilMode = lastVisibleNawafilMode
+        UserDefaults.standard.set(nawafilMode, forKey: kPrayerNawafilMode)
+        updateNawafilControlState()
         rebuild()
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
@@ -8901,7 +9544,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let bodyHeight: CGFloat
         switch displayMode {
         case 0: bodyHeight = 670 + separateExtra
-        case 1: bodyHeight = (nawafilMode == 1 ? 1110 : 760) + separateExtra
+        case 1: bodyHeight = (nawafilMode == 1 ? 1240 : 820) + separateExtra
         case 2:
             let chart = InteractivePrayerDayTimelineView.preferredHeight(
                 for: contentWidth)
@@ -8963,6 +9606,70 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         field.lineBreakMode = wrapping ? .byWordWrapping : .byTruncatingTail
         if wrapping { field.maximumNumberOfLines = 2 }
         return field
+    }
+
+    /// Auto Layout label used inside the List presentation.  Unlike
+    /// dashboardLabel, it keeps Cairo's intrinsic line box instead of expanding
+    /// a fixed frame into a neighboring label.
+    private func listLabel(_ text: String, size: CGFloat,
+                           weight: NSFont.Weight = .regular,
+                           color: NSColor = .labelColor,
+                           alignment: NSTextAlignment? = nil,
+                           maximumLines: Int = 1) -> NSTextField {
+        let field = maximumLines > 1
+            ? NSTextField(wrappingLabelWithString: text)
+            : NSTextField(labelWithString: text)
+        field.font = Localizer.shared.font(size: size, weight: weight)
+        field.textColor = color
+        field.alignment = alignment ?? Localizer.shared.leadingAlignment
+        field.baseWritingDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        field.lineBreakMode = maximumLines > 1 ? .byWordWrapping : .byTruncatingTail
+        field.maximumNumberOfLines = maximumLines
+        field.cell?.wraps = maximumLines > 1
+        field.cell?.truncatesLastVisibleLine = maximumLines == 1
+        field.translatesAutoresizingMaskIntoConstraints = false
+        return field
+    }
+
+    /// Numeric clock values remain LTR even when their surrounding row is RTL;
+    /// separating them from Arabic prose also avoids bidi punctuation swaps.
+    private func listTimeLabel(_ text: String, size: CGFloat,
+                               weight: NSFont.Weight = .semibold,
+                               color: NSColor = .labelColor) -> NSTextField {
+        let field = NSTextField(labelWithString: text)
+        field.font = NSFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
+        field.textColor = color
+        field.alignment = .center
+        field.baseWritingDirection = .leftToRight
+        field.lineBreakMode = .byClipping
+        field.maximumNumberOfLines = 1
+        field.translatesAutoresizingMaskIntoConstraints = false
+        return field
+    }
+
+    private func localizedAdhanModeTitle(_ mode: AdhanMode) -> String {
+        switch mode {
+        case .off: return featureText("adhan.mode.off")
+        case .notify: return featureText("adhan.mode.notify")
+        case .adhan: return featureText("adhan.mode.play")
+        }
+    }
+
+    private func updatePrayerModeAccessibility(_ button: NSButton, index: Int) {
+        let mode = adhanModeForPrayer(index)
+        let prayer = appDelegate?.localizedPrayerName(at: index) ?? ""
+        let modeTitle = localizedAdhanModeTitle(mode)
+        let description = "\(prayer): \(modeTitle)"
+        button.toolTip = description
+        button.setAccessibilityLabel(prayer)
+        button.setAccessibilityValue(modeTitle)
+        button.setAccessibilityHelp(description)
+    }
+
+    @objc private func prayerListModeTapped(_ sender: NSButton) {
+        appDelegate?.adhanModeButtonTapped(sender)
+        updatePrayerModeAccessibility(sender, index: sender.tag)
     }
 
     private func localizedLongDate() -> String {
@@ -9241,18 +9948,41 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private func buildList(in body: NSView, app: AppDelegate,
                            x: CGFloat, width: CGFloat) {
         let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        body.addSubview(dashboardLabel(featureText("full.view.list"),
-            frame: NSRect(x: x, y: 20, width: width, height: 32),
-            size: 24, weight: .bold))
-        body.addSubview(dashboardLabel("\(mosqueName) · \(localizedLongDate())",
-            frame: NSRect(x: x, y: 52, width: width, height: 21),
-            size: 12, color: .secondaryLabelColor))
+        let header = FlippedView(frame: NSRect(x: x, y: 14, width: width, height: 80))
+        body.addSubview(header)
+        let heading = listLabel(featureText("full.view.list"), size: 24,
+                                weight: .bold)
+        let mosque = listLabel(mosqueName, size: 12,
+                               color: .secondaryLabelColor)
+        let date = listLabel(localizedLongDate(), size: 12,
+                             color: .secondaryLabelColor)
+        mosque.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        date.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let context = NSStackView(views: [mosque, date])
+        context.orientation = .horizontal
+        context.alignment = .centerY
+        context.spacing = 8
+        context.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        context.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(heading)
+        header.addSubview(context)
+        NSLayoutConstraint.activate([
+            heading.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            heading.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            heading.topAnchor.constraint(equalTo: header.topAnchor, constant: 2),
+            context.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            context.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor),
+            context.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 2),
+            context.bottomAnchor.constraint(lessThanOrEqualTo: header.bottomAnchor,
+                                            constant: -2),
+        ])
 
-        var y: CGFloat = 88
+        var y: CGFloat = 108
         func prayer(_ index: Int) {
             addPrayerListRow(to: body, app: app, index: index,
-                frame: NSRect(x: x, y: y, width: width, height: 72))
-            y += 80
+                frame: NSRect(x: x, y: y, width: width, height: 78))
+            y += 86
         }
         func nafl(_ kind: PrayerScheduleKind, _ title: String, _ detail: String,
                   _ citation: String) {
@@ -9260,13 +9990,13 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                                         window: detail, citation: citation)
             addNawafilListRow(to: body, title: title, detail: detail,
                 knowledge: item,
-                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 52))
-            y += 60
+                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 64))
+            y += 72
         }
         func landmark(_ title: String, _ raw: String, _ symbol: String) {
             addLandmarkListRow(to: body, title: title, raw: raw, symbol: symbol,
-                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 52))
-            y += 60
+                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 64))
+            y += 72
         }
 
         if nawafilMode == 1 {
@@ -9327,49 +10057,75 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func addPrayerListRow(to parent: NSView, app: AppDelegate, index: Int,
                                   frame: NSRect) {
-        let isRTL = Localizer.shared.isRTL
         let card = AdaptiveCardView(frame: frame)
         card.cornerRadius = 12
         parent.addSubview(card)
-        let mode = NSButton(frame: NSRect(x: isRTL ? 8 : frame.width - 52,
-                                          y: 14, width: 44, height: 44))
+
+        let mode = NSButton(frame: NSRect(x: 0, y: 0, width: 44, height: 44))
         mode.isBordered = false
         mode.title = ""
         mode.tag = index
-        mode.target = app
-        mode.action = #selector(AppDelegate.adhanModeButtonTapped(_:))
+        mode.target = self
+        mode.action = #selector(prayerListModeTapped(_:))
         mode.imagePosition = .imageOnly
         mode.focusRingType = .default
-        mode.setAccessibilityLabel(app.localizedPrayerName(at: index))
+        mode.translatesAutoresizingMaskIntoConstraints = false
         app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(index))
-        card.addSubview(mode)
+        updatePrayerModeAccessibility(mode, index: index)
 
+        let infoView: NSView
         if let knowledge = knowledge(forPrayer: index) {
-            card.addSubview(makeInfoButton(
+            let button = makeInfoButton(
                 for: knowledge,
-                frame: NSRect(x: isRTL ? frame.width - 52 : 8,
-                              y: 14, width: 44, height: 44)))
+                frame: NSRect(x: 0, y: 0, width: 44, height: 44))
+            button.translatesAutoresizingMaskIntoConstraints = false
+            infoView = button
+        } else {
+            let placeholder = NSView()
+            placeholder.translatesAutoresizingMaskIntoConstraints = false
+            placeholder.setAccessibilityElement(false)
+            infoView = placeholder
         }
 
-        let titleX: CGFloat = 64
-        let titleWidth = frame.width * 0.31
-        card.addSubview(dashboardLabel(app.localizedPrayerName(at: index),
-            frame: NSRect(x: titleX, y: 15, width: titleWidth, height: 25),
-            size: 17, weight: .semibold))
+        let title = listLabel(app.localizedPrayerName(at: index), size: 17,
+                              weight: .semibold, maximumLines: 2)
+        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
-        let timeX: CGFloat = frame.width * 0.43
-        let adhan = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
-            frame: NSRect(x: timeX, y: 13, width: frame.width * 0.22, height: 33),
-            size: 27, weight: .semibold, alignment: .center)
-        adhan.font = NSFont.monospacedDigitSystemFont(ofSize: 27, weight: .semibold)
-        card.addSubview(adhan)
+        let adhan = listTimeLabel(raw.isEmpty ? "—" : displayTime(raw), size: 27)
         let iqama = app.iqamaTimeAt(index).map(displayTime) ?? "—"
-        let iqamaX: CGFloat = isRTL ? 18 : frame.width * 0.69
-        card.addSubview(dashboardLabel("\(t("col.iqama")) · \(iqama)",
-            frame: NSRect(x: iqamaX, y: 45,
-                          width: frame.width * 0.27, height: 20),
-            size: 12.5, color: .secondaryLabelColor,
-            alignment: isRTL ? .left : .right))
+        let iqamaTitle = listLabel(t("col.iqama"), size: 10.5,
+                                   weight: .medium,
+                                   color: .secondaryLabelColor,
+                                   alignment: .center)
+        let iqamaValue = listTimeLabel(iqama, size: 15,
+                                       color: .secondaryLabelColor)
+        let iqamaStack = NSStackView(views: [iqamaTitle, iqamaValue])
+        iqamaStack.orientation = .vertical
+        iqamaStack.alignment = .centerX
+        iqamaStack.spacing = 0
+        iqamaStack.translatesAutoresizingMaskIntoConstraints = false
+
+        let row = NSStackView(views: [infoView, title, adhan, iqamaStack, mode])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        row.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        row.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 8),
+            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8),
+            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
+            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -6),
+            infoView.widthAnchor.constraint(equalToConstant: 44),
+            infoView.heightAnchor.constraint(equalToConstant: 44),
+            adhan.widthAnchor.constraint(equalToConstant: 112),
+            iqamaStack.widthAnchor.constraint(equalToConstant: 132),
+            mode.widthAnchor.constraint(equalToConstant: 44),
+            mode.heightAnchor.constraint(equalToConstant: 44),
+        ])
     }
 
     private func addNawafilListRow(to parent: NSView, title: String, detail: String,
@@ -9378,25 +10134,49 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let card = AdaptiveCardView(frame: frame)
         card.cornerRadius = 10
         parent.addSubview(card)
-        let icon = NSImageView(frame: NSRect(x: Localizer.shared.isRTL
-                                              ? frame.width - 39 : 14,
-                                             y: 15, width: 20, height: 20))
+
+        let icon = NSImageView()
         icon.image = templateSymbol("sparkles", pointSize: 13, weight: .semibold)
         icon.contentTintColor = .appGreenAccent
-        card.addSubview(icon)
-        let isRTL = Localizer.shared.isRTL
-        card.addSubview(makeInfoButton(
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.setAccessibilityElement(false)
+        let info = makeInfoButton(
             for: knowledge,
-            frame: NSRect(x: isRTL ? 0 : frame.width - 44,
-                          y: 4, width: 44, height: 44)))
-        let textX: CGFloat = isRTL ? 44 : 44
-        let textWidth = frame.width - 88
-        card.addSubview(dashboardLabel(title,
-            frame: NSRect(x: textX, y: 7, width: textWidth, height: 21),
-            size: 14, weight: .semibold, color: .appGreenAccent))
-        card.addSubview(dashboardLabel(detail,
-            frame: NSRect(x: textX, y: 29, width: textWidth, height: 17),
-            size: 11.5, color: .secondaryLabelColor))
+            frame: NSRect(x: 0, y: 0, width: 44, height: 44))
+        info.translatesAutoresizingMaskIntoConstraints = false
+        let titleLabel = listLabel(title, size: 14, weight: .semibold,
+                                   color: .appGreenAccent, maximumLines: 1)
+        let detailLabel = listLabel(detail, size: 11.5,
+                                    color: .secondaryLabelColor,
+                                    maximumLines: 2)
+        let text = NSStackView(views: [titleLabel, detailLabel])
+        text.orientation = .vertical
+        text.alignment = .leading
+        text.spacing = 1
+        text.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        text.translatesAutoresizingMaskIntoConstraints = false
+        text.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
+        let row = NSStackView(views: [icon, text, info])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        row.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        row.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -4),
+            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
+            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -6),
+            icon.widthAnchor.constraint(equalToConstant: 20),
+            icon.heightAnchor.constraint(equalToConstant: 20),
+            info.widthAnchor.constraint(equalToConstant: 44),
+            info.heightAnchor.constraint(equalToConstant: 44),
+        ])
     }
 
     private func addLandmarkListRow(to parent: NSView, title: String, raw: String,
@@ -9404,23 +10184,41 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let card = AdaptiveCardView(frame: frame)
         card.cornerRadius = 10
         parent.addSubview(card)
-        let isRTL = Localizer.shared.isRTL
-        let icon = NSImageView(frame: NSRect(x: isRTL ? frame.width - 39 : 14,
-                                             y: 16, width: 20, height: 20))
+
+        let icon = NSImageView()
         icon.image = templateSymbol(symbol, pointSize: 13, weight: .semibold)
         icon.contentTintColor = NSColor.systemOrange
-        card.addSubview(icon)
-        card.addSubview(dashboardLabel(title,
-            frame: NSRect(x: isRTL ? 14 : 44, y: 14,
-                          width: frame.width * 0.55, height: 23),
-            size: 14, weight: .semibold))
-        let time = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
-            frame: NSRect(x: isRTL ? 44 : frame.width * 0.70, y: 11,
-                          width: frame.width * 0.25, height: 28),
-            size: 19, weight: .semibold,
-            alignment: isRTL ? .left : .right)
-        time.font = NSFont.monospacedDigitSystemFont(ofSize: 19, weight: .semibold)
-        card.addSubview(time)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.setAccessibilityElement(false)
+        let titleLabel = listLabel(title, size: 14, weight: .semibold,
+                                   maximumLines: 2)
+        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        let shownTime = raw.isEmpty ? "—" : displayTime(raw)
+        let time = listTimeLabel(shownTime, size: 19)
+
+        let row = NSStackView(views: [icon, titleLabel, time])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        row.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        row.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
+            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -6),
+            icon.widthAnchor.constraint(equalToConstant: 20),
+            icon.heightAnchor.constraint(equalToConstant: 20),
+            time.widthAnchor.constraint(equalToConstant: 116),
+        ])
+        card.setAccessibilityElement(true)
+        card.setAccessibilityRole(.group)
+        card.setAccessibilityLabel("\(title), \(shownTime)")
+        titleLabel.setAccessibilityElement(false)
+        time.setAccessibilityElement(false)
     }
 
     private func buildClock(in body: NSView, app: AppDelegate,
