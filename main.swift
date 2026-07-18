@@ -89,7 +89,7 @@ let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbo
 let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
 let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
 
-let kAppVersion          = "3.13.1"
+let kAppVersion          = "3.13.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2185,7 +2185,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "Separate section", "full.landmarks": "Day landmarks",
         "full.landmark.sunrise": "Sunrise", "full.landmark.sunset": "Sunset",
         "full.landmark.friday": "Friday prayers", "full.sunset": "Sunset",
-        "full.sunset.maghrib_fallback": "Uses Maghrib when no separate sunset is published",
+        "full.sunset.maghrib_fallback": "Maghrib fallback when no separate time is published",
         "full.clock.accessibility": "Live prayer clock",
         "full.clock.am_outer": "AM · outer ring    PM · inner ring"
     ],
@@ -2221,7 +2221,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "Section séparée", "full.landmarks": "Repères du jour",
         "full.landmark.sunrise": "Lever du soleil", "full.landmark.sunset": "Coucher du soleil",
         "full.landmark.friday": "Prières du vendredi", "full.sunset": "Coucher du soleil",
-        "full.sunset.maghrib_fallback": "Utilise le Maghrib si aucun coucher distinct n’est publié",
+        "full.sunset.maghrib_fallback": "Repli sur Maghrib sans horaire distinct",
         "full.clock.accessibility": "Horloge des prières en direct",
         "full.clock.am_outer": "Matin · anneau extérieur    Après-midi/soir · anneau intérieur"
     ],
@@ -2257,7 +2257,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "Sección separada", "full.landmarks": "Referencias del día",
         "full.landmark.sunrise": "Amanecer", "full.landmark.sunset": "Puesta de sol",
         "full.landmark.friday": "Oraciones del viernes", "full.sunset": "Puesta de sol",
-        "full.sunset.maghrib_fallback": "Usa Maghrib si no se publica otra hora de puesta del sol",
+        "full.sunset.maghrib_fallback": "Usa Maghrib si no hay hora propia",
         "full.clock.accessibility": "Reloj de oración en directo",
         "full.clock.am_outer": "AM · anillo exterior    PM · anillo interior"
     ],
@@ -2293,7 +2293,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "قسم منفصل", "full.landmarks": "معالم اليوم",
         "full.landmark.sunrise": "شروق الشمس", "full.landmark.sunset": "غروب الشمس",
         "full.landmark.friday": "صلوات الجمعة", "full.sunset": "الغروب",
-        "full.sunset.maghrib_fallback": "يُستخدم وقت المغرب إن لم ينشر المصدر وقتًا مستقلاً للغروب",
+        "full.sunset.maghrib_fallback": "وقت المغرب عند غياب وقت مستقل",
         "full.clock.accessibility": "ساعة مواقيت الصلاة الحية",
         "full.clock.am_outer": "صباحًا · الحلقة الخارجية    مساءً · الحلقة الداخلية"
     ],
@@ -2329,7 +2329,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "单独分区", "full.landmarks": "全天参考时间",
         "full.landmark.sunrise": "日出", "full.landmark.sunset": "日落",
         "full.landmark.friday": "主麻拜", "full.sunset": "日落",
-        "full.sunset.maghrib_fallback": "若来源未提供独立日落时间，则使用昏礼时间",
+        "full.sunset.maghrib_fallback": "无独立时间时使用昏礼时间",
         "full.clock.accessibility": "实时礼拜时钟",
         "full.clock.am_outer": "上午 · 外圈    下午及夜间 · 内圈"
     ],
@@ -2365,7 +2365,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "अलग भाग", "full.landmarks": "दिन के प्रमुख समय",
         "full.landmark.sunrise": "सूर्योदय", "full.landmark.sunset": "सूर्यास्त",
         "full.landmark.friday": "जुमे की नमाज़", "full.sunset": "सूर्यास्त",
-        "full.sunset.maghrib_fallback": "अलग सूर्यास्त न मिलने पर मग़रिब का समय उपयोग होता है",
+        "full.sunset.maghrib_fallback": "अलग समय न हो तो मग़रिब का समय",
         "full.clock.accessibility": "सीधी नमाज़ घड़ी",
         "full.clock.am_outer": "सुबह · बाहरी घेरा    दोपहर/रात · भीतरी घेरा"
     ],
@@ -2401,7 +2401,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "আলাদা অংশ", "full.landmarks": "দিনের প্রধান সময়",
         "full.landmark.sunrise": "সূর্যোদয়", "full.landmark.sunset": "সূর্যাস্ত",
         "full.landmark.friday": "জুমার নামাজ", "full.sunset": "সূর্যাস্ত",
-        "full.sunset.maghrib_fallback": "আলাদা সূর্যাস্ত না থাকলে মাগরিবের সময় ব্যবহার করা হয়",
+        "full.sunset.maghrib_fallback": "আলাদা সময় না থাকলে মাগরিবের সময়",
         "full.clock.accessibility": "সরাসরি নামাজের ঘড়ি",
         "full.clock.am_outer": "সকাল · বাইরের বলয়    বিকেল/রাত · ভেতরের বলয়"
     ],
@@ -2437,7 +2437,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "Отдельный раздел", "full.landmarks": "Ориентиры дня",
         "full.landmark.sunrise": "Восход", "full.landmark.sunset": "Закат",
         "full.landmark.friday": "Пятничные молитвы", "full.sunset": "Закат",
-        "full.sunset.maghrib_fallback": "Используется Магриб, если отдельное время заката не опубликовано",
+        "full.sunset.maghrib_fallback": "Магриб, если нет отдельного времени",
         "full.clock.accessibility": "Живые часы молитв",
         "full.clock.am_outer": "До полудня · внешнее кольцо    После полудня · внутреннее"
     ],
@@ -2473,7 +2473,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "Secção separada", "full.landmarks": "Marcos do dia",
         "full.landmark.sunrise": "Nascer do sol", "full.landmark.sunset": "Pôr do sol",
         "full.landmark.friday": "Orações de sexta-feira", "full.sunset": "Pôr do sol",
-        "full.sunset.maghrib_fallback": "Usa o Maghrib se não houver outro horário de pôr do sol",
+        "full.sunset.maghrib_fallback": "Usa o Maghrib sem horário próprio",
         "full.clock.accessibility": "Relógio de oração em direto",
         "full.clock.am_outer": "Manhã · anel exterior    Tarde/noite · anel interior"
     ],
@@ -2509,7 +2509,7 @@ private let featureTranslations: [String: [String: String]] = [
         "full.nawafil.separate": "الگ حصہ", "full.landmarks": "دن کے اہم اوقات",
         "full.landmark.sunrise": "طلوعِ آفتاب", "full.landmark.sunset": "غروبِ آفتاب",
         "full.landmark.friday": "جمعہ کی نمازیں", "full.sunset": "غروبِ آفتاب",
-        "full.sunset.maghrib_fallback": "الگ وقت نہ ملنے پر مغرب کا وقت استعمال ہوتا ہے",
+        "full.sunset.maghrib_fallback": "الگ وقت نہ ہو تو مغرب کا وقت",
         "full.clock.accessibility": "براہِ راست نماز گھڑی",
         "full.clock.am_outer": "صبح · بیرونی حلقہ    دوپہر/رات · اندرونی حلقہ"
     ]
@@ -5787,6 +5787,7 @@ final class PrayerDayTimelineView: NSControl {
         self.prayerNames = prayerNames
         self.showsNawafil = showsNawafil
         super.init(frame: frame)
+        setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(featureText("full.timeline.title"))
         let summary = zip(prayerNames, info.times).map {
@@ -6089,8 +6090,13 @@ final class PrayerAnalogClockView: NSControl {
         self.prayerNames = prayerNames
         self.showsNawafil = showsNawafil
         super.init(frame: frame)
+        setAccessibilityElement(true)
         setAccessibilityRole(.group)
         setAccessibilityLabel(featureText("full.clock.accessibility"))
+        let summary = zip(prayerNames, info.times).map {
+            "\($0.0) \(displayTime($0.1))"
+        }.joined(separator: ", ")
+        setAccessibilityValue(summary)
     }
 
     required init?(coder: NSCoder) { fatalError() }
@@ -6309,6 +6315,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         return max(0, min(2, UserDefaults.standard.integer(forKey: kPrayerNawafilMode)))
     }()
     private var lastRenderedWidth: CGFloat = 0
+    private var didSetInitialScrollPosition = false
 
     private typealias NawafilData = (title: String, count: String, window: String,
                                      best: String, source: String)
@@ -6450,6 +6457,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             buildTimeline(in: body, app: app, x: contentX, width: contentWidth)
         default:
             buildClock(in: body, app: app, x: contentX, width: contentWidth)
+        }
+        if !didSetInitialScrollPosition {
+            didSetInitialScrollPosition = true
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.scrollView.contentView.scroll(to: .zero)
+                self.scrollView.reflectScrolledClipView(self.scrollView.contentView)
+            }
         }
     }
 
@@ -7022,10 +7037,16 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var forwardButton: HoverIconButton!
     private var bookmarkButton: HoverIconButton!
     private var removeBookmarkButton: HoverIconButton!
+    private var unavailableOverlay: NSVisualEffectView!
+    private var unavailableHint: NSTextField!
+    private var fallbackButton: NSButton!
+    private var loadWatchdog: Timer?
 
     private var edition: String {
         editionControl?.selectedSegment == 1 ? "warsh" : "hafs"
     }
+
+    deinit { loadWatchdog?.invalidate() }
 
     override func loadView() {
         let root = NSView()
@@ -7155,6 +7176,64 @@ final class QuranViewController: NSViewController, MainTabContent,
         separator.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(separator)
 
+        unavailableOverlay = NSVisualEffectView()
+        unavailableOverlay.material = .popover
+        unavailableOverlay.blendingMode = .withinWindow
+        unavailableOverlay.state = .active
+        unavailableOverlay.wantsLayer = true
+        unavailableOverlay.layer?.cornerRadius = 16
+        unavailableOverlay.translatesAutoresizingMaskIntoConstraints = false
+        unavailableOverlay.isHidden = true
+        unavailableOverlay.setAccessibilityElement(true)
+        unavailableOverlay.setAccessibilityRole(.group)
+        unavailableOverlay.setAccessibilityLabel(featureText("quran.unavailable"))
+        root.addSubview(unavailableOverlay)
+
+        let unavailableTitle = NSTextField(labelWithString: featureText("quran.unavailable"))
+        unavailableTitle.font = Localizer.shared.font(size: 20, weight: .semibold)
+        unavailableTitle.alignment = .center
+        unavailableTitle.translatesAutoresizingMaskIntoConstraints = false
+
+        unavailableHint = NSTextField(wrappingLabelWithString: featureText("quran.study.hafs_only"))
+        unavailableHint.font = Localizer.shared.font(size: 12.5)
+        unavailableHint.textColor = .secondaryLabelColor
+        unavailableHint.alignment = .center
+        unavailableHint.maximumNumberOfLines = 3
+        unavailableHint.translatesAutoresizingMaskIntoConstraints = false
+
+        let retryButton = NSButton(title: t("tooltip.refresh"), target: self,
+                                   action: #selector(retryOfficialReader))
+        retryButton.bezelStyle = .rounded
+        let officialButton = NSButton(title: featureText("quran.provenance.open"),
+                                      target: self,
+                                      action: #selector(openOfficialReaderExternally))
+        officialButton.bezelStyle = .rounded
+        fallbackButton = NSButton(title: featureText("quran.source.foundation"),
+                                  target: self,
+                                  action: #selector(openReaderFallback))
+        fallbackButton.bezelStyle = .rounded
+        fallbackButton.keyEquivalent = "\r"
+
+        let unavailableActions = NSStackView(views: [retryButton, officialButton,
+                                                      fallbackButton])
+        unavailableActions.orientation = .horizontal
+        unavailableActions.alignment = .centerY
+        unavailableActions.distribution = .fillEqually
+        unavailableActions.spacing = 8
+        unavailableActions.userInterfaceLayoutDirection = direction
+        unavailableActions.translatesAutoresizingMaskIntoConstraints = false
+
+        let unavailableStack = NSStackView(views: [unavailableTitle, unavailableHint,
+                                                    unavailableActions])
+        unavailableStack.orientation = .vertical
+        unavailableStack.alignment = .centerX
+        unavailableStack.spacing = 14
+        unavailableStack.edgeInsets = NSEdgeInsets(top: 22, left: 22,
+                                                    bottom: 22, right: 22)
+        unavailableStack.userInterfaceLayoutDirection = direction
+        unavailableStack.translatesAutoresizingMaskIntoConstraints = false
+        unavailableOverlay.addSubview(unavailableStack)
+
         NSLayoutConstraint.activate([
             controlBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             controlBar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -7232,6 +7311,20 @@ final class QuranViewController: NSViewController, MainTabContent,
             webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             webView.topAnchor.constraint(equalTo: separator.bottomAnchor),
             webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+
+            unavailableOverlay.centerXAnchor.constraint(equalTo: webView.centerXAnchor),
+            unavailableOverlay.centerYAnchor.constraint(equalTo: webView.centerYAnchor),
+            unavailableOverlay.widthAnchor.constraint(equalToConstant: 580),
+            unavailableOverlay.leadingAnchor.constraint(greaterThanOrEqualTo: webView.leadingAnchor,
+                                                         constant: 30),
+            unavailableOverlay.trailingAnchor.constraint(lessThanOrEqualTo: webView.trailingAnchor,
+                                                          constant: -30),
+            unavailableStack.leadingAnchor.constraint(equalTo: unavailableOverlay.leadingAnchor),
+            unavailableStack.trailingAnchor.constraint(equalTo: unavailableOverlay.trailingAnchor),
+            unavailableStack.topAnchor.constraint(equalTo: unavailableOverlay.topAnchor),
+            unavailableStack.bottomAnchor.constraint(equalTo: unavailableOverlay.bottomAnchor),
+            unavailableHint.widthAnchor.constraint(lessThanOrEqualToConstant: 500),
+            unavailableActions.widthAnchor.constraint(equalToConstant: 520),
         ])
 
         view = root
@@ -7278,7 +7371,62 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     @objc private func goBack() { if webView.canGoBack { webView.goBack() } }
     @objc private func goForward() { if webView.canGoForward { webView.goForward() } }
-    @objc private func reloadReader() { webView.reload() }
+    @objc private func reloadReader() {
+        if unavailableOverlay?.isHidden == false {
+            retryOfficialReader()
+        } else {
+            webView.reload()
+        }
+    }
+
+    private func scheduleLoadWatchdog() {
+        loadWatchdog?.invalidate()
+        let timer = Timer(timeInterval: 12, repeats: false) { [weak self] _ in
+            self?.showUnavailableReader()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        loadWatchdog = timer
+    }
+
+    private func cancelLoadWatchdog() {
+        loadWatchdog?.invalidate()
+        loadWatchdog = nil
+    }
+
+    private func showUnavailableReader() {
+        progress?.stopAnimation(nil)
+        sourceLabel?.stringValue = featureText("quran.unavailable")
+        let isWarsh = edition == "warsh"
+        unavailableHint?.stringValue = isWarsh
+            ? featureText("quran.official_moroccan.help")
+            : featureText("quran.study.hafs_only")
+        fallbackButton?.title = isWarsh
+            ? featureText("quran.official_moroccan")
+            : featureText("quran.source.foundation")
+        unavailableOverlay?.isHidden = false
+    }
+
+    @objc private func retryOfficialReader() {
+        cancelLoadWatchdog()
+        unavailableOverlay?.isHidden = true
+        loadEdition(resume: false)
+    }
+
+    @objc private func openOfficialReaderExternally() {
+        guard let url = URL(string: officialReaderURL(for: edition)) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    @objc private func openReaderFallback() {
+        if edition == "warsh" {
+            openMoroccanMushaf()
+            return
+        }
+        guard let url = URL(string: "https://quran.com/1") else { return }
+        unavailableOverlay?.isHidden = true
+        sourceLabel.stringValue = featureText("quran.source.foundation")
+        webView.load(URLRequest(url: url, timeoutInterval: 30))
+    }
 
     @objc private func studyModeChanged(_ sender: NSPopUpButton) {
         searchField.placeholderString = sender.indexOfSelectedItem == 1
@@ -7425,11 +7573,15 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        unavailableOverlay?.isHidden = true
         progress.startAnimation(nil)
+        scheduleLoadWatchdog()
         updateNavigationState()
     }
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        cancelLoadWatchdog()
+        unavailableOverlay?.isHidden = true
         progress.stopAnimation(nil)
         if let raw = webView.url?.absoluteString, raw.contains("qurancomplex.gov.sa") {
             UserDefaults.standard.set(raw, forKey: lastURLKey(for: edition))
@@ -7444,14 +7596,18 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
                  withError error: Error) {
-        progress.stopAnimation(nil)
-        sourceLabel.stringValue = featureText("quran.unavailable")
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
+        cancelLoadWatchdog()
+        showUnavailableReader()
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
                  withError error: Error) {
-        progress.stopAnimation(nil)
-        sourceLabel.stringValue = featureText("quran.unavailable")
+        let nsError = error as NSError
+        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
+        cancelLoadWatchdog()
+        showUnavailableReader()
     }
 
     func webView(_ webView: WKWebView,
