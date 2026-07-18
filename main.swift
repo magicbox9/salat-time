@@ -67,7 +67,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.8.0"
+let kAppVersion          = "3.8.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -7512,7 +7512,11 @@ final class CompactAdhkarView: FlippedView {
         } else {
             selectedID = nil
         }
-        renderPreview()
+        if let item = session.currentItem, let position = session.position {
+            render(item: item, index: position.0 - 1, total: position.1)
+        } else {
+            renderPreview()
+        }
         refreshControls()
     }
 
@@ -8497,15 +8501,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         compactPrayerViews.forEach { $0.isHidden = isCompactAdhkarMode }
         compactAdhkarView?.isHidden = !isCompactAdhkarMode
         if isCompactAdhkarMode { compactAdhkarView?.reloadCollections() }
-        headerLinkBtn?.isHidden = isCompactAdhkarMode
-        if isCompactAdhkarMode {
-            nameLabel.stringValue = t("settings.section.adhkar")
-            nameLabel.frame = NSRect(x: 68, y: 25,
-                                     width: mainContent.bounds.width - 92, height: 22)
-            addressLabel.stringValue = ""
-        } else {
-            updateUI()
-        }
+        updateUI()
         let tint: NSColor = isCompactAdhkarMode ? .appGreenAccent : .secondaryLabelColor
         compactAdhkarButton?.idleTint = tint
         compactAdhkarButton?.contentTintColor = tint
@@ -8791,9 +8787,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     // ---------------------------------------------------- rendering
     func updateUI() {
         guard nameLabel != nil else { return }
-        nameLabel.stringValue = info.name.isEmpty ? t("mosque.default") : info.name
-        var addr = info.localisation
-        if !info.phone.isEmpty { addr += (addr.isEmpty ? "" : " · ") + "📞 \(info.phone)" }
+        nameLabel.stringValue = isCompactAdhkarMode
+            ? t("settings.section.adhkar")
+            : (info.name.isEmpty ? t("mosque.default") : info.name)
+        var addr = isCompactAdhkarMode ? "" : info.localisation
+        if !isCompactAdhkarMode, !info.phone.isEmpty {
+            addr += (addr.isEmpty ? "" : " · ") + "📞 \(info.phone)"
+        }
         addressLabel.stringValue = addr
 
         // Re-center the mosque name vertically with the app icon when there's
@@ -8802,10 +8802,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         // address y=34 → block midline y=36 = icon midline).
         if let nf = nameLabel?.frame {
             let newY: CGFloat = addr.isEmpty ? 25 : 12
-            if nf.origin.y != newY {
-                nameLabel.frame = NSRect(x: nf.origin.x, y: newY,
-                                         width: nf.size.width, height: nf.size.height)
-            }
+            let newWidth = mainContent.bounds.width - (isCompactAdhkarMode ? 92 : 124)
+            nameLabel.frame = NSRect(x: nf.origin.x, y: newY,
+                                     width: newWidth, height: nf.size.height)
             addressLabel.isHidden = addr.isEmpty
         }
 
@@ -8814,6 +8813,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         // user doesn't wonder why their click does nothing.
         if headerLinkBtn != nil {
             let hasURL = !currentMosqueURL().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            headerLinkBtn.isHidden = isCompactAdhkarMode
             headerLinkBtn.isEnabled = hasURL
             headerLinkBtn.alphaValue = hasURL ? 1.0 : 0.4
         }
