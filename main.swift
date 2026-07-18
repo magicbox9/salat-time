@@ -67,7 +67,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.7.1"
+let kAppVersion          = "3.8.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2097,6 +2097,170 @@ final class Localizer {
 
 /// Convenience global: `t("col.prayer")`.
 func t(_ key: String) -> String { Localizer.shared.t(key) }
+
+/// Localized copy for the compact reader and the Nawafil dashboard. Keeping
+/// these additions in source lets an upgraded build expose the new surfaces
+/// in every language immediately, while the larger JSON catalog remains the
+/// source for all existing app copy.
+private let featureTranslations: [String: [String: String]] = [
+    "en": [
+        "full.open_more": "More controls…", "full.nawafil": "Nawafil prayers",
+        "full.rakahs": "Rak‘ahs", "full.window": "Time window", "full.best": "Best time",
+        "full.guidance": "Calculated from today’s mosque times. Treat these windows as guidance and follow local scholarly advice.",
+        "nawafil.rawatib": "Sunnah Rawatib", "nawafil.rawatib.count": "12 total",
+        "nawafil.rawatib.window": "2 before Fajr · 4 before and 2 after Dhuhr · 2 after Maghrib · 2 after Isha",
+        "nawafil.rawatib.best": "Close to their obligatory prayers",
+        "nawafil.duha": "Duha", "nawafil.duha.count": "2–8",
+        "nawafil.duha.best": "Later morning, after the sun’s heat is felt",
+        "nawafil.qiyam": "Night prayer", "nawafil.qiyam.count": "2 at a time",
+        "nawafil.qiyam.best": "Final third of the night",
+        "nawafil.witr": "Witr", "nawafil.witr.count": "Odd number, minimum 1",
+        "nawafil.witr.best": "The last prayer of the night",
+        "popup.adhkar.empty": "This collection has no adhkar yet."
+    ],
+    "fr": [
+        "full.open_more": "Plus de contrôles…", "full.nawafil": "Prières surérogatoires",
+        "full.rakahs": "Rak‘āt", "full.window": "Plage horaire", "full.best": "Meilleur moment",
+        "full.guidance": "Calculé selon les horaires de la mosquée aujourd’hui. Ces plages sont indicatives ; suivez les conseils religieux locaux.",
+        "nawafil.rawatib": "Sunan Rawātib", "nawafil.rawatib.count": "12 au total",
+        "nawafil.rawatib.window": "2 avant Fajr · 4 avant et 2 après Dhuhr · 2 après Maghrib · 2 après Isha",
+        "nawafil.rawatib.best": "Au plus près des prières obligatoires",
+        "nawafil.duha": "Duha", "nawafil.duha.count": "2 à 8",
+        "nawafil.duha.best": "En fin de matinée, lorsque la chaleur du soleil se fait sentir",
+        "nawafil.qiyam": "Prière de nuit", "nawafil.qiyam.count": "2 par 2",
+        "nawafil.qiyam.best": "Dernier tiers de la nuit",
+        "nawafil.witr": "Witr", "nawafil.witr.count": "Nombre impair, minimum 1",
+        "nawafil.witr.best": "La dernière prière de la nuit",
+        "popup.adhkar.empty": "Cette collection ne contient encore aucun adhkār."
+    ],
+    "es": [
+        "full.open_more": "Más controles…", "full.nawafil": "Oraciones voluntarias",
+        "full.rakahs": "Rak‘āt", "full.window": "Franja horaria", "full.best": "Mejor momento",
+        "full.guidance": "Calculado con los horarios de la mezquita de hoy. Usa estas franjas como guía y sigue el consejo religioso local.",
+        "nawafil.rawatib": "Sunan Rawātib", "nawafil.rawatib.count": "12 en total",
+        "nawafil.rawatib.window": "2 antes del Fajr · 4 antes y 2 después del Dhuhr · 2 después del Maghrib · 2 después del Isha",
+        "nawafil.rawatib.best": "Cerca de sus oraciones obligatorias",
+        "nawafil.duha": "Duha", "nawafil.duha.count": "2–8",
+        "nawafil.duha.best": "A media mañana, cuando se siente el calor del sol",
+        "nawafil.qiyam": "Oración nocturna", "nawafil.qiyam.count": "De 2 en 2",
+        "nawafil.qiyam.best": "Último tercio de la noche",
+        "nawafil.witr": "Witr", "nawafil.witr.count": "Número impar, mínimo 1",
+        "nawafil.witr.best": "La última oración de la noche",
+        "popup.adhkar.empty": "Esta colección todavía no contiene adhkār."
+    ],
+    "ar": [
+        "full.open_more": "مزيد من التحكم…", "full.nawafil": "صلوات النوافل",
+        "full.rakahs": "الركعات", "full.window": "وقت الصلاة", "full.best": "أفضل وقت",
+        "full.guidance": "محسوب وفق مواقيت مسجدك اليوم. هذه الأوقات إرشادية، فاتبع توجيه أهل العلم في بلدك.",
+        "nawafil.rawatib": "السنن الرواتب", "nawafil.rawatib.count": "١٢ ركعة",
+        "nawafil.rawatib.window": "٢ قبل الفجر · ٤ قبل الظهر و٢ بعده · ٢ بعد المغرب · ٢ بعد العشاء",
+        "nawafil.rawatib.best": "قريبًا من الصلوات المفروضة",
+        "nawafil.duha": "صلاة الضحى", "nawafil.duha.count": "٢–٨ ركعات",
+        "nawafil.duha.best": "بعد ارتفاع الشمس واشتداد حرها",
+        "nawafil.qiyam": "قيام الليل", "nawafil.qiyam.count": "ركعتان ركعتان",
+        "nawafil.qiyam.best": "الثلث الأخير من الليل",
+        "nawafil.witr": "الوتر", "nawafil.witr.count": "عدد فردي، أقله ركعة",
+        "nawafil.witr.best": "آخر صلاة الليل",
+        "popup.adhkar.empty": "لا تحتوي هذه المجموعة على أذكار بعد."
+    ],
+    "zh": [
+        "full.open_more": "更多控制…", "full.nawafil": "副功拜",
+        "full.rakahs": "拜数", "full.window": "时间范围", "full.best": "最佳时间",
+        "full.guidance": "根据今日清真寺礼拜时间计算，仅供参考；请遵循当地学者的指导。",
+        "nawafil.rawatib": "常行圣行拜", "nawafil.rawatib.count": "共12拜",
+        "nawafil.rawatib.window": "晨礼前2拜 · 晌礼前4拜、后2拜 · 昏礼后2拜 · 宵礼后2拜",
+        "nawafil.rawatib.best": "靠近相应的主命拜",
+        "nawafil.duha": "杜哈拜", "nawafil.duha.count": "2–8拜",
+        "nawafil.duha.best": "上午较晚、太阳已有热度时",
+        "nawafil.qiyam": "夜间拜", "nawafil.qiyam.count": "每次2拜",
+        "nawafil.qiyam.best": "夜晚最后三分之一",
+        "nawafil.witr": "奇数拜", "nawafil.witr.count": "奇数，至少1拜",
+        "nawafil.witr.best": "作为夜间最后的礼拜",
+        "popup.adhkar.empty": "此合集中还没有赞词。"
+    ],
+    "hi": [
+        "full.open_more": "और नियंत्रण…", "full.nawafil": "नफ़्ल नमाज़ें",
+        "full.rakahs": "रकअत", "full.window": "समय सीमा", "full.best": "बेहतर समय",
+        "full.guidance": "आज की मस्जिद के समयों से गणना की गई है। इसे मार्गदर्शन मानें और स्थानीय आलिम की सलाह का पालन करें।",
+        "nawafil.rawatib": "सुन्नत रावतिब", "nawafil.rawatib.count": "कुल 12",
+        "nawafil.rawatib.window": "फ़ज्र से पहले 2 · ज़ुहर से पहले 4 और बाद में 2 · मग़रिब के बाद 2 · इशा के बाद 2",
+        "nawafil.rawatib.best": "संबंधित फ़र्ज़ नमाज़ के पास",
+        "nawafil.duha": "दुहा", "nawafil.duha.count": "2–8",
+        "nawafil.duha.best": "दिन चढ़ने पर, जब सूरज की गर्मी महसूस हो",
+        "nawafil.qiyam": "रात की नमाज़", "nawafil.qiyam.count": "2-2 रकअत",
+        "nawafil.qiyam.best": "रात का आख़िरी तिहाई",
+        "nawafil.witr": "वित्र", "nawafil.witr.count": "विषम संख्या, कम से कम 1",
+        "nawafil.witr.best": "रात की आख़िरी नमाज़",
+        "popup.adhkar.empty": "इस संग्रह में अभी कोई अज़्कार नहीं है।"
+    ],
+    "bn": [
+        "full.open_more": "আরও নিয়ন্ত্রণ…", "full.nawafil": "নফল নামাজ",
+        "full.rakahs": "রাকাত", "full.window": "সময়সীমা", "full.best": "উত্তম সময়",
+        "full.guidance": "আজকের মসজিদের সময় থেকে হিসাব করা। এগুলো নির্দেশনা হিসেবে নিন এবং স্থানীয় আলেমের পরামর্শ অনুসরণ করুন।",
+        "nawafil.rawatib": "সুন্নাতে রাওয়াতিব", "nawafil.rawatib.count": "মোট ১২",
+        "nawafil.rawatib.window": "ফজরের আগে ২ · যোহরের আগে ৪ ও পরে ২ · মাগরিবের পরে ২ · ইশার পরে ২",
+        "nawafil.rawatib.best": "সংশ্লিষ্ট ফরজ নামাজের কাছাকাছি",
+        "nawafil.duha": "দুহা", "nawafil.duha.count": "২–৮",
+        "nawafil.duha.best": "বেলা বাড়লে, সূর্যের তাপ অনুভূত হওয়ার পর",
+        "nawafil.qiyam": "রাতের নামাজ", "nawafil.qiyam.count": "২ রাকাত করে",
+        "nawafil.qiyam.best": "রাতের শেষ তৃতীয়াংশ",
+        "nawafil.witr": "বিতর", "nawafil.witr.count": "বিজোড়, কমপক্ষে ১",
+        "nawafil.witr.best": "রাতের শেষ নামাজ",
+        "popup.adhkar.empty": "এই সংগ্রহে এখনও কোনো আজকার নেই।"
+    ],
+    "ru": [
+        "full.open_more": "Больше настроек…", "full.nawafil": "Дополнительные молитвы",
+        "full.rakahs": "Ракааты", "full.window": "Период", "full.best": "Лучшее время",
+        "full.guidance": "Рассчитано по сегодняшнему расписанию мечети. Используйте как ориентир и следуйте местным религиозным рекомендациям.",
+        "nawafil.rawatib": "Сунна-рауатиб", "nawafil.rawatib.count": "Всего 12",
+        "nawafil.rawatib.window": "2 до Фаджра · 4 до и 2 после Зухра · 2 после Магриба · 2 после Иша",
+        "nawafil.rawatib.best": "Рядом с соответствующими обязательными молитвами",
+        "nawafil.duha": "Духа", "nawafil.duha.count": "2–8",
+        "nawafil.duha.best": "Позднее утро, когда ощущается тепло солнца",
+        "nawafil.qiyam": "Ночная молитва", "nawafil.qiyam.count": "По 2 ракаата",
+        "nawafil.qiyam.best": "Последняя треть ночи",
+        "nawafil.witr": "Витр", "nawafil.witr.count": "Нечётное число, минимум 1",
+        "nawafil.witr.best": "Последняя молитва ночи",
+        "popup.adhkar.empty": "В этой коллекции пока нет азкаров."
+    ],
+    "pt": [
+        "full.open_more": "Mais controlos…", "full.nawafil": "Orações voluntárias",
+        "full.rakahs": "Rak‘āt", "full.window": "Janela de tempo", "full.best": "Melhor momento",
+        "full.guidance": "Calculado com os horários da mesquita de hoje. Use como orientação e siga o aconselhamento religioso local.",
+        "nawafil.rawatib": "Sunan Rawātib", "nawafil.rawatib.count": "12 no total",
+        "nawafil.rawatib.window": "2 antes do Fajr · 4 antes e 2 depois do Dhuhr · 2 depois do Maghrib · 2 depois do Isha",
+        "nawafil.rawatib.best": "Perto das respetivas orações obrigatórias",
+        "nawafil.duha": "Duha", "nawafil.duha.count": "2–8",
+        "nawafil.duha.best": "Mais tarde de manhã, quando se sente o calor do sol",
+        "nawafil.qiyam": "Oração noturna", "nawafil.qiyam.count": "2 de cada vez",
+        "nawafil.qiyam.best": "Último terço da noite",
+        "nawafil.witr": "Witr", "nawafil.witr.count": "Número ímpar, mínimo 1",
+        "nawafil.witr.best": "A última oração da noite",
+        "popup.adhkar.empty": "Esta coleção ainda não contém adhkār."
+    ],
+    "ur": [
+        "full.open_more": "مزید کنٹرول…", "full.nawafil": "نفل نمازیں",
+        "full.rakahs": "رکعات", "full.window": "وقت کی حد", "full.best": "بہترین وقت",
+        "full.guidance": "آج کے مسجد کے اوقات سے حساب کیا گیا ہے۔ اسے رہنمائی سمجھیں اور مقامی علما کی ہدایت پر عمل کریں۔",
+        "nawafil.rawatib": "سننِ رواتب", "nawafil.rawatib.count": "کل ۱۲",
+        "nawafil.rawatib.window": "فجر سے پہلے ۲ · ظہر سے پہلے ۴ اور بعد میں ۲ · مغرب کے بعد ۲ · عشا کے بعد ۲",
+        "nawafil.rawatib.best": "متعلقہ فرض نمازوں کے قریب",
+        "nawafil.duha": "چاشت", "nawafil.duha.count": "۲–۸",
+        "nawafil.duha.best": "دن چڑھنے پر، جب سورج کی گرمی محسوس ہو",
+        "nawafil.qiyam": "قیام اللیل", "nawafil.qiyam.count": "دو دو رکعت",
+        "nawafil.qiyam.best": "رات کا آخری تہائی",
+        "nawafil.witr": "وتر", "nawafil.witr.count": "طاق عدد، کم از کم ۱",
+        "nawafil.witr.best": "رات کی آخری نماز",
+        "popup.adhkar.empty": "اس مجموعے میں ابھی کوئی اذکار نہیں ہیں۔"
+    ]
+]
+
+func featureText(_ key: String) -> String {
+    let code = Localizer.shared.current.code
+    return featureTranslations[code]?[key]
+        ?? featureTranslations["en"]?[key]
+        ?? key
+}
 
 /// Register the bundled Cairo font so NSFont(name:…) / NSFontManager can find
 /// it. We now ship a single variable .ttf — the old per-weight files were
@@ -4750,14 +4914,14 @@ final class SettingsView: FlippedView {
 }
 
 // ============================================================================
-// MARK: Adhkar window — dedicated adhkar management UI
+// MARK: Main window — full prayer and Adhkar management UI
 // ============================================================================
 // The app stays a menu-bar app by default (LSUIElement=true, .accessory
 // policy). When the adhkar window opens we flip to .regular so a dock icon
 // appears, and flip back to .accessory when it closes.
 //
-// This window is ONLY about adhkar — no prayer times, adhan, or settings
-// tabs. Those are managed in the tray app's popover as they always were.
+// Adhan/prayer times and Adhkar are equal destinations. Shared settings are
+// opened from a gear button rather than occupying a third content tab.
 
 protocol MainTabContent: NSViewController {
     func tabDidActivate()
@@ -4767,9 +4931,12 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 
     private weak var appDelegate: AppDelegate?
     private var contentContainer: NSView!
+    private var adhanVC: PrayerDashboardViewController?
     private var editorVC: AdhkarEditorViewController?
     private var settingsVC: AdhkarSettingsViewController?
     private var viewSwitcher: NSSegmentedControl!
+    private var settingsButton: HoverIconButton!
+    private var isShowingSettings = false
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -4778,7 +4945,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
                    styleMask: [.titled, .closable, .miniaturizable, .resizable,
                                .fullSizeContentView],
                    backing: .buffered, defer: false)
-        self.title = t("adhkar.editor.title")
+        self.title = "Salat Time"
         self.titleVisibility = .hidden
         self.titlebarAppearsTransparent = true
         self.isMovableByWindowBackground = true
@@ -4789,12 +4956,16 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         buildShell()
     }
 
-    func showMainWindow() {
+    func showMainWindow(selecting destination: Int? = nil) {
+        if let destination {
+            viewSwitcher.selectedSegment = max(0, min(1, destination))
+            isShowingSettings = false
+            showSelectedDestination()
+        }
         NSApp.setActivationPolicy(.regular)
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        editorVC?.tabDidActivate()
-        settingsVC?.tabDidActivate()
+        activeViewController()?.tabDidActivate()
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -4828,24 +4999,39 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         appTitle.alignment = Localizer.shared.leadingAlignment
         header.addSubview(appTitle)
 
-        let subtitle = NSTextField(labelWithString: t("adhkar.editor.title"))
+        let subtitle = NSTextField(labelWithString:
+            "\(t("main.tab.prayer_times")) · \(t("settings.section.adhkar"))")
         subtitle.translatesAutoresizingMaskIntoConstraints = false
         subtitle.font = Localizer.shared.font(size: 11)
         subtitle.textColor = NSColor(white: 1, alpha: 0.82)
         subtitle.alignment = Localizer.shared.leadingAlignment
         header.addSubview(subtitle)
 
-        // Segmented control for switching between Library and Settings.
+        // Adhan and Adhkar are equal, primary destinations. Settings is a
+        // separate gear action so it no longer masquerades as content.
         viewSwitcher = NSSegmentedControl()
         viewSwitcher.segmentCount = 2
-        viewSwitcher.setLabel(t("adhkar.tab.library"), forSegment: 0)
-        viewSwitcher.setLabel(t("adhkar.tab.settings"), forSegment: 1)
+        viewSwitcher.setLabel(t("settings.section.adhan"), forSegment: 0)
+        viewSwitcher.setLabel(t("settings.section.adhkar"), forSegment: 1)
         viewSwitcher.segmentStyle = .texturedRounded
         viewSwitcher.selectedSegment = 0
         viewSwitcher.target = self
         viewSwitcher.action = #selector(viewSwitched(_:))
         viewSwitcher.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(viewSwitcher)
+
+        settingsButton = HoverIconButton(symbol: "gearshape.fill",
+                                         toolTip: t("tooltip.settings"),
+                                         target: self,
+                                         action: #selector(settingsTapped),
+                                         pointSize: 15,
+                                         size: NSSize(width: 40, height: 34))
+        settingsButton.translatesAutoresizingMaskIntoConstraints = false
+        settingsButton.idleTint = NSColor(white: 1, alpha: 0.82)
+        settingsButton.hoverTint = .white
+        settingsButton.contentTintColor = settingsButton.idleTint
+        settingsButton.hoverBG = NSColor.white.withAlphaComponent(0.14)
+        header.addSubview(settingsButton)
 
         contentContainer = NSView()
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -4870,7 +5056,13 @@ final class MainWindow: NSWindow, NSWindowDelegate {
             subtitle.topAnchor.constraint(equalTo: appTitle.bottomAnchor, constant: 1),
             subtitle.trailingAnchor.constraint(equalTo: appTitle.trailingAnchor),
 
-            viewSwitcher.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -22),
+            settingsButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -20),
+            settingsButton.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
+            settingsButton.widthAnchor.constraint(equalToConstant: 40),
+            settingsButton.heightAnchor.constraint(equalToConstant: 34),
+
+            viewSwitcher.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor,
+                                                     constant: -10),
             viewSwitcher.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
             viewSwitcher.widthAnchor.constraint(equalToConstant: 250),
             viewSwitcher.heightAnchor.constraint(equalToConstant: 30),
@@ -4887,31 +5079,61 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     /// popup, leaving this window visually and linguistically stale.
     func reloadForPreferences() {
         let selectedTab = viewSwitcher?.selectedSegment ?? 0
+        let wasShowingSettings = isShowingSettings
+        adhanVC = nil
         editorVC = nil
         settingsVC = nil
         contentView = nil
         buildShell()
         if let appDelegate = appDelegate {
+            setAdhan(PrayerDashboardViewController(appDelegate: appDelegate))
             setEditor(AdhkarEditorViewController(appDelegate: appDelegate))
         }
-        if selectedTab == 1 {
-            viewSwitcher.selectedSegment = 1
-            viewSwitched(viewSwitcher)
+        viewSwitcher.selectedSegment = selectedTab
+        if wasShowingSettings {
+            isShowingSettings = true
+            showSettings()
+        } else {
+            showSelectedDestination()
         }
     }
 
     @objc private func viewSwitched(_ sender: NSSegmentedControl) {
-        let showSettings = sender.selectedSegment == 1
-        contentContainer.subviews.forEach { $0.removeFromSuperview() }
-        // For settings: create lazily if needed. For editor: must already exist.
-        guard showSettings || editorVC != nil else { return }
-        let vc: NSViewController
-        if showSettings {
-            if settingsVC == nil { settingsVC = AdhkarSettingsViewController() }
-            vc = settingsVC!
+        isShowingSettings = false
+        showSelectedDestination()
+    }
+
+    @objc private func settingsTapped() {
+        if isShowingSettings {
+            isShowingSettings = false
+            showSelectedDestination()
         } else {
-            vc = editorVC!
+            isShowingSettings = true
+            showSettings()
         }
+    }
+
+    private func activeViewController() -> MainTabContent? {
+        if isShowingSettings { return settingsVC }
+        return viewSwitcher?.selectedSegment == 1 ? editorVC : adhanVC
+    }
+
+    private func showSelectedDestination() {
+        if viewSwitcher.selectedSegment == 1 {
+            if let editorVC { present(editorVC) }
+        } else if let adhanVC {
+            present(adhanVC)
+        }
+    }
+
+    private func showSettings() {
+        if settingsVC == nil { settingsVC = AdhkarSettingsViewController() }
+        guard let settingsVC else { return }
+        present(settingsVC)
+    }
+
+    private func present(_ vc: MainTabContent) {
+        contentContainer.subviews.forEach { $0.removeFromSuperview() }
         vc.view.translatesAutoresizingMaskIntoConstraints = false
         contentContainer.addSubview(vc.view)
         NSLayoutConstraint.activate([
@@ -4920,21 +5142,266 @@ final class MainWindow: NSWindow, NSWindowDelegate {
             vc.view.topAnchor.constraint(equalTo: contentContainer.topAnchor),
             vc.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
         ])
-        if let activatable = vc as? MainTabContent { activatable.tabDidActivate() }
+        vc.tabDidActivate()
+    }
+
+    func setAdhan(_ vc: PrayerDashboardViewController) {
+        adhanVC = vc
+        if viewSwitcher.selectedSegment == 0 && !isShowingSettings {
+            present(vc)
+        }
     }
 
     func setEditor(_ vc: AdhkarEditorViewController) {
         editorVC = vc
-        // Show the editor immediately.
-        contentContainer.subviews.forEach { $0.removeFromSuperview() }
-        vc.view.translatesAutoresizingMaskIntoConstraints = false
-        contentContainer.addSubview(vc.view)
+        if viewSwitcher.selectedSegment == 1 && !isShowingSettings {
+            present(vc)
+        }
+    }
+}
+
+// ============================================================================
+// MARK: Full Adhan dashboard — prayer times + Nawafil guidance
+// ============================================================================
+
+final class PrayerDashboardViewController: NSViewController, MainTabContent {
+    private weak var appDelegate: AppDelegate?
+    private var scrollView: NSScrollView!
+
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func loadView() {
+        let root = NSView()
+        scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        if Localizer.shared.isRTL { scrollView.userInterfaceLayoutDirection = .rightToLeft }
+        root.addSubview(scrollView)
         NSLayoutConstraint.activate([
-            vc.view.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor),
-            vc.view.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
-            vc.view.topAnchor.constraint(equalTo: contentContainer.topAnchor),
-            vc.view.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
+        self.view = root
+        rebuild()
+    }
+
+    func tabDidActivate() { rebuild() }
+
+    private func rebuild() {
+        guard scrollView != nil else { return }
+        let width: CGFloat = 960
+        let body = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 850))
+        scrollView.documentView = body
+        guard let app = appDelegate else { return }
+        let isRTL = Localizer.shared.isRTL
+
+        func label(_ text: String, frame: NSRect, size: CGFloat,
+                   weight: NSFont.Weight = .regular,
+                   color: NSColor = .labelColor,
+                   alignment: NSTextAlignment? = nil) -> NSTextField {
+            let field = NSTextField(labelWithString: text)
+            field.frame = frame
+            field.font = Localizer.shared.font(size: size, weight: weight)
+            field.textColor = color
+            field.alignment = alignment ?? (isRTL ? .right : .left)
+            field.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+            field.lineBreakMode = .byTruncatingTail
+            return field
+        }
+
+        let heading = label(t("main.tab.prayer_times"),
+                            frame: NSRect(x: 80, y: 22, width: 800, height: 30),
+                            size: 22, weight: .bold)
+        body.addSubview(heading)
+
+        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
+        let mosque = label(mosqueName, frame: NSRect(x: 80, y: 50, width: 800, height: 18),
+                           size: 11, color: .secondaryLabelColor)
+        body.addSubview(mosque)
+
+        let prayerCard = AdaptiveCardView(frame: NSRect(x: 80, y: 76, width: 800, height: 282))
+        prayerCard.addsDepth = true
+        body.addSubview(prayerCard)
+
+        let headerFields = [
+            label(t("col.prayer"), frame: NSRect(x: 20, y: 13, width: 250, height: 18),
+                  size: 10, weight: .semibold, color: .secondaryLabelColor),
+            label(t("col.adhan"), frame: NSRect(x: 340, y: 13, width: 120, height: 18),
+                  size: 10, weight: .semibold, color: .secondaryLabelColor),
+            label(t("col.iqama"), frame: NSRect(x: 520, y: 13, width: 120, height: 18),
+                  size: 10, weight: .semibold, color: .secondaryLabelColor),
+        ]
+        headerFields.forEach { prayerCard.addSubview($0) }
+        let topSep = NSBox(frame: NSRect(x: 16, y: 41, width: 768, height: 1))
+        topSep.boxType = .separator
+        prayerCard.addSubview(topSep)
+
+        let nextIndex = app.info.times.count >= 5 ? app.nextPrayer().index : -1
+        for i in 0..<5 {
+            let rowY = 42 + CGFloat(i) * 48
+            if i == nextIndex {
+                let pair = currentAccentPair()
+                let highlight = AdaptiveBackgroundView(
+                    frame: NSRect(x: 10, y: rowY + 3, width: 780, height: 42),
+                    light: pair.light.withAlphaComponent(0.12),
+                    dark: pair.dark.withAlphaComponent(0.20), radius: 9)
+                prayerCard.addSubview(highlight)
+            }
+            if i > 0 {
+                let sep = NSBox(frame: NSRect(x: 16, y: rowY, width: 768, height: 1))
+                sep.boxType = .separator
+                prayerCard.addSubview(sep)
+            }
+
+            let name = label(app.localizedPrayerName(at: i),
+                             frame: NSRect(x: 20, y: rowY + 14, width: 250, height: 22),
+                             size: 15, weight: i == nextIndex ? .semibold : .medium,
+                             color: i == nextIndex ? .appGreenAccent : .labelColor)
+            prayerCard.addSubview(name)
+
+            let adhanRaw = app.info.times.indices.contains(i) ? app.info.times[i] : ""
+            let adhan = label(adhanRaw.isEmpty ? "—" : displayTime(adhanRaw),
+                              frame: NSRect(x: 340, y: rowY + 12, width: 130, height: 24),
+                              size: 16, weight: .semibold,
+                              color: i == nextIndex ? .appGreenAccent : .labelColor)
+            adhan.font = NSFont.monospacedDigitSystemFont(ofSize: 16, weight: .semibold)
+            prayerCard.addSubview(adhan)
+
+            let iqamaRaw = app.iqamaTimeAt(i) ?? ""
+            let iqama = label(iqamaRaw.isEmpty ? "—" : displayTime(iqamaRaw),
+                              frame: NSRect(x: 520, y: rowY + 13, width: 130, height: 22),
+                              size: 14, color: .secondaryLabelColor)
+            iqama.font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .regular)
+            prayerCard.addSubview(iqama)
+
+            let mode = NSButton(frame: NSRect(x: isRTL ? 20 : 744,
+                                              y: rowY + 9, width: 32, height: 30))
+            mode.isBordered = false
+            mode.title = ""
+            mode.tag = i
+            mode.target = app
+            mode.action = #selector(AppDelegate.adhanModeButtonTapped(_:))
+            mode.imagePosition = .imageOnly
+            mode.focusRingType = .none
+            app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(i))
+            prayerCard.addSubview(mode)
+        }
+        if isRTL { applyRTL(prayerCard) }
+
+        let nawafilHeading = label(featureText("full.nawafil"),
+                                   frame: NSRect(x: 80, y: 388, width: 800, height: 28),
+                                   size: 20, weight: .bold)
+        body.addSubview(nawafilHeading)
+
+        let duhaWindow: String = {
+            guard !app.info.shuruq.isEmpty, app.info.times.indices.contains(1) else { return "—" }
+            return "\(displayTime(app.addMinutes(to: app.info.shuruq, minutes: 20))) – "
+                 + "\(displayTime(app.addMinutes(to: app.info.times[1], minutes: -10)))"
+        }()
+        let nightWindow: String = {
+            guard app.info.times.indices.contains(4), app.info.times.indices.contains(0) else { return "—" }
+            return "\(displayTime(app.info.times[4])) – \(displayTime(app.info.times[0]))"
+        }()
+        let finalThird = lastThirdStart(using: app.info)
+        let finalThirdBest = finalThird.map {
+            "\(featureText("nawafil.qiyam.best")) · \(displayTime($0)) – \(displayTime(app.info.times[0]))"
+        } ?? featureText("nawafil.qiyam.best")
+
+        let cards: [(String, String, String, String, String)] = [
+            (featureText("nawafil.rawatib"), featureText("nawafil.rawatib.count"),
+             featureText("nawafil.rawatib.window"), featureText("nawafil.rawatib.best"),
+             "Jāmiʿ at-Tirmidhī 415"),
+            (featureText("nawafil.duha"), featureText("nawafil.duha.count"),
+             duhaWindow, featureText("nawafil.duha.best"), "Ṣaḥīḥ Muslim 720, 748b"),
+            (featureText("nawafil.qiyam"), featureText("nawafil.qiyam.count"),
+             nightWindow, finalThirdBest, "Ṣaḥīḥ al-Bukhārī 1145"),
+            (featureText("nawafil.witr"), featureText("nawafil.witr.count"),
+             nightWindow, featureText("nawafil.witr.best"), "Ṣaḥīḥ Muslim 752a"),
+        ]
+        let cardFrames = [NSRect(x: 80, y: 430, width: 390, height: 164),
+                          NSRect(x: 490, y: 430, width: 390, height: 164),
+                          NSRect(x: 80, y: 610, width: 390, height: 164),
+                          NSRect(x: 490, y: 610, width: 390, height: 164)]
+        for (index, item) in cards.enumerated() {
+            addNawafilCard(to: body, frame: cardFrames[index], data: item)
+        }
+
+        let guidance = NSTextField(wrappingLabelWithString: featureText("full.guidance"))
+        guidance.frame = NSRect(x: 80, y: 798, width: 800, height: 34)
+        guidance.font = Localizer.shared.font(size: 10)
+        guidance.textColor = .tertiaryLabelColor
+        guidance.alignment = .center
+        guidance.maximumNumberOfLines = 2
+        body.addSubview(guidance)
+    }
+
+    private func addNawafilCard(to parent: NSView, frame: NSRect,
+                                data: (String, String, String, String, String)) {
+        let isRTL = Localizer.shared.isRTL
+        let card = AdaptiveCardView(frame: frame)
+        card.addsDepth = true
+        parent.addSubview(card)
+
+        func field(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat,
+                   height: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular,
+                   color: NSColor = .labelColor) -> NSTextField {
+            let value = NSTextField(wrappingLabelWithString: text)
+            value.frame = NSRect(x: x, y: y, width: width, height: height)
+            value.font = Localizer.shared.font(size: size, weight: weight)
+            value.textColor = color
+            value.alignment = isRTL ? .right : .left
+            value.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+            value.maximumNumberOfLines = 2
+            return value
+        }
+
+        card.addSubview(field(data.0, x: 16, y: 12, width: 215, height: 25,
+                              size: 16, weight: .semibold))
+        card.addSubview(field(data.1, x: 236, y: 14, width: 138, height: 20,
+                              size: 11, weight: .medium, color: .appGreenAccent))
+        let sep = NSBox(frame: NSRect(x: 14, y: 43, width: 362, height: 1))
+        sep.boxType = .separator
+        card.addSubview(sep)
+        card.addSubview(field(featureText("full.window"), x: 16, y: 52,
+                              width: 358, height: 15, size: 9, weight: .semibold,
+                              color: .tertiaryLabelColor))
+        card.addSubview(field(data.2, x: 16, y: 68, width: 358, height: 35,
+                              size: 11, color: .secondaryLabelColor))
+        card.addSubview(field(featureText("full.best"), x: 16, y: 105,
+                              width: 358, height: 15, size: 9, weight: .semibold,
+                              color: .tertiaryLabelColor))
+        card.addSubview(field(data.3, x: 16, y: 121, width: 358, height: 25,
+                              size: 11, color: .secondaryLabelColor))
+        card.addSubview(field(data.4, x: 16, y: 146, width: 358, height: 14,
+                              size: 9, color: .tertiaryLabelColor))
+        if isRTL { applyRTL(card) }
+    }
+
+    private func lastThirdStart(using info: MosqueInfo) -> String? {
+        guard info.times.indices.contains(3), info.times.indices.contains(0),
+              let maghrib = minutes(info.times[3]), let fajrBase = minutes(info.times[0]) else {
+            return nil
+        }
+        let fajr = fajrBase <= maghrib ? fajrBase + 24 * 60 : fajrBase
+        let start = maghrib + (fajr - maghrib) * 2 / 3
+        return String(format: "%02d:%02d", (start / 60) % 24, start % 60)
+    }
+
+    private func minutes(_ hhmm: String) -> Int? {
+        let parts = hhmm.split(separator: ":")
+        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1]) else {
+            return nil
+        }
+        return hour * 60 + minute
     }
 }
 
@@ -6906,6 +7373,208 @@ final class AdhkarLibraryPickerSheet: NSWindowController, NSWindowDelegate,
 }
 
 // ============================================================================
+// MARK: Compact Adhkar — menu-bar sibling of the prayer view
+// ============================================================================
+
+final class CompactAdhkarView: FlippedView {
+    private weak var appDelegate: AppDelegate?
+    private let session = AdhkarSession()
+    private var collections: [AdhkarCollection] = []
+    private var selectedID: UUID?
+
+    private var collectionPopup: NSPopUpButton!
+    private var arabicLabel: NSTextField!
+    private var positionLabel: NSTextField!
+    private var progress: NSProgressIndicator!
+    private var playButton: HoverIconButton!
+    private var muteButton: HoverIconButton!
+
+    init(frame: NSRect, appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+        super.init(frame: frame)
+        autoresizingMask = [.width]
+        userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        buildUI()
+        wireSession()
+        reloadCollections()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func buildUI() {
+        collectionPopup = NSPopUpButton(frame: NSRect(x: 16, y: 14,
+                                                       width: bounds.width - 32, height: 28),
+                                         pullsDown: false)
+        collectionPopup.autoresizingMask = [.width]
+        collectionPopup.target = self
+        collectionPopup.action = #selector(collectionChanged(_:))
+        addSubview(collectionPopup)
+
+        let card = AdaptiveCardView(frame: NSRect(x: 12, y: 54,
+                                                   width: bounds.width - 24, height: 208))
+        card.autoresizingMask = [.width]
+        card.cornerRadius = 12
+        card.addsDepth = true
+        addSubview(card)
+
+        arabicLabel = NSTextField(wrappingLabelWithString: "")
+        arabicLabel.frame = NSRect(x: 16, y: 16, width: card.bounds.width - 32, height: 142)
+        arabicLabel.autoresizingMask = [.width]
+        arabicLabel.font = NSFont(name: "Cairo", size: 19)
+            ?? NSFont.systemFont(ofSize: 19, weight: .medium)
+        arabicLabel.textColor = .labelColor
+        arabicLabel.alignment = .right
+        arabicLabel.baseWritingDirection = .rightToLeft
+        arabicLabel.maximumNumberOfLines = 0
+        arabicLabel.cell?.wraps = true
+        arabicLabel.cell?.truncatesLastVisibleLine = true
+        card.addSubview(arabicLabel)
+
+        positionLabel = NSTextField(labelWithString: "")
+        positionLabel.frame = NSRect(x: 16, y: 166, width: card.bounds.width - 32, height: 16)
+        positionLabel.autoresizingMask = [.width]
+        positionLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        positionLabel.textColor = .secondaryLabelColor
+        positionLabel.alignment = .center
+        card.addSubview(positionLabel)
+
+        progress = NSProgressIndicator(frame: NSRect(x: 22, y: 190,
+                                                      width: card.bounds.width - 44, height: 4))
+        progress.autoresizingMask = [.width]
+        progress.style = .bar
+        progress.isIndeterminate = false
+        progress.minValue = 0
+        progress.maxValue = 1
+        card.addSubview(progress)
+
+        let controlSize = NSSize(width: 40, height: 34)
+        let symbols = ["backward.fill", "play.fill", "forward.fill",
+                       "speaker.wave.2.fill", "stop.fill"]
+        let tools = [t("adhkar.prev"), t("adhkar.play"), t("adhkar.next"),
+                     t("adhkar.mute"), t("adhkar.stop")]
+        let actions: [Selector] = [#selector(previousTapped), #selector(playTapped),
+                                   #selector(nextTapped), #selector(muteTapped),
+                                   #selector(stopTapped)]
+        let totalWidth: CGFloat = 5 * controlSize.width + 4 * 7
+        var x = (bounds.width - totalWidth) / 2
+        var controls: [HoverIconButton] = []
+        for i in 0..<symbols.count {
+            let button = HoverIconButton(symbol: symbols[i], toolTip: tools[i],
+                                         target: self, action: actions[i],
+                                         pointSize: 14, size: controlSize)
+            button.frame.origin = NSPoint(x: x, y: 274)
+            button.autoresizingMask = [.minXMargin, .maxXMargin]
+            addSubview(button)
+            controls.append(button)
+            x += controlSize.width + 7
+        }
+        playButton = controls[1]
+        muteButton = controls[3]
+        controls[4].idleTint = .systemRed
+        controls[4].hoverTint = .systemRed
+        controls[4].contentTintColor = .systemRed
+
+        let moreButton = NSButton(title: featureText("full.open_more"),
+                                  target: self, action: #selector(openMoreTapped))
+        moreButton.frame = NSRect(x: 54, y: 318, width: bounds.width - 108, height: 28)
+        moreButton.autoresizingMask = [.minXMargin, .maxXMargin]
+        moreButton.bezelStyle = .rounded
+        moreButton.controlSize = .small
+        moreButton.image = templateSymbol("arrow.up.right.square", pointSize: 11)
+        moreButton.imagePosition = .imageLeading
+        addSubview(moreButton)
+    }
+
+    private func wireSession() {
+        session.onItemChange = { [weak self] item, index, total in
+            self?.render(item: item, index: index, total: total)
+        }
+        session.onPlaybackStateChange = { [weak self] in
+            self?.refreshControls()
+        }
+        session.onFinish = { [weak self] in
+            self?.renderPreview()
+            self?.refreshControls()
+        }
+    }
+
+    func reloadCollections() {
+        let previousID = selectedID
+        collections = AdhkarLibrary.load().filter { !$0.items.isEmpty }
+        collectionPopup.removeAllItems()
+        collections.forEach { collectionPopup.addItem(withTitle: $0.displayName) }
+        let selectedIndex = previousID.flatMap { id in
+            collections.firstIndex(where: { $0.id == id })
+        } ?? 0
+        if collections.indices.contains(selectedIndex) {
+            collectionPopup.selectItem(at: selectedIndex)
+            selectedID = collections[selectedIndex].id
+        } else {
+            selectedID = nil
+        }
+        renderPreview()
+        refreshControls()
+    }
+
+    private var selectedCollection: AdhkarCollection? {
+        guard let id = selectedID else { return nil }
+        return collections.first(where: { $0.id == id })
+    }
+
+    private func renderPreview() {
+        guard let collection = selectedCollection, let first = collection.items.first else {
+            arabicLabel.stringValue = featureText("popup.adhkar.empty")
+            arabicLabel.alignment = .center
+            arabicLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+            positionLabel.stringValue = ""
+            progress.doubleValue = 0
+            return
+        }
+        render(item: first, index: 0, total: collection.items.count)
+    }
+
+    private func render(item: AdhkarEntry, index: Int, total: Int) {
+        arabicLabel.stringValue = item.arabic
+        arabicLabel.alignment = .right
+        arabicLabel.baseWritingDirection = .rightToLeft
+        positionLabel.stringValue = "\(index + 1) / \(total)"
+        progress.doubleValue = total > 0 ? Double(index + 1) / Double(total) : 0
+    }
+
+    private func refreshControls() {
+        let playing = session.isPlaying
+        playButton.image = templateSymbol(playing ? "pause.fill" : "play.fill", pointSize: 14)
+        playButton.toolTip = playing ? t("adhkar.pause") : t("adhkar.play")
+        muteButton.image = templateSymbol(session.muted ? "speaker.slash.fill"
+                                                          : "speaker.wave.2.fill", pointSize: 14)
+        muteButton.toolTip = session.muted ? t("adhkar.unmute") : t("adhkar.mute")
+    }
+
+    @objc private func collectionChanged(_ sender: NSPopUpButton) {
+        session.stop()
+        guard collections.indices.contains(sender.indexOfSelectedItem) else { return }
+        selectedID = collections[sender.indexOfSelectedItem].id
+        renderPreview()
+    }
+
+    @objc private func playTapped() {
+        if session.isPlaying {
+            session.pause()
+        } else if session.isPaused {
+            session.resume()
+        } else if let collection = selectedCollection {
+            session.start(collection: collection)
+        }
+    }
+
+    @objc private func previousTapped() { session.previous() }
+    @objc private func nextTapped() { session.next() }
+    @objc private func muteTapped() { session.setMuted(!session.muted) }
+    @objc private func stopTapped() { session.stop(); renderPreview() }
+    @objc private func openMoreTapped() { appDelegate?.openMainWindow(selecting: 1) }
+}
+
+// ============================================================================
 // MARK: AppDelegate
 // ============================================================================
 class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
@@ -6938,6 +7607,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     var mainContent: FlippedView!
     var pickerView: MosquePickerView?
     var settingsView: SettingsView?
+    /// Prayer-specific views in the compact popup. They are hidden as a
+    /// group when the user switches the same popup to its compact Adhkar
+    /// sibling; the shared header and footer remain in place.
+    var compactPrayerViews: [NSView] = []
+    var compactAdhkarView: CompactAdhkarView?
+    var compactAdhkarButton: HoverIconButton?
+    var isCompactAdhkarMode = false
 
     // Main view UI
     var nameLabel:     NSTextField!
@@ -7217,17 +7893,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         if !popover.isShown { togglePopover() }
         showSettings()
     }
-    /// Open the adhkar management window. Lazily builds the window + editor
-    /// on first call.
+    /// Open the full prayer + adhkar management window. Destination 0 is
+    /// Adhan/prayer times and 1 is Adhkar.
     @objc func menuOpenMainWindow() { openMainWindow() }
-    func openMainWindow() {
+    func openMainWindow(selecting destination: Int? = nil) {
         if mainWindow == nil {
             let w = MainWindow(appDelegate: self)
+            let adhan = PrayerDashboardViewController(appDelegate: self)
             let editor = AdhkarEditorViewController(appDelegate: self)
+            w.setAdhan(adhan)
             w.setEditor(editor)
             mainWindow = w
         }
-        mainWindow?.showMainWindow()
+        mainWindow?.showMainWindow(selecting: destination)
     }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
@@ -7402,6 +8080,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let vc = NSViewController()
         let W: CGFloat = 280, H: CGFloat = 490
 
+        compactPrayerViews.removeAll()
+        compactAdhkarView = nil
+        compactAdhkarButton = nil
+        isCompactAdhkarMode = false
+
         // Appearance-adaptive root. In Liquid Glass mode, `contentContainer`
         // is the NSVisualEffectView so content inherits vibrancy and sits
         // above the contrast scrim. In opaque mode, `contentContainer` is
@@ -7494,6 +8177,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         headerLinkBtn.action = #selector(openCurrentMosquePageTapped)
         headerLinkBtn.autoresizingMask = [.minXMargin]
         headerBG.addSubview(headerLinkBtn)
+
+        // Everything added to the root after this point and before the
+        // footer belongs to the compact prayer view. Keeping these views as
+        // a group lets the book button swap to Adhkar without rebuilding the
+        // popover or disturbing its shared header/tool bar.
+        let prayerBodySubviewStart = content.subviews.count
 
         // Next-prayer label
         nextPrayerLbl = NSTextField(labelWithString: "")
@@ -7720,6 +8409,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         gregorianLbl.alignment = .right
         content.addSubview(gregorianLbl)
 
+        compactPrayerViews = Array(content.subviews.dropFirst(prayerBodySubviewStart))
+        let compactAdhkar = CompactAdhkarView(
+            frame: NSRect(x: 0, y: 72, width: W, height: 360),
+            appDelegate: self)
+        compactAdhkar.isHidden = true
+        content.addSubview(compactAdhkar)
+        compactAdhkarView = compactAdhkar
+
         // ---------------- Bottom toolbar ----------------
         // Hairline separator
         let footerSep = NSBox(frame: NSRect(x: 16, y: 432, width: W - 32, height: 1))
@@ -7760,18 +8457,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         changeBtn.setFrameOrigin(NSPoint(x: centers[1] - btnSize.width/2, y: btnY))
         content.addSubview(changeBtn)
 
-        // Adhkar button — opens the adhkar manager window directly, so the
-        // user doesn't have to right-click → "Open Main Window…".
-        // (Theme tweaks are still available in Settings → Appearance.)
+        // Adhkar button — switches this same compact surface between prayer
+        // times and the compact reader. The reader itself exposes a "More
+        // controls" affordance for the full management window.
         let adhkarBtn = HoverIconButton(
             symbol: "text.book.closed.fill",
             toolTip: t("adhkar.editor.title"),
             target: self,
-            action: #selector(menuOpenMainWindow),
+            action: #selector(toggleCompactAdhkar),
             pointSize: 15,
             size: btnSize)
         adhkarBtn.setFrameOrigin(NSPoint(x: centers[2] - btnSize.width/2, y: btnY))
         content.addSubview(adhkarBtn)
+        compactAdhkarButton = adhkarBtn
 
         let settingsBtn = HoverIconButton(
             symbol: "gearshape.fill",
@@ -7793,6 +8491,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     // -------------------------------------------------------- mode swap
     @objc func changeMosqueTapped() { showPicker() }
     @objc func settingsTapped() { showSettings() }
+
+    @objc func toggleCompactAdhkar() {
+        isCompactAdhkarMode.toggle()
+        compactPrayerViews.forEach { $0.isHidden = isCompactAdhkarMode }
+        compactAdhkarView?.isHidden = !isCompactAdhkarMode
+        if isCompactAdhkarMode { compactAdhkarView?.reloadCollections() }
+        headerLinkBtn?.isHidden = isCompactAdhkarMode
+        if isCompactAdhkarMode {
+            nameLabel.stringValue = t("settings.section.adhkar")
+            nameLabel.frame = NSRect(x: 68, y: 25,
+                                     width: mainContent.bounds.width - 92, height: 22)
+            addressLabel.stringValue = ""
+        } else {
+            updateUI()
+        }
+        let tint: NSColor = isCompactAdhkarMode ? .appGreenAccent : .secondaryLabelColor
+        compactAdhkarButton?.idleTint = tint
+        compactAdhkarButton?.contentTintColor = tint
+    }
 
     /// Open the currently-selected mosque's page on mawaqit.net in the
     /// user's default browser. Uses `desktopMawaqitURL` to strip the `/m/`
