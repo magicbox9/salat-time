@@ -67,7 +67,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.8.1"
+let kAppVersion          = "3.8.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1332,7 +1332,21 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         guard !text.isEmpty else { scheduleAutoAdvance(); return }
         speechSynthesizer.delegate = self
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "ar-SA")
+        // Prefer the highest-quality Arabic voice installed on this Mac.
+        // If the user later adds an Enhanced or Premium Arabic voice in
+        // macOS, the reader adopts it automatically without an app update.
+        // Quality outranks regional matching because adhkar use MSA.
+        let arabicVoices = AVSpeechSynthesisVoice.speechVoices().filter {
+            $0.language.lowercased().hasPrefix("ar")
+        }
+        utterance.voice = arabicVoices.max { lhs, rhs in
+            if lhs.quality.rawValue != rhs.quality.rawValue {
+                return lhs.quality.rawValue < rhs.quality.rawValue
+            }
+            let lhsRegional = lhs.language == "ar-SA" ? 1 : 0
+            let rhsRegional = rhs.language == "ar-SA" ? 1 : 0
+            return lhsRegional < rhsRegional
+        } ?? AVSpeechSynthesisVoice(language: "ar-SA")
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.82
         utterance.pitchMultiplier = 0.98
         utterance.volume = isMuted ? 0 : savedAdhkarVolume()
