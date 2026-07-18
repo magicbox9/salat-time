@@ -114,7 +114,7 @@ let kQuranReaderTextScale        = "quranReaderTextScale"
 let kQuranTranslationVisible     = "quranTranslationVisible"
 let kQuranTranslationKey         = "quranTranslationKey"
 
-let kAppVersion          = "3.19.0"
+let kAppVersion          = "3.19.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -8877,6 +8877,7 @@ final class PrayerDisplayModeButton: NSButton {
         self.wantsLayer = true
         self.layer?.cornerRadius = 24
         self.layer?.masksToBounds = true
+        self.setAccessibilityElement(true)
         self.setAccessibilityRole(.radioButton)
         self.setAccessibilityLabel(label)
         self.setAccessibilityHelp("\(t("main.tab.prayer_times")) · \(label)")
@@ -9003,6 +9004,8 @@ final class PrayerDisplayModeRail: NSControl {
             ])
         }
         visuallyOrderedButtons.forEach { buttonStack.addArrangedSubview($0) }
+        buttonStack.setAccessibilityElement(false)
+        setAccessibilityChildren(visuallyOrderedButtons)
         NSLayoutConstraint.activate([
             buttonStack.centerXAnchor.constraint(equalTo: centerXAnchor),
             buttonStack.centerYAnchor.constraint(equalTo: centerYAnchor),
@@ -9164,10 +9167,6 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         nawafilPlacementButton.selectItem(at: max(0, lastVisibleNawafilMode - 1))
         nawafilPlacementButton.target = self
         nawafilPlacementButton.action = #selector(nawafilPlacementChanged(_:))
-        nawafilPlacementButton.image = templateSymbol("slider.horizontal.3",
-                                                       pointSize: 14,
-                                                       weight: .semibold)
-        nawafilPlacementButton.imagePosition = .imageOnly
         nawafilPlacementButton.bezelStyle = .texturedRounded
         nawafilPlacementButton.focusRingType = .default
         nawafilPlacementButton.toolTip = selectedNawafilPlacementTitle()
@@ -9282,7 +9281,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             nawafilSwitch.widthAnchor.constraint(equalToConstant: 44),
             nawafilSwitch.heightAnchor.constraint(equalToConstant: 44),
             nawafilSwitchLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 130),
-            nawafilPlacementButton.widthAnchor.constraint(equalToConstant: 44),
+            nawafilPlacementButton.widthAnchor.constraint(equalToConstant: 132),
             nawafilPlacementButton.heightAnchor.constraint(equalToConstant: 44),
 
             countdownCard.topAnchor.constraint(equalTo: modeControl.bottomAnchor,
@@ -9405,19 +9404,12 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             featureText("full.nawafil.integrated"),
             featureText("full.nawafil.separate"),
         ])
-        nawafilPlacementButton.image = templateSymbol("slider.horizontal.3",
-                                                       pointSize: 14,
-                                                       weight: .semibold)
         updateNawafilControlState()
     }
 
     private func updateNawafilControlState() {
         nawafilSwitch.state = nawafilMode == 0 ? .off : .on
         nawafilPlacementButton.selectItem(at: max(0, lastVisibleNawafilMode - 1))
-        nawafilPlacementButton.image = templateSymbol("slider.horizontal.3",
-                                                       pointSize: 14,
-                                                       weight: .semibold)
-        nawafilPlacementButton.imagePosition = .imageOnly
         nawafilPlacementButton.isEnabled = nawafilMode != 0
         let placement = selectedNawafilPlacementTitle()
         nawafilSwitch.setAccessibilityHelp(placement)
@@ -12214,6 +12206,7 @@ private final class QuranVerseRowView: NSTableCellView {
         surahHeader.stringValue = Localizer.shared.isRTL
             ? verse.suraNameArabic : "\(verse.suraNameArabic)  ·  \(verse.suraNameEnglish)"
         surahHeader.font = Localizer.shared.font(size: 18, weight: .bold)
+        surahHeader.textColor = palette.primary
         // With the publisher font present, the terminal KFG ayah marker is
         // rendered exactly. The build is expected to bundle that verified font.
         // A tightly-scoped fallback removes only the presentation marker and
@@ -12500,13 +12493,13 @@ final class QuranViewController: NSViewController, MainTabContent,
                                           meaningsButton, provenanceButton])
         rowOne.orientation = .horizontal
         rowOne.alignment = .centerY
-        rowOne.spacing = 8
+        rowOne.spacing = 6
         rowOne.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
         let rowTwo = NSStackView(views: [translationLabel, translationSwitch, translationPopup,
                                           sourceLabel, palettePopup, layoutPopup, smaller, larger])
         rowTwo.orientation = .horizontal
         rowTwo.alignment = .centerY
-        rowTwo.spacing = 8
+        rowTwo.spacing = 6
         rowTwo.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
         let controls = NSStackView(views: [rowOne, rowTwo])
         controls.orientation = .vertical
@@ -12579,15 +12572,15 @@ final class QuranViewController: NSViewController, MainTabContent,
             controls.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -7),
             rowOne.widthAnchor.constraint(equalTo: controls.widthAnchor),
             rowTwo.widthAnchor.constraint(equalTo: controls.widthAnchor),
-            editionControl.widthAnchor.constraint(equalToConstant: 150),
+            editionControl.widthAnchor.constraint(equalToConstant: 130),
             editionControl.heightAnchor.constraint(equalToConstant: 32),
-            surahPopup.widthAnchor.constraint(equalToConstant: 210),
+            surahPopup.widthAnchor.constraint(equalToConstant: 170),
             surahPopup.heightAnchor.constraint(equalToConstant: 32),
-            searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 150),
+            searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
             searchField.heightAnchor.constraint(equalToConstant: 32),
-            translationPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 230),
-            palettePopup.widthAnchor.constraint(equalToConstant: 108),
-            layoutPopup.widthAnchor.constraint(equalToConstant: 108),
+            translationPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 190),
+            palettePopup.widthAnchor.constraint(equalToConstant: 100),
+            layoutPopup.widthAnchor.constraint(equalToConstant: 100),
             hero.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 54),
             hero.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -54),
             hero.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 16),
@@ -12664,6 +12657,8 @@ final class QuranViewController: NSViewController, MainTabContent,
                           self.edition == selectedEdition else { return }
                     self.verses = decoded
                     self.surahVerses = grouped
+                    self.migrateLegacyPageBookmarks(using: decoded,
+                                                     edition: selectedEdition)
                     self.populateSurahPopup()
                     self.loadWordMeaningsIfNeeded()
                     if !restorePosition { self.selectedAyah = 1 }
@@ -12689,6 +12684,21 @@ final class QuranViewController: NSViewController, MainTabContent,
         if let item = surahPopup.itemArray.first(where: { $0.tag == selectedSurah }) {
             surahPopup.select(item)
         }
+    }
+
+    private func migrateLegacyPageBookmarks(using corpus: [OfflineQuranVerse],
+                                            edition: String) {
+        var changed = false
+        for index in bookmarks.indices where bookmarks[index].edition == edition
+            && bookmarks[index].sura == nil {
+            guard let verse = corpus.first(where: {
+                $0.appears(on: bookmarks[index].page)
+            }) else { continue }
+            bookmarks[index].sura = verse.suraNumber
+            bookmarks[index].ayah = verse.ayahNumber
+            changed = true
+        }
+        if changed { saveBookmarks() }
     }
 
     private func rebuildVisibleVerses(scrollToSelection: Bool) {
@@ -12924,7 +12934,8 @@ final class QuranViewController: NSViewController, MainTabContent,
         cell.identifier = identifier
         let verse = visibleVerses[row]
         let translated = wantsTranslation ? translations["\(verse.suraNumber):\(verse.ayahNumber)"] : nil
-        let startsSurah = row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber
+        let startsSurah = searchActive
+            && (row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber)
         let font = verifiedQuranFont(edition: edition, size: 30 * textScale)
         cell.configure(verse: verse, translation: translated,
                        descriptor: translated == nil ? nil : currentTranslation,
@@ -12952,7 +12963,10 @@ final class QuranViewController: NSViewController, MainTabContent,
             height += localizedTextHeight(translated.text, font: translationFont,
                                           width: width, maximumLines: 0) + 18
         }
-        if row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber { height += 45 }
+        if searchActive,
+           row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber {
+            height += 45
+        }
         if readerLayout != .flow { height += 24 }
         if readerLayout == .focus { height = max(height, tableView.bounds.height - 20) }
         return max(128, height)
