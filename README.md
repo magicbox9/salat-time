@@ -27,6 +27,16 @@ with no strings attached.
 - Per-prayer adhan mode toggles (off / notification-only / full adhan)
 - Open at login, Hijri date display, 12h/24h toggle, configurable audio
   output device for the adhan
+- Full prayer dashboard with overview, chronological list, interactive
+  24-hour timeline, and live analog-clock views; Nawafil can be integrated,
+  hidden, or shown in a dedicated section
+- Editable Adhkar collections with compact playback, schedules, independent
+  audio routing, and an Adhan-conflict delay
+- Qur'an workspace with official King Fahd Complex Hafs and Warsh readers,
+  local reading bookmarks, search, and a clearly labelled Quran Foundation
+  tafsir study surface
+- One full-window Settings surface for appearance, mosque discovery, menu-bar,
+  Adhan, and Adhkar preferences
 
 ## Technology
 
@@ -42,7 +52,7 @@ with no strings attached.
 
 ```
 AwqatSalat/
-├── main.swift         All app source (~4,900 lines)
+├── main.swift         All app source
 ├── build.sh           Compiles, downloads adhans + fonts, codesigns
 ├── Info.plist         Bundle metadata (version, bundle ID, LSUIElement)
 ├── icon.png           1024×1024 source icon
@@ -64,8 +74,9 @@ The build script will:
 2. Rasterize `icon.png` into a multi-resolution `AppIcon.icns`
 3. Download the 14 adhan recordings from Assabile with a Referer header
 4. Download the Cairo variable font from Google Fonts
-5. Write `translations.json` for all 10 languages
-6. Copy `Info.plist` into the bundle and ad-hoc codesign
+5. Download the verified Adhkar recitation segments and bundle `adhkar.json`
+6. Write `translations.json` for all 10 languages
+7. Copy `Info.plist` into the bundle and ad-hoc codesign
 
 Total build time: ~60 seconds on a first run (mostly the audio downloads).
 
@@ -75,10 +86,19 @@ Total build time: ~60 seconds on a first run (mostly the audio downloads).
 - **Mosque search / geocoding**: Mawaqit `/api/2.0/mosque/search?word=...`
 - **Adhan audio**: [assabile.com](https://www.assabile.com) — 14 recordings
   from their curated public collection, downloaded at build time
+- **Qur'an Mushaf readers**: [King Fahd Glorious Qur'an Printing Complex](https://qurancomplex.gov.sa/embed-isdarat/)
+  — official embeddable Hafs and Warsh publications
+- **Qur'an source metadata**: [King Fahd Complex developer platform](https://qurancomplex.gov.sa/quran-dev/)
+  — published edition versions and integrity hashes
+- **Search and tafsir study**: [Quran Foundation](https://quran.com/) — kept
+  separate from the canonical Warsh reader and labelled as Hafs-based study
+- **Official Moroccan reference**: the Ministry of Habous'
+  [Digital Mushaf Mohammadi](https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html),
+  opened externally because no redistribution API is published
 - **Arabic font**: Google Fonts Cairo variable
 
-No user accounts, no analytics, no telemetry, no network calls beyond the
-mawaqit.net API.
+No user accounts, analytics, or telemetry are added by Salat Time. Network
+access is limited to the named prayer, audio, and Qur'an sources above.
 
 ## Licensing
 

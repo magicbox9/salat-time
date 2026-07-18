@@ -76,7 +76,20 @@ let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 let kPrayerDashboardMode   = "prayerDashboardMode"      // 0...3
 let kPrayerNawafilMode     = "prayerNawafilMode"        // 0 hide, 1 integrated, 2 separate
 
-let kAppVersion          = "3.12.0"
+// --- Qur'an reader ----------------------------------------------------------
+// Canonical reading surfaces are the King Fahd Complex's explicitly
+// embeddable publications. No Qur'an text is generated, OCR'd, transformed,
+// or copied into UserDefaults; local state stores locators only.
+let kQuranEditionKey       = "quranEdition"              // "hafs" | "warsh"
+let kQuranBookmarksKey     = "quranBookmarksJSON_v1"
+let kQuranLastHafsURL      = "quranLastHafsURL"
+let kQuranLastWarshURL     = "quranLastWarshURL"
+let kQuranHafsReaderURL    = "https://qurancomplex.gov.sa/isdarat-hafs/#flipbook-df_11301/1/"
+let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbook-df_11326/1/"
+let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
+let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
+
+let kAppVersion          = "3.13.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -441,6 +454,14 @@ struct MosqueRef: Codable, Equatable {
     static func == (a: MosqueRef, b: MosqueRef) -> Bool {
         return normalizeMosqueURL(a.url) == normalizeMosqueURL(b.url)
     }
+}
+
+struct QuranBookmark: Codable {
+    var id: UUID = UUID()
+    var title: String
+    var url: String
+    var edition: String
+    var createdAt: Date = Date()
 }
 
 func normalizeMosqueURL(_ raw: String) -> String {
@@ -2494,8 +2515,174 @@ private let featureTranslations: [String: [String: String]] = [
     ]
 ]
 
+/// Qur'an controls use the same ten-language matrix as prayer and Adhkar.
+/// Edition names remain bilingual proper names (Hafs · حفص / Warsh · ورش),
+/// while every action, source boundary, and error is localized here.
+private let quranTranslationKeys = [
+    "quran.tab", "main.destinations", "quran.source.kfgqpc", "quran.provenance",
+    "quran.official_moroccan", "quran.official_moroccan.help", "quran.forward",
+    "quran.search.placeholder", "quran.study.search", "quran.study.tafsir",
+    "quran.study.official_source", "quran.bookmarks", "quran.bookmark.add",
+    "quran.bookmark.remove", "quran.reader", "quran.tafsir.placeholder",
+    "quran.source.kfgqpc.developer", "quran.study.hafs_only",
+    "quran.source.foundation", "quran.bookmark.name.help", "quran.bookmark",
+    "quran.bookmarks.empty", "quran.provenance.title", "quran.provenance.detail",
+    "quran.provenance.open", "quran.unavailable",
+]
+
+private let quranTranslationRows: [String: [String]] = [
+    "en": [
+        "Qur’an", "App destinations", "Official King Fahd Complex reader",
+        "Source and integrity", "Official Moroccan Mushaf",
+        "Open the Ministry of Habous’ official Warsh Mushaf Mohammadi",
+        "Forward", "Search the Qur’an or enter 2:255", "Search",
+        "Tafsir sources", "Official data", "Bookmarks", "Add bookmark",
+        "Remove current bookmark", "Official Mushaf reader",
+        "Enter a verse, for example 2:255", "King Fahd Complex developer data",
+        "Study results use Hafs; the Warsh Mushaf remains separate",
+        "Quran Foundation search and tafsir", "Name this reading place.",
+        "Reading bookmark", "No bookmarks yet", "Verified Qur’an sources",
+        "Hafs and Warsh pages load unchanged from the King Fahd Complex. Local bookmarks store only their location; no Qur’an text is generated or rewritten.",
+        "Open official source", "Verified content is currently unavailable",
+    ],
+    "fr": [
+        "Coran", "Sections de l’app", "Lecteur officiel du Complexe du roi Fahd",
+        "Source et intégrité", "Mushaf marocain officiel",
+        "Ouvrir le Mushaf Mohammadi officiel en Warsh du ministère des Habous",
+        "Suivant", "Rechercher dans le Coran ou saisir 2:255", "Recherche",
+        "Sources de tafsir", "Données officielles", "Signets", "Ajouter un signet",
+        "Supprimer le signet actuel", "Lecteur officiel du Mushaf",
+        "Saisissez un verset, par exemple 2:255", "Données développeur du Complexe du roi Fahd",
+        "L’étude utilise Hafs ; le Mushaf Warsh reste séparé",
+        "Recherche et tafsir de Quran Foundation", "Nommez cet emplacement de lecture.",
+        "Signet de lecture", "Aucun signet", "Sources coraniques vérifiées",
+        "Les pages Hafs et Warsh sont chargées sans modification depuis le Complexe du roi Fahd. Les signets ne stockent que l’emplacement ; aucun texte coranique n’est généré ni réécrit.",
+        "Ouvrir la source officielle", "Le contenu vérifié est indisponible pour le moment",
+    ],
+    "es": [
+        "Corán", "Secciones de la app", "Lector oficial del Complejo Rey Fahd",
+        "Fuente e integridad", "Mushaf marroquí oficial",
+        "Abrir el Mushaf Mohammadi oficial en Warsh del Ministerio de Habices",
+        "Adelante", "Buscar en el Corán o escribir 2:255", "Buscar",
+        "Fuentes de tafsir", "Datos oficiales", "Marcadores", "Añadir marcador",
+        "Quitar marcador actual", "Lector oficial del Mushaf",
+        "Escribe una aleya, por ejemplo 2:255", "Datos para desarrolladores del Complejo Rey Fahd",
+        "El estudio usa Hafs; el Mushaf Warsh permanece separado",
+        "Búsqueda y tafsir de Quran Foundation", "Pon un nombre a este punto de lectura.",
+        "Marcador de lectura", "Aún no hay marcadores", "Fuentes coránicas verificadas",
+        "Las páginas Hafs y Warsh se cargan sin cambios desde el Complejo Rey Fahd. Los marcadores solo guardan la ubicación; ningún texto coránico se genera ni reescribe.",
+        "Abrir fuente oficial", "El contenido verificado no está disponible ahora",
+    ],
+    "ar": [
+        "القرآن", "أقسام التطبيق", "قارئ رسمي من مجمع الملك فهد",
+        "المصدر وسلامة المحتوى", "المصحف المغربي الرسمي",
+        "فتح المصحف المحمدي الرسمي برواية ورش لوزارة الأوقاف والشؤون الإسلامية",
+        "التالي", "ابحث في القرآن أو أدخل 2:255", "بحث",
+        "مصادر التفسير", "البيانات الرسمية", "العلامات المرجعية", "إضافة علامة",
+        "حذف العلامة الحالية", "قارئ المصحف الرسمي",
+        "أدخل آية، مثل 2:255", "بيانات المطورين لمجمع الملك فهد",
+        "نتائج البحث والتفسير برواية حفص، ويظل مصحف ورش مستقلاً",
+        "بحث وتفاسير مؤسسة القرآن", "سمِّ موضع القراءة هذا.",
+        "علامة قراءة", "لا توجد علامات بعد", "مصادر قرآن موثّقة",
+        "تُحمَّل صفحات حفص وورش كما هي من مجمع الملك فهد. تحفظ العلامات الموضع فقط، ولا يُولَّد النص القرآني ولا يُعاد تحريره.",
+        "فتح المصدر الرسمي", "المحتوى الموثّق غير متاح حاليًا",
+    ],
+    "zh": [
+        "古兰经", "应用分区", "法赫德国王古兰经印刷院官方阅读器",
+        "来源与完整性", "摩洛哥官方穆斯哈夫",
+        "打开宗教基金部官方 Warsh《穆罕默迪穆斯哈夫》",
+        "前进", "搜索古兰经或输入 2:255", "搜索",
+        "经注来源", "官方数据", "书签", "添加书签",
+        "移除当前书签", "官方穆斯哈夫阅读器",
+        "输入经文，例如 2:255", "法赫德国王印刷院开发者数据",
+        "研读结果使用 Hafs；Warsh 穆斯哈夫保持独立",
+        "Quran Foundation 搜索与经注", "为此阅读位置命名。",
+        "阅读书签", "暂无书签", "已验证的古兰经来源",
+        "Hafs 与 Warsh 页面由法赫德国王印刷院原样加载。本地书签只保存位置，不生成或改写任何古兰经文本。",
+        "打开官方来源", "已验证内容暂时不可用",
+    ],
+    "hi": [
+        "क़ुरआन", "ऐप के भाग", "किंग फ़हद कॉम्प्लेक्स का आधिकारिक रीडर",
+        "स्रोत और शुद्धता", "आधिकारिक मोरक्को मुसहफ़",
+        "हबूस मंत्रालय का आधिकारिक वार्श मुसहफ़ मोहम्मदी खोलें",
+        "आगे", "क़ुरआन खोजें या 2:255 लिखें", "खोज",
+        "तफ़सीर स्रोत", "आधिकारिक डेटा", "बुकमार्क", "बुकमार्क जोड़ें",
+        "मौजूदा बुकमार्क हटाएँ", "आधिकारिक मुसहफ़ रीडर",
+        "आयत लिखें, जैसे 2:255", "किंग फ़हद कॉम्प्लेक्स डेवलपर डेटा",
+        "अध्ययन परिणाम हफ़्स में हैं; वार्श मुसहफ़ अलग रहता है",
+        "Quran Foundation खोज और तफ़सीर", "इस पढ़ने की जगह को नाम दें।",
+        "पढ़ने का बुकमार्क", "अभी कोई बुकमार्क नहीं", "सत्यापित क़ुरआन स्रोत",
+        "हफ़्स और वार्श पृष्ठ किंग फ़हद कॉम्प्लेक्स से बिना बदलाव लोड होते हैं। बुकमार्क केवल स्थान रखते हैं; क़ुरआन पाठ बनाया या बदला नहीं जाता।",
+        "आधिकारिक स्रोत खोलें", "सत्यापित सामग्री अभी उपलब्ध नहीं है",
+    ],
+    "bn": [
+        "কুরআন", "অ্যাপের বিভাগ", "কিং ফাহদ কমপ্লেক্সের সরকারি পাঠক",
+        "উৎস ও অখণ্ডতা", "সরকারি মরক্কোর মুসহাফ",
+        "হাবুস মন্ত্রণালয়ের সরকারি ওয়ারশ মুসহাফ মোহাম্মদি খুলুন",
+        "সামনে", "কুরআনে খুঁজুন বা 2:255 লিখুন", "খোঁজ",
+        "তাফসিরের উৎস", "সরকারি ডেটা", "বুকমার্ক", "বুকমার্ক যোগ করুন",
+        "বর্তমান বুকমার্ক মুছুন", "সরকারি মুসহাফ পাঠক",
+        "আয়াত লিখুন, যেমন 2:255", "কিং ফাহদ কমপ্লেক্স ডেভেলপার ডেটা",
+        "অধ্যয়নের ফল হাফস ব্যবহার করে; ওয়ারশ মুসহাফ আলাদা থাকে",
+        "Quran Foundation খোঁজ ও তাফসির", "এই পড়ার স্থানটির নাম দিন।",
+        "পড়ার বুকমার্ক", "এখনও কোনো বুকমার্ক নেই", "যাচাইকৃত কুরআনের উৎস",
+        "হাফস ও ওয়ারশ পৃষ্ঠা কিং ফাহদ কমপ্লেক্স থেকে অপরিবর্তিতভাবে লোড হয়। বুকমার্ক শুধু অবস্থান রাখে; কুরআনের পাঠ তৈরি বা বদলানো হয় না।",
+        "সরকারি উৎস খুলুন", "যাচাইকৃত বিষয়বস্তু এখন পাওয়া যাচ্ছে না",
+    ],
+    "ru": [
+        "Коран", "Разделы приложения", "Официальный ридер Комплекса короля Фахда",
+        "Источник и целостность", "Официальный марокканский мусхаф",
+        "Открыть официальный марокканский Мусхаф Мухаммади в чтении Варш",
+        "Вперёд", "Поиск по Корану или ссылка 2:255", "Поиск",
+        "Источники тафсира", "Официальные данные", "Закладки", "Добавить закладку",
+        "Удалить текущую закладку", "Официальный ридер мусхафа",
+        "Введите аят, например 2:255", "Данные для разработчиков Комплекса короля Фахда",
+        "Материалы для изучения используют Хафс; мусхаф Варш остаётся отдельным",
+        "Поиск и тафсиры Quran Foundation", "Назовите это место чтения.",
+        "Закладка чтения", "Закладок пока нет", "Проверенные источники Корана",
+        "Страницы Хафс и Варш загружаются без изменений из Комплекса короля Фахда. Закладки хранят только позицию; текст Корана не создаётся и не переписывается.",
+        "Открыть официальный источник", "Проверенное содержимое сейчас недоступно",
+    ],
+    "pt": [
+        "Alcorão", "Secções da app", "Leitor oficial do Complexo Rei Fahd",
+        "Fonte e integridade", "Mushaf marroquino oficial",
+        "Abrir o Mushaf Mohammadi oficial em Warsh do Ministério dos Habous",
+        "Avançar", "Pesquisar no Alcorão ou introduzir 2:255", "Pesquisa",
+        "Fontes de tafsir", "Dados oficiais", "Marcadores", "Adicionar marcador",
+        "Remover marcador atual", "Leitor oficial do Mushaf",
+        "Introduza um versículo, por exemplo 2:255", "Dados para programadores do Complexo Rei Fahd",
+        "O estudo usa Hafs; o Mushaf Warsh permanece separado",
+        "Pesquisa e tafsir da Quran Foundation", "Dê um nome a este ponto de leitura.",
+        "Marcador de leitura", "Ainda não há marcadores", "Fontes do Alcorão verificadas",
+        "As páginas Hafs e Warsh são carregadas sem alterações do Complexo Rei Fahd. Os marcadores guardam apenas a posição; nenhum texto do Alcorão é gerado ou reescrito.",
+        "Abrir fonte oficial", "O conteúdo verificado está indisponível neste momento",
+    ],
+    "ur": [
+        "قرآن", "ایپ کے حصے", "کنگ فہد کمپلیکس کا سرکاری قاری",
+        "ماخذ اور صحت", "سرکاری مراکشی مصحف",
+        "وزارتِ اوقاف کا سرکاری ورش مصحف محمدی کھولیں",
+        "آگے", "قرآن میں تلاش کریں یا 2:255 لکھیں", "تلاش",
+        "تفاسیر کے ماخذ", "سرکاری ڈیٹا", "بک مارکس", "بک مارک شامل کریں",
+        "موجودہ بک مارک ہٹائیں", "سرکاری مصحف قاری",
+        "آیت لکھیں، مثلاً 2:255", "کنگ فہد کمپلیکس کا ڈویلپر ڈیٹا",
+        "مطالعہ کے نتائج حفص میں ہیں؛ ورش مصحف الگ رہتا ہے",
+        "Quran Foundation تلاش اور تفاسیر", "اس مطالعہ کی جگہ کو نام دیں۔",
+        "مطالعہ بک مارک", "ابھی کوئی بک مارک نہیں", "تصدیق شدہ قرآنی ماخذ",
+        "حفص اور ورش کے صفحات کنگ فہد کمپلیکس سے بغیر تبدیلی لوڈ ہوتے ہیں۔ بک مارک صرف مقام محفوظ کرتے ہیں؛ قرآنی متن بنایا یا بدلا نہیں جاتا۔",
+        "سرکاری ماخذ کھولیں", "تصدیق شدہ مواد فی الحال دستیاب نہیں",
+    ],
+]
+
 func featureText(_ key: String) -> String {
     let code = Localizer.shared.current.code
+    if let index = quranTranslationKeys.firstIndex(of: key),
+       let row = quranTranslationRows[code], row.indices.contains(index) {
+        return row[index]
+    }
+    if let index = quranTranslationKeys.firstIndex(of: key),
+       let row = quranTranslationRows["en"], row.indices.contains(index) {
+        return row[index]
+    }
     return featureTranslations[code]?[key]
         ?? featureTranslations["en"]?[key]
         ?? key
@@ -5202,12 +5389,16 @@ final class MainMosquePickerViewController: NSViewController, MainTabContent {
     func tabDidActivate() { picker?.refreshCurrentMode() }
 }
 
-final class MainWindow: NSWindow, NSWindowDelegate {
+final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
+
+    private static let destinationsItemID = NSToolbarItem.Identifier("salattime.destinations")
+    private static let settingsItemID = NSToolbarItem.Identifier("salattime.settings")
 
     private weak var appDelegate: AppDelegate?
     private var contentContainer: NSView!
     private var adhanVC: PrayerDashboardViewController?
     private var editorVC: AdhkarEditorViewController?
+    private var quranVC: QuranViewController?
     private var settingsVC: AdhkarSettingsViewController?
     private var mosquePickerVC: MainMosquePickerViewController?
     private var viewSwitcher: NSSegmentedControl!
@@ -5218,13 +5409,13 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         self.appDelegate = appDelegate
         let frame = NSRect(x: 0, y: 0, width: 960, height: 640)
         super.init(contentRect: frame,
-                   styleMask: [.titled, .closable, .miniaturizable, .resizable,
-                               .fullSizeContentView],
+                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                    backing: .buffered, defer: false)
         self.title = "Salat Time"
-        self.titleVisibility = .hidden
-        self.titlebarAppearsTransparent = true
-        self.isMovableByWindowBackground = true
+        self.titleVisibility = .visible
+        self.titlebarAppearsTransparent = false
+        self.isMovableByWindowBackground = false
+        if #available(macOS 11.0, *) { self.toolbarStyle = .unifiedCompact }
         self.center()
         self.isReleasedWhenClosed = false
         self.minSize = NSSize(width: 820, height: 540)
@@ -5234,7 +5425,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 
     func showMainWindow(selecting destination: Int? = nil) {
         if let destination {
-            viewSwitcher.selectedSegment = max(0, min(1, destination))
+            viewSwitcher.selectedSegment = max(0, min(2, destination))
             isShowingSettings = false
             showSelectedDestination()
         }
@@ -5251,50 +5442,25 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     private func buildShell() {
         let root = RootPanelView(frame: self.contentLayoutRect)
         root.autoresizingMask = [.width, .height]
+        root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         contentView = root
 
-        // The full window is the larger sibling of the Adhan popup: same
-        // accent header, moon mark, material, and typography.
-        let header = FlippedView()
-        header.translatesAutoresizingMaskIntoConstraints = false
-        header.wantsLayer = true
-        header.layer?.backgroundColor = NSColor.appGreenHeader.cgColor
-        header.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        root.contentContainer.addSubview(header)
-
-        let icon = NSImageView()
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.image = templateSymbol("moon.stars.fill", pointSize: 30, weight: .semibold)
-        icon.contentTintColor = NSColor(white: 1, alpha: 0.96)
-        header.addSubview(icon)
-
-        let appTitle = NSTextField(labelWithString: "Salat Time")
-        appTitle.translatesAutoresizingMaskIntoConstraints = false
-        appTitle.font = Localizer.shared.font(size: 17, weight: .bold)
-        appTitle.textColor = .white
-        appTitle.alignment = Localizer.shared.leadingAlignment
-        header.addSubview(appTitle)
-
-        let subtitle = NSTextField(labelWithString:
-            "\(t("main.tab.prayer_times")) · \(t("settings.section.adhkar"))")
-        subtitle.translatesAutoresizingMaskIntoConstraints = false
-        subtitle.font = Localizer.shared.font(size: 11)
-        subtitle.textColor = NSColor(white: 1, alpha: 0.82)
-        subtitle.alignment = Localizer.shared.leadingAlignment
-        header.addSubview(subtitle)
-
-        // Adhan and Adhkar are equal, primary destinations. Settings is a
-        // separate gear action so it no longer masquerades as content.
+        // The main destinations belong in native macOS chrome. This keeps
+        // traffic lights, focus, translucency, and compact-window behavior
+        // consistent with the rest of the system while Moroccan detail stays
+        // inside the content where it can support rather than overpower it.
         viewSwitcher = NSSegmentedControl()
-        viewSwitcher.segmentCount = 2
+        viewSwitcher.segmentCount = 3
         viewSwitcher.setLabel(t("settings.section.adhan"), forSegment: 0)
         viewSwitcher.setLabel(t("settings.section.adhkar"), forSegment: 1)
+        viewSwitcher.setLabel(featureText("quran.tab"), forSegment: 2)
         viewSwitcher.segmentStyle = .texturedRounded
+        viewSwitcher.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
         viewSwitcher.selectedSegment = 0
         viewSwitcher.target = self
         viewSwitcher.action = #selector(viewSwitched(_:))
-        viewSwitcher.translatesAutoresizingMaskIntoConstraints = false
-        header.addSubview(viewSwitcher)
+        viewSwitcher.frame = NSRect(x: 0, y: 0, width: 360, height: 28)
+        viewSwitcher.setAccessibilityLabel(featureText("main.destinations"))
 
         settingsButton = HoverIconButton(symbol: "gearshape.fill",
                                          toolTip: t("tooltip.settings"),
@@ -5302,52 +5468,54 @@ final class MainWindow: NSWindow, NSWindowDelegate {
                                          action: #selector(settingsTapped),
                                          pointSize: 15,
                                          size: NSSize(width: 40, height: 34))
-        settingsButton.translatesAutoresizingMaskIntoConstraints = false
-        settingsButton.idleTint = NSColor(white: 1, alpha: 0.82)
-        settingsButton.hoverTint = .white
+        settingsButton.idleTint = .secondaryLabelColor
+        settingsButton.hoverTint = .labelColor
         settingsButton.contentTintColor = settingsButton.idleTint
-        settingsButton.hoverBG = NSColor.white.withAlphaComponent(0.14)
-        header.addSubview(settingsButton)
 
         contentContainer = NSView()
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
         root.contentContainer.addSubview(contentContainer)
 
         NSLayoutConstraint.activate([
-            header.leadingAnchor.constraint(equalTo: root.contentContainer.leadingAnchor),
-            header.trailingAnchor.constraint(equalTo: root.contentContainer.trailingAnchor),
-            header.topAnchor.constraint(equalTo: root.contentContainer.topAnchor),
-            header.heightAnchor.constraint(equalToConstant: 86),
-
-            icon.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 22),
-            icon.centerYAnchor.constraint(equalTo: header.centerYAnchor, constant: 8),
-            icon.widthAnchor.constraint(equalToConstant: 42),
-            icon.heightAnchor.constraint(equalToConstant: 42),
-
-            appTitle.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 12),
-            appTitle.topAnchor.constraint(equalTo: icon.topAnchor, constant: 2),
-            appTitle.trailingAnchor.constraint(lessThanOrEqualTo: viewSwitcher.leadingAnchor,
-                                                constant: -20),
-            subtitle.leadingAnchor.constraint(equalTo: appTitle.leadingAnchor),
-            subtitle.topAnchor.constraint(equalTo: appTitle.bottomAnchor, constant: 1),
-            subtitle.trailingAnchor.constraint(equalTo: appTitle.trailingAnchor),
-
-            settingsButton.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -20),
-            settingsButton.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
-            settingsButton.widthAnchor.constraint(equalToConstant: 40),
-            settingsButton.heightAnchor.constraint(equalToConstant: 34),
-
-            viewSwitcher.trailingAnchor.constraint(equalTo: settingsButton.leadingAnchor,
-                                                     constant: -10),
-            viewSwitcher.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
-            viewSwitcher.widthAnchor.constraint(equalToConstant: 250),
-            viewSwitcher.heightAnchor.constraint(equalToConstant: 30),
-
             contentContainer.leadingAnchor.constraint(equalTo: root.contentContainer.leadingAnchor),
             contentContainer.trailingAnchor.constraint(equalTo: root.contentContainer.trailingAnchor),
-            contentContainer.topAnchor.constraint(equalTo: header.bottomAnchor),
+            contentContainer.topAnchor.constraint(equalTo: root.contentContainer.topAnchor),
             contentContainer.bottomAnchor.constraint(equalTo: root.contentContainer.bottomAnchor),
         ])
+
+        let toolbar = NSToolbar(identifier: NSToolbar.Identifier("salattime.main.toolbar"))
+        toolbar.delegate = self
+        toolbar.displayMode = .iconOnly
+        toolbar.allowsUserCustomization = false
+        toolbar.autosavesConfiguration = false
+        self.toolbar = toolbar
+    }
+
+    func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace, Self.destinationsItemID, Self.settingsItemID]
+    }
+
+    func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
+        [.flexibleSpace, Self.destinationsItemID, .flexibleSpace, Self.settingsItemID]
+    }
+
+    func toolbar(_ toolbar: NSToolbar,
+                 itemForItemIdentifier itemIdentifier: NSToolbarItem.Identifier,
+                 willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
+        let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+        if itemIdentifier == Self.destinationsItemID {
+            item.view = viewSwitcher
+            item.label = featureText("main.destinations")
+            item.paletteLabel = item.label
+            return item
+        }
+        if itemIdentifier == Self.settingsItemID {
+            item.view = settingsButton
+            item.label = t("settings.title")
+            item.paletteLabel = item.label
+            return item
+        }
+        return nil
     }
 
     /// Rebuild every full-window surface after a language, accent, material,
@@ -5358,6 +5526,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         let wasShowingSettings = isShowingSettings
         adhanVC = nil
         editorVC = nil
+        quranVC = nil
         settingsVC = nil
         mosquePickerVC = nil
         contentView = nil
@@ -5365,6 +5534,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         if let appDelegate = appDelegate {
             setAdhan(PrayerDashboardViewController(appDelegate: appDelegate))
             setEditor(AdhkarEditorViewController(appDelegate: appDelegate))
+            setQuran(QuranViewController())
         }
         viewSwitcher.selectedSegment = selectedTab
         if wasShowingSettings {
@@ -5392,14 +5562,21 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 
     private func activeViewController() -> MainTabContent? {
         if isShowingSettings { return settingsVC }
-        return viewSwitcher?.selectedSegment == 1 ? editorVC : adhanVC
+        switch viewSwitcher?.selectedSegment ?? 0 {
+        case 1: return editorVC
+        case 2: return quranVC
+        default: return adhanVC
+        }
     }
 
     private func showSelectedDestination() {
-        if viewSwitcher.selectedSegment == 1 {
+        switch viewSwitcher.selectedSegment {
+        case 1:
             if let editorVC { present(editorVC) }
-        } else if let adhanVC {
-            present(adhanVC)
+        case 2:
+            if let quranVC { present(quranVC) }
+        default:
+            if let adhanVC { present(adhanVC) }
         }
     }
 
@@ -5459,6 +5636,13 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     func setEditor(_ vc: AdhkarEditorViewController) {
         editorVC = vc
         if viewSwitcher.selectedSegment == 1 && !isShowingSettings {
+            present(vc)
+        }
+    }
+
+    func setQuran(_ vc: QuranViewController) {
+        quranVC = vc
+        if viewSwitcher.selectedSegment == 2 && !isShowingSettings {
             present(vc)
         }
     }
@@ -6817,6 +7001,479 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         }
         return hour * 60 + minute
     }
+}
+
+// ============================================================================
+// MARK: Qur'an — verified Hafs/Warsh reader, study, and local reading state
+// ============================================================================
+
+/// Native shell around the King Fahd Complex's official, explicitly
+/// embeddable Mushaf publications. The shell owns navigation and reading
+/// state; canonical Qur'an content remains untouched at its official source.
+final class QuranViewController: NSViewController, MainTabContent,
+                                 WKNavigationDelegate, NSSearchFieldDelegate {
+    private var editionControl: NSSegmentedControl!
+    private var sourceLabel: NSTextField!
+    private var searchField: NSSearchField!
+    private var studyPopup: NSPopUpButton!
+    private var webView: WKWebView!
+    private var progress: NSProgressIndicator!
+    private var backButton: HoverIconButton!
+    private var forwardButton: HoverIconButton!
+    private var bookmarkButton: HoverIconButton!
+    private var removeBookmarkButton: HoverIconButton!
+
+    private var edition: String {
+        editionControl?.selectedSegment == 1 ? "warsh" : "hafs"
+    }
+
+    override func loadView() {
+        let root = NSView()
+        let direction: NSUserInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        root.userInterfaceLayoutDirection = direction
+
+        let controlBar = NSVisualEffectView()
+        controlBar.material = .headerView
+        controlBar.blendingMode = .withinWindow
+        controlBar.state = .active
+        controlBar.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.userInterfaceLayoutDirection = direction
+        root.addSubview(controlBar)
+
+        editionControl = NSSegmentedControl(
+            labels: ["Hafs · حفص", "Warsh · ورش"],
+            trackingMode: .selectOne, target: self,
+            action: #selector(editionChanged(_:)))
+        editionControl.segmentStyle = .texturedRounded
+        editionControl.selectedSegment = (UserDefaults.standard.string(forKey: kQuranEditionKey)
+                                           ?? "hafs") == "warsh" ? 1 : 0
+        editionControl.userInterfaceLayoutDirection = direction
+        editionControl.translatesAutoresizingMaskIntoConstraints = false
+        editionControl.setAccessibilityLabel(featureText("quran.tab"))
+        controlBar.addSubview(editionControl)
+
+        sourceLabel = NSTextField(labelWithString: featureText("quran.source.kfgqpc"))
+        sourceLabel.font = Localizer.shared.font(size: 11.5, weight: .medium)
+        sourceLabel.textColor = .secondaryLabelColor
+        sourceLabel.lineBreakMode = .byTruncatingTail
+        sourceLabel.alignment = Localizer.shared.leadingAlignment
+        sourceLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        sourceLabel.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.addSubview(sourceLabel)
+
+        progress = NSProgressIndicator()
+        progress.style = .spinning
+        progress.controlSize = .small
+        progress.isDisplayedWhenStopped = false
+        progress.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.addSubview(progress)
+
+        let sourceButton = HoverIconButton(symbol: "checkmark.shield.fill",
+            toolTip: featureText("quran.provenance"), target: self,
+            action: #selector(showProvenance), pointSize: 14,
+            size: NSSize(width: 38, height: 30))
+        sourceButton.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.addSubview(sourceButton)
+
+        let moroccanButton = NSButton(title: featureText("quran.official_moroccan"),
+                                      target: self,
+                                      action: #selector(openMoroccanMushaf))
+        moroccanButton.bezelStyle = .rounded
+        moroccanButton.image = templateSymbol("safari.fill", pointSize: 12)
+        moroccanButton.imagePosition = Localizer.shared.isRTL ? .imageRight : .imageLeft
+        moroccanButton.toolTip = featureText("quran.official_moroccan.help")
+        moroccanButton.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.addSubview(moroccanButton)
+
+        backButton = HoverIconButton(symbol: backChevronSymbol,
+            toolTip: t("tooltip.back"), target: self,
+            action: #selector(goBack), pointSize: 13,
+            size: NSSize(width: 34, height: 28))
+        forwardButton = HoverIconButton(symbol: Localizer.shared.isRTL
+                                            ? "chevron.left" : "chevron.right",
+            toolTip: featureText("quran.forward"), target: self,
+            action: #selector(goForward), pointSize: 13,
+            size: NSSize(width: 34, height: 28))
+        let reloadButton = HoverIconButton(symbol: "arrow.clockwise",
+            toolTip: t("tooltip.refresh"), target: self,
+            action: #selector(reloadReader), pointSize: 13,
+            size: NSSize(width: 34, height: 28))
+        for button in [backButton!, forwardButton!, reloadButton] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            controlBar.addSubview(button)
+        }
+
+        searchField = NSSearchField()
+        searchField.placeholderString = featureText("quran.search.placeholder")
+        searchField.font = Localizer.shared.font(size: 12.5)
+        searchField.target = self
+        searchField.action = #selector(runStudySearch)
+        searchField.delegate = self
+        searchField.userInterfaceLayoutDirection = direction
+        searchField.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.addSubview(searchField)
+
+        studyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        studyPopup.addItems(withTitles: [featureText("quran.study.search"),
+                                         featureText("quran.study.tafsir"),
+                                         featureText("quran.study.official_source")])
+        studyPopup.target = self
+        studyPopup.action = #selector(studyModeChanged(_:))
+        studyPopup.userInterfaceLayoutDirection = direction
+        studyPopup.translatesAutoresizingMaskIntoConstraints = false
+        controlBar.addSubview(studyPopup)
+
+        bookmarkButton = HoverIconButton(symbol: "bookmark.fill",
+            toolTip: featureText("quran.bookmarks"), target: self,
+            action: #selector(showBookmarks(_:)), pointSize: 13,
+            size: NSSize(width: 36, height: 28))
+        let addBookmarkButton = HoverIconButton(symbol: "bookmark.badge.plus",
+            toolTip: featureText("quran.bookmark.add"), target: self,
+            action: #selector(addBookmark), pointSize: 13,
+            size: NSSize(width: 36, height: 28))
+        removeBookmarkButton = HoverIconButton(symbol: "bookmark.slash",
+            toolTip: featureText("quran.bookmark.remove"), target: self,
+            action: #selector(removeCurrentBookmark), pointSize: 13,
+            size: NSSize(width: 36, height: 28))
+        for button in [bookmarkButton!, addBookmarkButton, removeBookmarkButton!] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            controlBar.addSubview(button)
+        }
+
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .default()
+        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.navigationDelegate = self
+        webView.allowsMagnification = true
+        webView.translatesAutoresizingMaskIntoConstraints = false
+        webView.setAccessibilityLabel(featureText("quran.reader"))
+        root.addSubview(webView)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+        separator.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(separator)
+
+        NSLayoutConstraint.activate([
+            controlBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            controlBar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            controlBar.topAnchor.constraint(equalTo: root.topAnchor),
+            controlBar.heightAnchor.constraint(equalToConstant: 94),
+
+            editionControl.leadingAnchor.constraint(equalTo: controlBar.leadingAnchor,
+                                                     constant: 20),
+            editionControl.topAnchor.constraint(equalTo: controlBar.topAnchor, constant: 12),
+            editionControl.widthAnchor.constraint(equalToConstant: 260),
+            editionControl.heightAnchor.constraint(equalToConstant: 28),
+
+            sourceLabel.leadingAnchor.constraint(equalTo: editionControl.trailingAnchor,
+                                                  constant: 12),
+            sourceLabel.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            progress.leadingAnchor.constraint(equalTo: sourceLabel.trailingAnchor, constant: 7),
+            progress.centerYAnchor.constraint(equalTo: sourceLabel.centerYAnchor),
+            progress.widthAnchor.constraint(equalToConstant: 16),
+            progress.heightAnchor.constraint(equalToConstant: 16),
+
+            sourceButton.trailingAnchor.constraint(equalTo: moroccanButton.leadingAnchor,
+                                                     constant: -8),
+            sourceButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            sourceButton.widthAnchor.constraint(equalToConstant: 38),
+            sourceButton.heightAnchor.constraint(equalToConstant: 30),
+            moroccanButton.trailingAnchor.constraint(equalTo: controlBar.trailingAnchor,
+                                                      constant: -20),
+            moroccanButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            moroccanButton.widthAnchor.constraint(equalToConstant: 180),
+            sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: sourceButton.leadingAnchor,
+                                                   constant: -8),
+
+            backButton.leadingAnchor.constraint(equalTo: controlBar.leadingAnchor, constant: 20),
+            backButton.topAnchor.constraint(equalTo: controlBar.topAnchor, constant: 54),
+            backButton.widthAnchor.constraint(equalToConstant: 34),
+            backButton.heightAnchor.constraint(equalToConstant: 28),
+            forwardButton.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: 2),
+            forwardButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            forwardButton.widthAnchor.constraint(equalToConstant: 34),
+            forwardButton.heightAnchor.constraint(equalToConstant: 28),
+            reloadButton.leadingAnchor.constraint(equalTo: forwardButton.trailingAnchor, constant: 2),
+            reloadButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            reloadButton.widthAnchor.constraint(equalToConstant: 34),
+            reloadButton.heightAnchor.constraint(equalToConstant: 28),
+
+            searchField.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 10),
+            searchField.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            searchField.heightAnchor.constraint(equalToConstant: 28),
+            studyPopup.leadingAnchor.constraint(equalTo: searchField.trailingAnchor, constant: 8),
+            studyPopup.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            studyPopup.widthAnchor.constraint(equalToConstant: 190),
+            studyPopup.heightAnchor.constraint(equalToConstant: 28),
+            bookmarkButton.leadingAnchor.constraint(equalTo: studyPopup.trailingAnchor, constant: 8),
+            bookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            bookmarkButton.widthAnchor.constraint(equalToConstant: 36),
+            bookmarkButton.heightAnchor.constraint(equalToConstant: 28),
+            addBookmarkButton.leadingAnchor.constraint(equalTo: bookmarkButton.trailingAnchor,
+                                                        constant: 2),
+            addBookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            addBookmarkButton.widthAnchor.constraint(equalToConstant: 36),
+            addBookmarkButton.heightAnchor.constraint(equalToConstant: 28),
+            removeBookmarkButton.leadingAnchor.constraint(equalTo: addBookmarkButton.trailingAnchor,
+                                                           constant: 2),
+            removeBookmarkButton.trailingAnchor.constraint(equalTo: controlBar.trailingAnchor,
+                                                            constant: -20),
+            removeBookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
+            removeBookmarkButton.widthAnchor.constraint(equalToConstant: 36),
+            removeBookmarkButton.heightAnchor.constraint(equalToConstant: 28),
+
+            separator.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            separator.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            separator.topAnchor.constraint(equalTo: controlBar.bottomAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 1),
+            webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            webView.topAnchor.constraint(equalTo: separator.bottomAnchor),
+            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
+
+        view = root
+        loadEdition(resume: true)
+    }
+
+    func tabDidActivate() {
+        if webView?.url == nil { loadEdition(resume: true) }
+        updateNavigationState()
+    }
+
+    private func officialReaderURL(for edition: String) -> String {
+        edition == "warsh" ? kQuranWarshReaderURL : kQuranHafsReaderURL
+    }
+
+    private func lastURLKey(for edition: String) -> String {
+        edition == "warsh" ? kQuranLastWarshURL : kQuranLastHafsURL
+    }
+
+    private func loadEdition(resume: Bool) {
+        UserDefaults.standard.set(edition, forKey: kQuranEditionKey)
+        var raw = officialReaderURL(for: edition)
+        if resume, let saved = UserDefaults.standard.string(forKey: lastURLKey(for: edition)),
+           isAllowedReaderURL(saved), saved.contains("qurancomplex.gov.sa") {
+            raw = saved
+        }
+        guard let url = URL(string: raw) else { return }
+        sourceLabel.stringValue = featureText("quran.source.kfgqpc")
+        webView.load(URLRequest(url: url,
+                                cachePolicy: .returnCacheDataElseLoad,
+                                timeoutInterval: 30))
+    }
+
+    private func isAllowedReaderURL(_ raw: String) -> Bool {
+        guard let host = URL(string: raw)?.host?.lowercased() else { return false }
+        return host == "qurancomplex.gov.sa"
+            || host.hasSuffix(".qurancomplex.gov.sa")
+            || host == "quran.com" || host.hasSuffix(".quran.com")
+    }
+
+    @objc private func editionChanged(_ sender: NSSegmentedControl) {
+        loadEdition(resume: true)
+    }
+
+    @objc private func goBack() { if webView.canGoBack { webView.goBack() } }
+    @objc private func goForward() { if webView.canGoForward { webView.goForward() } }
+    @objc private func reloadReader() { webView.reload() }
+
+    @objc private func studyModeChanged(_ sender: NSPopUpButton) {
+        searchField.placeholderString = sender.indexOfSelectedItem == 1
+            ? featureText("quran.tafsir.placeholder")
+            : featureText("quran.search.placeholder")
+        if sender.indexOfSelectedItem == 2 {
+            webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
+            sourceLabel.stringValue = featureText("quran.source.kfgqpc.developer")
+        }
+    }
+
+    @objc private func runStudySearch() {
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return }
+        if studyPopup.indexOfSelectedItem == 2 {
+            webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
+            return
+        }
+        let isReference = query.range(of: #"^\d{1,3}:\d{1,3}$"#,
+                                      options: .regularExpression) != nil
+        let url: URL?
+        if studyPopup.indexOfSelectedItem == 1, isReference {
+            url = URL(string: "https://quran.com/\(query)/tafsirs")
+        } else if isReference {
+            url = URL(string: "https://quran.com/\(query)")
+        } else {
+            var components = URLComponents(string: "https://quran.com/search")
+            components?.queryItems = [URLQueryItem(name: "q", value: query)]
+            url = components?.url
+        }
+        guard let url else { return }
+        webView.load(URLRequest(url: url))
+        sourceLabel.stringValue = edition == "warsh"
+            ? featureText("quran.study.hafs_only")
+            : featureText("quran.source.foundation")
+    }
+
+    private func loadBookmarks() -> [QuranBookmark] {
+        guard let data = UserDefaults.standard.data(forKey: kQuranBookmarksKey),
+              let values = try? JSONDecoder().decode([QuranBookmark].self, from: data) else {
+            return []
+        }
+        return values
+    }
+
+    private func saveBookmarks(_ values: [QuranBookmark]) {
+        guard let data = try? JSONEncoder().encode(values) else { return }
+        UserDefaults.standard.set(data, forKey: kQuranBookmarksKey)
+    }
+
+    @objc private func addBookmark() {
+        guard let url = webView.url, isAllowedReaderURL(url.absoluteString) else { return }
+        let alert = NSAlert()
+        alert.messageText = featureText("quran.bookmark.add")
+        alert.informativeText = featureText("quran.bookmark.name.help")
+        alert.addButton(withTitle: t("settings.save"))
+        alert.addButton(withTitle: t("adhkar.editor.cancel"))
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+        field.stringValue = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            .nonEmpty ?? (edition == "warsh" ? "Warsh · ورش" : "Hafs · حفص")
+        alert.accessoryView = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let title = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        var values = loadBookmarks()
+        if let existing = values.firstIndex(where: { $0.url == url.absoluteString }) {
+            values[existing].title = title.nonEmpty ?? values[existing].title
+        } else {
+            values.append(QuranBookmark(title: title.nonEmpty ?? featureText("quran.bookmark"),
+                                        url: url.absoluteString, edition: edition))
+        }
+        saveBookmarks(values)
+        updateNavigationState()
+    }
+
+    @objc private func showBookmarks(_ sender: NSButton) {
+        let menu = NSMenu()
+        let values = loadBookmarks()
+        if values.isEmpty {
+            let empty = NSMenuItem(title: featureText("quran.bookmarks.empty"),
+                                   action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+        } else {
+            for (index, bookmark) in values.enumerated() {
+                let item = NSMenuItem(title: bookmark.title,
+                                      action: #selector(openBookmark(_:)),
+                                      keyEquivalent: "")
+                item.tag = index
+                item.image = templateSymbol(bookmark.edition == "warsh"
+                                                ? "book.closed.fill" : "book.fill",
+                                             pointSize: 11)
+                menu.addItem(item)
+            }
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4),
+                   in: sender)
+    }
+
+    @objc private func openBookmark(_ sender: NSMenuItem) {
+        let values = loadBookmarks()
+        guard values.indices.contains(sender.tag),
+              let url = URL(string: values[sender.tag].url),
+              isAllowedReaderURL(url.absoluteString) else { return }
+        editionControl.selectedSegment = values[sender.tag].edition == "warsh" ? 1 : 0
+        UserDefaults.standard.set(values[sender.tag].edition, forKey: kQuranEditionKey)
+        webView.load(URLRequest(url: url))
+    }
+
+    @objc private func removeCurrentBookmark() {
+        guard let raw = webView.url?.absoluteString else { return }
+        var values = loadBookmarks()
+        values.removeAll { $0.url == raw }
+        saveBookmarks(values)
+        updateNavigationState()
+    }
+
+    @objc private func showProvenance() {
+        let alert = NSAlert()
+        alert.messageText = featureText("quran.provenance.title")
+        alert.informativeText = featureText("quran.provenance.detail")
+            + "\n\nHafs v13 · SHA-1 36EA5AB0D7EA1702F17FF43F9B50924CCCD77EBF"
+            + "\nWarsh v6 · SHA-1 44ECEA8FEB23817FDC01A8EE2162A6A0CF08CAE7"
+            + "\nTafsir Muyassar v3 · SHA-1 5F533113C2F54F32EDED734BB49E6A5837965722"
+        alert.addButton(withTitle: featureText("quran.provenance.open"))
+        alert.addButton(withTitle: t("adhkar.editor.cancel"))
+        if alert.runModal() == .alertFirstButtonReturn,
+           let url = URL(string: kQuranDeveloperURL) {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func openMoroccanMushaf() {
+        guard let url = URL(string: kMoroccanMushafURL) else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func updateNavigationState() {
+        backButton?.isEnabled = webView?.canGoBack ?? false
+        forwardButton?.isEnabled = webView?.canGoForward ?? false
+        let current = webView?.url?.absoluteString
+        removeBookmarkButton?.isEnabled = current.map { raw in
+            loadBookmarks().contains { $0.url == raw }
+        } ?? false
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        progress.startAnimation(nil)
+        updateNavigationState()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        progress.stopAnimation(nil)
+        if let raw = webView.url?.absoluteString, raw.contains("qurancomplex.gov.sa") {
+            UserDefaults.standard.set(raw, forKey: lastURLKey(for: edition))
+            sourceLabel.stringValue = featureText("quran.source.kfgqpc")
+        } else if webView.url?.host?.contains("quran.com") == true {
+            sourceLabel.stringValue = edition == "warsh"
+                ? featureText("quran.study.hafs_only")
+                : featureText("quran.source.foundation")
+        }
+        updateNavigationState()
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
+                 withError error: Error) {
+        progress.stopAnimation(nil)
+        sourceLabel.stringValue = featureText("quran.unavailable")
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: Error) {
+        progress.stopAnimation(nil)
+        sourceLabel.stringValue = featureText("quran.unavailable")
+    }
+
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard let url = navigationAction.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        if isAllowedReaderURL(url.absoluteString) || url.scheme == "about" {
+            decisionHandler(.allow)
+        } else if navigationAction.navigationType == .linkActivated {
+            NSWorkspace.shared.open(url)
+            decisionHandler(.cancel)
+        } else {
+            decisionHandler(.cancel)
+        }
+    }
+}
+
+private extension String {
+    var nonEmpty: String? { isEmpty ? nil : self }
 }
 
 // ============================================================================
@@ -9601,6 +10258,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let editor = AdhkarEditorViewController(appDelegate: self)
             w.setAdhan(adhan)
             w.setEditor(editor)
+            w.setQuran(QuranViewController())
             mainWindow = w
         }
         mainWindow?.showMainWindow(selecting: destination)
@@ -9612,6 +10270,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let w = MainWindow(appDelegate: self)
             w.setAdhan(PrayerDashboardViewController(appDelegate: self))
             w.setEditor(AdhkarEditorViewController(appDelegate: self))
+            w.setQuran(QuranViewController())
             mainWindow = w
         }
         mainWindow?.showSettingsWindow(section: section)
@@ -9623,6 +10282,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let window = MainWindow(appDelegate: self)
             window.setAdhan(PrayerDashboardViewController(appDelegate: self))
             window.setEditor(AdhkarEditorViewController(appDelegate: self))
+            window.setQuran(QuranViewController())
             mainWindow = window
         }
         mainWindow?.showMainWindow()
@@ -10155,31 +10815,27 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let btnY: CGFloat = 444
         let centers: [CGFloat] = [W * 0.125, W * 0.375, W * 0.625, W * 0.875]
 
-        // Quick-access language switcher. Users change the UI language far
-        // more often than they need to force-refresh, and having to open
-        // Settings → Language for a 10-language list felt heavy. Clicking
-        // the globe pops up a native NSMenu listing all languages in their
-        // native script, with the active one checked. (Refresh remains
-        // reachable from the status-bar right-click menu.)
-        let languageBtn = HoverIconButton(
-            symbol: "globe",
-            toolTip: t("tooltip.language"),
+        // Preferences now live exclusively in the full Settings surface, so
+        // the compact toolbar keeps only daily actions.
+        let refreshBtn = HoverIconButton(
+            symbol: "arrow.clockwise",
+            toolTip: t("tooltip.refresh"),
             target: self,
-            action: #selector(languageBtnTapped(_:)),
+            action: #selector(menuRefresh),
             pointSize: 15,
             size: btnSize)
-        languageBtn.setFrameOrigin(NSPoint(x: centers[0] - btnSize.width/2, y: btnY))
-        content.addSubview(languageBtn)
+        refreshBtn.setFrameOrigin(NSPoint(x: centers[0] - btnSize.width/2, y: btnY))
+        content.addSubview(refreshBtn)
 
-        let changeBtn = HoverIconButton(
-            symbol: "mappin.and.ellipse",
-            toolTip: t("tooltip.change"),
+        let quranBtn = HoverIconButton(
+            symbol: "book.pages.fill",
+            toolTip: featureText("quran.tab"),
             target: self,
-            action: #selector(changeMosqueTapped),
+            action: #selector(openQuranFromPopup),
             pointSize: 15,
             size: btnSize)
-        changeBtn.setFrameOrigin(NSPoint(x: centers[1] - btnSize.width/2, y: btnY))
-        content.addSubview(changeBtn)
+        quranBtn.setFrameOrigin(NSPoint(x: centers[1] - btnSize.width/2, y: btnY))
+        content.addSubview(quranBtn)
 
         // Adhkar button — switches this same compact surface between prayer
         // times and the compact reader. The reader itself exposes a "More
@@ -10214,6 +10870,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     // -------------------------------------------------------- mode swap
     @objc func changeMosqueTapped() { openMosqueSettings() }
+    @objc func openQuranFromPopup() {
+        popover?.performClose(nil)
+        openMainWindow(selecting: 2)
+    }
     @objc func settingsTapped() {
         // Prayer popup → Adhan settings; compact Adhkar → Adhkar settings.
         openSettingsWindow(section: isCompactAdhkarMode ? 3 : 2)

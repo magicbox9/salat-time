@@ -18,8 +18,9 @@ The app has **two UI surfaces** (v3):
   quick prayer-time view, right-click menu for actions.
 - **Main window** (on demand): a full management window opened from the menu
   bar's "Open Main Window…" item or the dock. Hosts tabs for Prayer Times,
-  Adhkar, Adhan, Settings. Switches the app to `.regular` activation policy
-  (dock icon appears) while open; back to `.accessory` (tray-only) on close.
+  Adhkar, and Qur'an, with all preferences behind one native Settings toolbar
+  button. Switches the app to `.regular` activation policy (dock icon appears)
+  while open; back to `.accessory` (tray-only) on close.
 
 ## 2. Layout
 
