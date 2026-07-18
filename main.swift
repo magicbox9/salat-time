@@ -114,8 +114,9 @@ let kQuranReaderTextScale        = "quranReaderTextScale"
 let kQuranTranslationVisible     = "quranTranslationVisible"
 let kQuranTranslationKey         = "quranTranslationKey"
 let kQuranReaderSidebar          = "quranReaderSidebarVisible"
+let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 
-let kAppVersion          = "3.20.1"
+let kAppVersion          = "3.21.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -11906,6 +11907,8 @@ private let quranReaderEnglish: [String: String] = [
     "text.size": "Text size", "theme": "Theme", "sidebar": "Show or hide surah list",
     "surah.filter": "Filter surahs", "copy": "Copy verse", "juz": "Juz",
     "results": "Search results", "meccan": "Meccan", "medinan": "Medinan",
+    "mode.verses": "Verses", "mode.mushaf": "Mushaf",
+    "mushaf.keys": "← next page · → previous page · double-click a verse for details",
 ]
 
 private let quranReaderArabic: [String: String] = [
@@ -11929,6 +11932,8 @@ private let quranReaderArabic: [String: String] = [
     "text.size": "حجم النص", "theme": "المظهر", "sidebar": "إظهار قائمة السور أو إخفاؤها",
     "surah.filter": "تصفية السور", "copy": "نسخ الآية", "juz": "الجزء",
     "results": "نتائج البحث", "meccan": "مكية", "medinan": "مدنية",
+    "mode.verses": "الآيات", "mode.mushaf": "المصحف",
+    "mushaf.keys": "← الصفحة التالية · → الصفحة السابقة · انقر مرتين على آية للتفاصيل",
 ]
 
 private func quranReaderText(_ key: String) -> String {
@@ -11944,7 +11949,8 @@ private func quranReaderText(_ key: String) -> String {
                "text.size":"Taille du texte", "theme":"Thème", "juz":"Juz",
                "sidebar":"Afficher ou masquer les sourates",
                "surah.filter":"Filtrer les sourates", "copy":"Copier le verset",
-               "results":"Résultats de recherche"],
+               "results":"Résultats de recherche",
+               "mode.verses":"Versets", "mode.mushaf":"Moushaf"],
         "es": ["translation":"Traducción de los significados", "show.translation":"Mostrar traducción",
                "surah":"Sura", "search":"Buscar en árabe o escribir 2:255",
                "background":"Fondo", "reading.style":"Estilo de lectura",
@@ -11955,7 +11961,8 @@ private func quranReaderText(_ key: String) -> String {
                "text.size":"Tamaño del texto", "theme":"Tema", "juz":"Yuz",
                "sidebar":"Mostrar u ocultar las suras",
                "surah.filter":"Filtrar suras", "copy":"Copiar aleya",
-               "results":"Resultados de búsqueda"],
+               "results":"Resultados de búsqueda",
+               "mode.verses":"Aleyas", "mode.mushaf":"Múshaf"],
         "pt": ["translation":"Tradução dos significados", "show.translation":"Mostrar tradução",
                "surah":"Surata", "search":"Pesquisar em árabe ou escrever 2:255",
                "background":"Fundo", "reading.style":"Estilo de leitura",
@@ -12175,6 +12182,60 @@ private final class QuranReaderFooterView: NSView {
         line.line(to: NSPoint(x: bounds.width, y: 0.5))
         line.lineWidth = 1
         line.stroke()
+    }
+}
+
+/// The Mushaf "paper": a palette-tinted sheet with the double ornamental
+/// border of a printed page. Purely decorative chrome — the interactive
+/// text view sits on top of it.
+private final class QuranMushafCardView: NSView {
+    var palette: QuranReaderPalette = .ivory { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        let sheet = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
+                                 xRadius: 14, yRadius: 14)
+        palette.surface.withAlphaComponent(palette == .night ? 0.92 : 0.97).setFill()
+        sheet.fill()
+        palette.motif.withAlphaComponent(0.9).setStroke()
+        sheet.lineWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1.6 : 1.1
+        sheet.stroke()
+        let inner = NSBezierPath(roundedRect: bounds.insetBy(dx: 9, dy: 9),
+                                 xRadius: 8, yRadius: 8)
+        palette.divider.setStroke()
+        inner.lineWidth = 0.7
+        inner.stroke()
+        palette.motif.setStroke()
+        for corner in [NSPoint(x: bounds.minX + 20, y: bounds.minY + 20),
+                       NSPoint(x: bounds.maxX - 20, y: bounds.minY + 20),
+                       NSPoint(x: bounds.minX + 20, y: bounds.maxY - 20),
+                       NSPoint(x: bounds.maxX - 20, y: bounds.maxY - 20)] {
+            let star = zelligeStarPath(center: corner, outer: 8, inner: 3.5)
+            star.lineWidth = 0.8
+            star.stroke()
+        }
+    }
+}
+
+/// Text surface of the Mushaf page. Forwards page-turn keys and verse taps
+/// to the reader while keeping native text selection and copying intact.
+private final class QuranMushafTextView: NSTextView {
+    weak var reader: QuranViewController?
+
+    override func keyDown(with event: NSEvent) {
+        if reader?.handleMushafKey(event) == true { return }
+        super.keyDown(with: event)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let clickCount = event.clickCount
+        let point = convert(event.locationInWindow, from: nil)
+        let index = characterIndexForInsertion(at: point)
+        super.mouseDown(with: event)
+        // Only treat it as a verse tap when the user didn't drag a manual
+        // text selection.
+        if selectedRange().length == 0 || clickCount >= 2 {
+            reader?.handleMushafClick(at: index, clickCount: clickCount)
+        }
     }
 }
 
@@ -12639,6 +12700,11 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var bookmarksButton: HoverIconButton!
     private var meaningsButton: HoverIconButton!
     private var readerSettingsButton: HoverIconButton!
+    private var modeControl: NSSegmentedControl!
+    private var mushafCard: QuranMushafCardView!
+    private var mushafText: QuranMushafTextView!
+    private var mushafHeaderLabel: NSTextField!
+    private var mushafPageLabel: NSTextField!
 
     private var settingsPopover: NSPopover?
     private weak var editionSegment: NSSegmentedControl?
@@ -12670,6 +12736,13 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var currentTranslation = QuranTranslationDescriptor.preferred
     private var edition = (UserDefaults.standard.string(forKey: kQuranEditionKey)
                            ?? "hafs") == "warsh" ? "warsh" : "hafs"
+    private var readerModeValue = UserDefaults.standard.string(forKey: kQuranReaderMode)
+        ?? "verses"
+    private var currentPage = 1
+    private var totalPages = 604
+    private var mushafRanges: [(range: NSRange, verse: OfflineQuranVerse)] = []
+
+    fileprivate var isMushaf: Bool { readerModeValue == "mushaf" }
 
     private var palette: QuranReaderPalette {
         QuranReaderPalette(rawValue: max(0, min(2,
@@ -12760,8 +12833,16 @@ final class QuranViewController: NSViewController, MainTabContent,
                                                action: #selector(showReaderSettings(_:)),
                                                pointSize: 14, size: NSSize(width: 36, height: 32))
 
-        let controls = NSStackView(views: [sidebarButton, previousButton, nextButton, crumbLabel,
-                                           searchField, bookmarkButton, bookmarksButton,
+        modeControl = NSSegmentedControl(labels: [quranReaderText("mode.verses"),
+                                                  quranReaderText("mode.mushaf")],
+                                         trackingMode: .selectOne,
+                                         target: self, action: #selector(readerModeChanged(_:)))
+        modeControl.segmentStyle = .texturedRounded
+        modeControl.selectedSegment = isMushaf ? 1 : 0
+        modeControl.setAccessibilityLabel(quranReaderText("reading.style"))
+
+        let controls = NSStackView(views: [sidebarButton, modeControl, previousButton, nextButton,
+                                           crumbLabel, searchField, bookmarkButton, bookmarksButton,
                                            meaningsButton, readerSettingsButton])
         controls.orientation = .horizontal
         controls.alignment = .centerY
@@ -12830,6 +12911,67 @@ final class QuranViewController: NSViewController, MainTabContent,
         footer = QuranReaderFooterView()
         footer.translatesAutoresizingMaskIntoConstraints = false
         backdrop.addSubview(footer)
+
+        // --- Mushaf page surface (hidden in verse mode) ---
+        mushafCard = QuranMushafCardView()
+        mushafCard.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(mushafCard)
+
+        mushafHeaderLabel = NSTextField(labelWithString: "")
+        mushafHeaderLabel.font = Localizer.shared.font(size: 12.5, weight: .semibold)
+        mushafHeaderLabel.alignment = .center
+        mushafHeaderLabel.lineBreakMode = .byTruncatingMiddle
+        mushafHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
+        mushafCard.addSubview(mushafHeaderLabel)
+
+        mushafPageLabel = NSTextField(labelWithString: "")
+        mushafPageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
+        mushafPageLabel.alignment = .center
+        mushafPageLabel.translatesAutoresizingMaskIntoConstraints = false
+        mushafCard.addSubview(mushafPageLabel)
+
+        mushafText = QuranMushafTextView(frame: .zero)
+        mushafText.reader = self
+        mushafText.isEditable = false
+        mushafText.isSelectable = true
+        mushafText.isRichText = false
+        mushafText.drawsBackground = false
+        mushafText.textContainerInset = NSSize(width: 20, height: 10)
+        mushafText.minSize = .zero
+        mushafText.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                    height: CGFloat.greatestFiniteMagnitude)
+        mushafText.isVerticallyResizable = true
+        mushafText.isHorizontallyResizable = false
+        mushafText.autoresizingMask = [.width]
+        mushafText.textContainer?.widthTracksTextView = true
+        mushafText.setAccessibilityLabel(quranReaderText("mode.mushaf"))
+        let mushafScroll = NSScrollView()
+        mushafScroll.documentView = mushafText
+        mushafScroll.hasVerticalScroller = true
+        mushafScroll.autohidesScrollers = true
+        mushafScroll.drawsBackground = false
+        mushafScroll.translatesAutoresizingMaskIntoConstraints = false
+        mushafCard.addSubview(mushafScroll)
+
+        let mushafWidth = mushafCard.widthAnchor.constraint(equalToConstant: 680)
+        mushafWidth.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            mushafCard.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
+            mushafCard.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 14),
+            mushafCard.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -14),
+            mushafWidth,
+            mushafCard.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor,
+                                              constant: -64),
+            mushafHeaderLabel.topAnchor.constraint(equalTo: mushafCard.topAnchor, constant: 16),
+            mushafHeaderLabel.leadingAnchor.constraint(equalTo: mushafCard.leadingAnchor, constant: 44),
+            mushafHeaderLabel.trailingAnchor.constraint(equalTo: mushafCard.trailingAnchor, constant: -44),
+            mushafScroll.topAnchor.constraint(equalTo: mushafHeaderLabel.bottomAnchor, constant: 8),
+            mushafScroll.leadingAnchor.constraint(equalTo: mushafCard.leadingAnchor, constant: 16),
+            mushafScroll.trailingAnchor.constraint(equalTo: mushafCard.trailingAnchor, constant: -16),
+            mushafScroll.bottomAnchor.constraint(equalTo: mushafPageLabel.topAnchor, constant: -6),
+            mushafPageLabel.bottomAnchor.constraint(equalTo: mushafCard.bottomAnchor, constant: -12),
+            mushafPageLabel.centerXAnchor.constraint(equalTo: mushafCard.centerXAnchor),
+        ])
 
         unavailableOverlay = NSVisualEffectView()
         unavailableOverlay.material = .popover
@@ -12908,6 +13050,8 @@ final class QuranViewController: NSViewController, MainTabContent,
         NotificationCenter.default.addObserver(self, selector: #selector(readerDidScroll(_:)),
                                                name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
+        scrollView.isHidden = isMushaf
+        mushafCard.isHidden = !isMushaf
         applyPalette()
         updateTranslationAvailability()
         loadEdition(restorePosition: true)
@@ -12927,6 +13071,10 @@ final class QuranViewController: NSViewController, MainTabContent,
         updateChrome()
         tableView?.reloadData()
         surahTable?.reloadData()
+        if isMushaf, mushafText != nil, !verses.isEmpty {
+            renderMushafPage()
+            view.window?.makeFirstResponder(mushafText)
+        }
     }
 
     // MARK: - corpus loading
@@ -12975,10 +13123,11 @@ final class QuranViewController: NSViewController, MainTabContent,
                         .map { strippedAyahMarkers($0.uthmanicText) } ?? ""
                     self.migrateLegacyPageBookmarks(using: decoded,
                                                      edition: selectedEdition)
+                    self.totalPages = decoded.map(\.pageStart).max() ?? 604
                     self.rebuildSurahIndex()
                     self.loadWordMeaningsIfNeeded()
                     if !restorePosition { self.selectedAyah = 1 }
-                    self.rebuildVisibleVerses(scrollToSelection: true)
+                    self.applyReaderMode()
                     self.updateTranslationAvailability()
                 }
             } catch {
@@ -13115,6 +13264,12 @@ final class QuranViewController: NSViewController, MainTabContent,
         if searchActive {
             footer.positionLabel.stringValue = String(format: quranReaderText("verses"),
                 localizedInterfaceDigits(String(visibleVerses.count)))
+            return
+        }
+        if isMushaf {
+            let pageText = "\(offlineQuranText("page")) \(localizedInterfaceDigits(String(currentPage))) \(offlineQuranText("of")) \(localizedInterfaceDigits(String(totalPages)))"
+            let locator = "\(localizedInterfaceDigits(String(selectedSurah))):\(localizedInterfaceDigits(String(selectedAyah)))"
+            footer.positionLabel.stringValue = "\(pageText) · \(locator)"
             return
         }
         guard let verse = topVisibleVerse() ?? currentVerse() else {
@@ -13254,7 +13409,245 @@ final class QuranViewController: NSViewController, MainTabContent,
         searchField.stringValue = ""
         searchActive = false
         persistLocator()
-        rebuildVisibleVerses(scrollToSelection: true)
+        if isMushaf {
+            goToPage(pageOfSelectedVerse(), keepSelection: true)
+        } else {
+            rebuildVisibleVerses(scrollToSelection: true)
+        }
+    }
+
+    // MARK: - Mushaf page mode
+
+    @objc private func readerModeChanged(_ sender: NSSegmentedControl) {
+        readerModeValue = sender.selectedSegment == 1 ? "mushaf" : "verses"
+        UserDefaults.standard.set(readerModeValue, forKey: kQuranReaderMode)
+        applyReaderMode()
+    }
+
+    /// Reflect the persisted reading mode: swap the visible surface, retarget
+    /// the navigation buttons, and render whichever representation of the
+    /// current locator applies.
+    private func applyReaderMode() {
+        guard scrollView != nil else { return }
+        let mushaf = isMushaf
+        scrollView.isHidden = mushaf
+        mushafCard.isHidden = !mushaf
+        previousButton.toolTip = mushaf ? offlineQuranText("previous")
+                                        : quranReaderText("previous")
+        nextButton.toolTip = mushaf ? offlineQuranText("next") : quranReaderText("next")
+        previousButton.setAccessibilityLabel(previousButton.toolTip ?? "")
+        nextButton.setAccessibilityLabel(nextButton.toolTip ?? "")
+        if mushaf {
+            currentPage = pageOfSelectedVerse()
+            renderMushafPage()
+            view.window?.makeFirstResponder(mushafText)
+        } else {
+            rebuildVisibleVerses(scrollToSelection: true)
+        }
+        updateChrome()
+        updateBookmarkButton()
+        syncSidebarSelection()
+    }
+
+    private func pageOfSelectedVerse() -> Int {
+        verses.first(where: {
+            $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah
+        })?.pageStart ?? currentPage
+    }
+
+    fileprivate func movePage(by delta: Int) { goToPage(currentPage + delta) }
+
+    private func goToPage(_ page: Int, keepSelection: Bool = false) {
+        guard !verses.isEmpty else { return }
+        let target = max(1, min(totalPages, page))
+        currentPage = target
+        if !keepSelection,
+           let first = verses.filter({ $0.pageStart == target }).min(by: { $0.id < $1.id }) {
+            selectedSurah = first.suraNumber
+            selectedAyah = first.ayahNumber
+            persistLocator()
+        }
+        renderMushafPage()
+        updateChrome()
+        updateBookmarkButton()
+        syncSidebarSelection()
+    }
+
+    private func mushafBodyFont() -> NSFont {
+        verifiedQuranFont(edition: edition, size: 25 * textScale)
+            ?? NSFont(name: "Geeza Pro", size: 25 * textScale)
+            ?? Localizer.shared.font(size: 25 * textScale)
+    }
+
+    private func arabicIndicDigits(_ value: Int) -> String {
+        let map: [Character: Character] = ["0": "٠", "1": "١", "2": "٢", "3": "٣",
+                                           "4": "٤", "5": "٥", "6": "٦", "7": "٧",
+                                           "8": "٨", "9": "٩"]
+        return String(String(value).map { map[$0] ?? $0 })
+    }
+
+    /// Rebuild the attributed page: the exact verse sequence of the printed
+    /// page for the loaded riwayah, with surah banners and the bismillah
+    /// where they occur in print, and an ornate inline number closing every
+    /// ayah. Ranges are kept so taps resolve back to verses.
+    private func renderMushafPage() {
+        guard mushafText != nil, !verses.isEmpty else { return }
+        let pageVerses = verses.filter { $0.pageStart == currentPage }
+            .sorted { $0.id < $1.id }
+        visibleVerses = pageVerses
+        let palette = self.palette
+        let hasOfficial = officialFont() != nil
+        let bodyFont = mushafBodyFont()
+        let bannerFont = Localizer.shared.font(size: 19 * textScale, weight: .bold)
+        let bismillahFont = currentBismillahFont()
+
+        let bodyParagraph = NSMutableParagraphStyle()
+        bodyParagraph.alignment = .justified
+        bodyParagraph.baseWritingDirection = .rightToLeft
+        bodyParagraph.lineBreakMode = .byWordWrapping
+        bodyParagraph.lineSpacing = 14 * textScale
+        bodyParagraph.paragraphSpacing = 8
+        let centered = NSMutableParagraphStyle()
+        centered.alignment = .center
+        centered.baseWritingDirection = .rightToLeft
+        centered.paragraphSpacingBefore = 10
+        centered.paragraphSpacing = 8
+
+        let result = NSMutableAttributedString()
+        var ranges: [(range: NSRange, verse: OfflineQuranVerse)] = []
+        for verse in pageVerses {
+            if verse.ayahNumber == 1 {
+                if result.length > 0 { result.append(NSAttributedString(string: "\n")) }
+                result.append(NSAttributedString(
+                    string: "۞ سُورَةُ \(verse.suraNameArabic) ۞\n",
+                    attributes: [.font: bannerFont,
+                                 .foregroundColor: NSColor.appGreenAccent,
+                                 .paragraphStyle: centered]))
+                if verse.suraNumber != 1, verse.suraNumber != 9, !bismillahText.isEmpty {
+                    result.append(NSAttributedString(
+                        string: bismillahText + "\n",
+                        attributes: [.font: bismillahFont,
+                                     .foregroundColor: palette.primary.withAlphaComponent(0.92),
+                                     .paragraphStyle: centered]))
+                }
+            }
+            let body = hasOfficial ? verse.uthmanicText
+                                   : strippedAyahMarkers(verse.uthmanicText)
+            let marker = hasOfficial ? "" : " ﴿\(arabicIndicDigits(verse.ayahNumber))﴾"
+            let start = result.length
+            result.append(NSAttributedString(
+                string: body + marker,
+                attributes: [.font: bodyFont, .foregroundColor: palette.primary,
+                             .paragraphStyle: bodyParagraph]))
+            ranges.append((NSRange(location: start, length: (body + marker).utf16.count),
+                           verse))
+            result.append(NSAttributedString(
+                string: " ",
+                attributes: [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+        }
+        mushafText.textStorage?.setAttributedString(result)
+        mushafRanges = ranges
+        applyMushafSelectionHighlight()
+        mushafText.scroll(.zero)
+
+        let suraNames = pageVerses.reduce(into: [String]()) { list, verse in
+            if list.last != verse.suraNameArabic { list.append(verse.suraNameArabic) }
+        }
+        let juzList = Set(pageVerses.map(\.jozz)).sorted()
+        let juzText = juzList.map { localizedInterfaceDigits(String($0)) }
+            .joined(separator: "، ")
+        mushafHeaderLabel.stringValue = suraNames.joined(separator: " · ")
+            + "   ·   \(quranReaderText("juz")) \(juzText)"
+        mushafHeaderLabel.textColor = palette.secondary
+        mushafPageLabel.stringValue =
+            "\(localizedInterfaceDigits(String(currentPage))) / \(localizedInterfaceDigits(String(totalPages)))"
+        mushafPageLabel.textColor = palette.secondary
+        mushafText.toolTip = quranReaderText("mushaf.keys")
+    }
+
+    private func applyMushafSelectionHighlight() {
+        guard let storage = mushafText?.textStorage else { return }
+        storage.removeAttribute(.backgroundColor,
+                                range: NSRange(location: 0, length: storage.length))
+        guard let hit = mushafRanges.first(where: {
+            $0.verse.suraNumber == selectedSurah && $0.verse.ayahNumber == selectedAyah
+        }) else { return }
+        storage.addAttribute(.backgroundColor,
+                             value: NSColor.appGreenAccent.withAlphaComponent(0.16),
+                             range: hit.range)
+    }
+
+    fileprivate func handleMushafKey(_ event: NSEvent) -> Bool {
+        guard isMushaf else { return false }
+        switch event.keyCode {
+        case 123: movePage(by: 1)                 // ← next page (RTL book order)
+        case 124: movePage(by: -1)                // → previous page
+        case 121, 49: movePage(by: 1)             // page-down, space
+        case 116: movePage(by: -1)                // page-up
+        case 115: goToPage(1)                     // home
+        case 119: goToPage(totalPages)            // end
+        default: return false
+        }
+        return true
+    }
+
+    fileprivate func handleMushafClick(at index: Int, clickCount: Int) {
+        guard let hit = mushafRanges.first(where: { NSLocationInRange(index, $0.range) })
+        else { return }
+        selectedSurah = hit.verse.suraNumber
+        selectedAyah = hit.verse.ayahNumber
+        persistLocator()
+        applyMushafSelectionHighlight()
+        updateBookmarkButton()
+        updateChrome()
+        syncSidebarSelection()
+        if clickCount >= 2 { showMushafVerseDetails(hit.verse, range: hit.range) }
+    }
+
+    /// Double-click detail popover: reference, translation of meanings (when
+    /// loaded), and its footnotes — the same information verse mode offers.
+    private func showMushafVerseDetails(_ verse: OfflineQuranVerse, range: NSRange) {
+        guard let layoutManager = mushafText.layoutManager,
+              let container = mushafText.textContainer else { return }
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: range,
+                                                  actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: container)
+        rect.origin.x += mushafText.textContainerOrigin.x
+        rect.origin.y += mushafText.textContainerOrigin.y
+
+        var body = "\(verse.suraNameArabic) (\(verse.suraNameEnglish)) · "
+            + "\(localizedInterfaceDigits(String(verse.suraNumber))):\(localizedInterfaceDigits(String(verse.ayahNumber)))"
+            + " · \(quranReaderText("juz")) \(localizedInterfaceDigits(String(verse.jozz)))"
+        if edition == "hafs",
+           let translated = translations["\(verse.suraNumber):\(verse.ayahNumber)"] {
+            body += "\n\n\(translated.text)"
+            if !translated.footnotes.isEmpty {
+                body += "\n\n\(quranReaderText("notes")):\n\(translated.footnotes)"
+            }
+            body += "\n\n\(quranReaderText("translation")) · \(currentTranslation.title) · v\(currentTranslation.version) · QuranEnc.com"
+        } else if edition == "hafs" {
+            body += "\n\n\(quranReaderText("show.translation")) — \(quranReaderText("reader.settings"))"
+        } else {
+            body += "\n\n\(quranReaderText("hafs.only"))"
+        }
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let controller = NSViewController()
+        let text = NSTextView(frame: NSRect(x: 0, y: 0, width: 360, height: 220))
+        text.isEditable = false
+        text.isSelectable = true
+        text.drawsBackground = false
+        text.textContainerInset = NSSize(width: 14, height: 14)
+        text.font = Localizer.shared.font(size: 13)
+        text.baseWritingDirection = currentTranslation.isRTL || Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        text.string = body
+        controller.view = text
+        controller.preferredContentSize = NSSize(width: 360, height: 220)
+        popover.contentViewController = controller
+        popover.show(relativeTo: rect, of: mushafText, preferredEdge: .maxY)
     }
 
     // MARK: - reading preferences popover
@@ -13425,12 +13818,14 @@ final class QuranViewController: NSViewController, MainTabContent,
         paletteSwatches.forEach { $0.isSelectedSwatch = $0.paletteValue == swatch.paletteValue }
         applyPalette()
         tableView.reloadData()
+        if isMushaf { renderMushafPage() }
     }
 
     private func applyPalette() {
         guard backdrop != nil else { return }
         backdrop.palette = palette
         footer.palette = palette
+        mushafCard?.palette = palette
     }
 
     @objc private func layoutChanged(_ sender: NSSegmentedControl) {
@@ -13443,6 +13838,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         UserDefaults.standard.set(value, forKey: kQuranReaderTextScale)
         tableView.reloadData()
         noteAllHeights()
+        if isMushaf { renderMushafPage() }
     }
 
     @objc private func translationVisibilityChanged(_ sender: NSSwitch) {
@@ -13460,8 +13856,12 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     // MARK: - navigation
 
-    @objc private func previousVerse(_ sender: Any?) { moveVerse(by: -1) }
-    @objc private func nextVerse(_ sender: Any?) { moveVerse(by: 1) }
+    @objc private func previousVerse(_ sender: Any?) {
+        isMushaf ? movePage(by: -1) : moveVerse(by: -1)
+    }
+    @objc private func nextVerse(_ sender: Any?) {
+        isMushaf ? movePage(by: 1) : moveVerse(by: 1)
+    }
     private func moveVerse(by delta: Int) {
         guard !verses.isEmpty else { return }
         let current = verses.firstIndex { $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah }
@@ -13505,7 +13905,12 @@ final class QuranViewController: NSViewController, MainTabContent,
         let query = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if query.isEmpty {
             searchActive = false
-            rebuildVisibleVerses(scrollToSelection: false)
+            if isMushaf {
+                renderMushafPage()
+                updateChrome()
+            } else {
+                rebuildVisibleVerses(scrollToSelection: false)
+            }
             return
         }
         if let reference = parseQuranReference(query),
@@ -13516,8 +13921,21 @@ final class QuranViewController: NSViewController, MainTabContent,
             selectedAyah = match.ayahNumber
             searchActive = false
             persistLocator()
-            rebuildVisibleVerses(scrollToSelection: true)
+            if isMushaf {
+                goToPage(match.pageStart, keepSelection: true)
+            } else {
+                rebuildVisibleVerses(scrollToSelection: true)
+            }
             return
+        }
+        // Full-text results need the verse list; leave the Mushaf page for
+        // the result view and let the user switch back when done.
+        if isMushaf {
+            readerModeValue = "verses"
+            UserDefaults.standard.set(readerModeValue, forKey: kQuranReaderMode)
+            modeControl.selectedSegment = 0
+            scrollView.isHidden = false
+            mushafCard.isHidden = true
         }
         let normalized = normalizedQuranSearch(query)
         let generation = UUID()
@@ -13686,9 +14104,9 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         saveBookmarks()
         updateBookmarkButton()
-        if let row = visibleVerses.firstIndex(where: {
+        if !isMushaf, let row = visibleVerses.firstIndex(where: {
             $0.suraNumber == verse.suraNumber && $0.ayahNumber == verse.ayahNumber
-        }) {
+        }), row < tableView.numberOfRows {
             tableView.reloadData(forRowIndexes: IndexSet(integer: row),
                                  columnIndexes: IndexSet(integer: 0))
         }
