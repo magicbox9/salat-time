@@ -71,7 +71,7 @@ let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
 let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 
-let kAppVersion          = "3.9.0"
+let kAppVersion          = "3.10.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2139,7 +2139,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "Automatic text size", "popup.text.expand": "Expand reading area",
         "popup.text.collapse": "Restore controls", "adhkar.after_adhan": "Start after Adhan",
         "adhkar.after_adhan.immediate": "Immediately after Adhan",
-        "adhkar.after_adhan.minutes": "%d min after Adhan"
+        "adhkar.after_adhan.minutes": "%d min after Adhan",
+        "full.view.overview": "Overview", "full.view.timeline": "Day timeline",
+        "full.next_prayer": "Next prayer", "full.timeline.title": "Prayer rhythm today"
     ],
     "fr": [
         "full.open_more": "Plus de contrôles…", "full.nawafil": "Prières surérogatoires",
@@ -2159,7 +2161,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "Taille automatique", "popup.text.expand": "Agrandir la zone de lecture",
         "popup.text.collapse": "Rétablir les contrôles", "adhkar.after_adhan": "Commencer après l’Adhan",
         "adhkar.after_adhan.immediate": "Juste après l’Adhan",
-        "adhkar.after_adhan.minutes": "%d min après l’Adhan"
+        "adhkar.after_adhan.minutes": "%d min après l’Adhan",
+        "full.view.overview": "Vue d’ensemble", "full.view.timeline": "Chronologie du jour",
+        "full.next_prayer": "Prochaine prière", "full.timeline.title": "Rythme des prières aujourd’hui"
     ],
     "es": [
         "full.open_more": "Más controles…", "full.nawafil": "Oraciones voluntarias",
@@ -2179,7 +2183,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "Tamaño automático", "popup.text.expand": "Ampliar área de lectura",
         "popup.text.collapse": "Restaurar controles", "adhkar.after_adhan": "Comenzar después del Adhan",
         "adhkar.after_adhan.immediate": "Inmediatamente después del Adhan",
-        "adhkar.after_adhan.minutes": "%d min después del Adhan"
+        "adhkar.after_adhan.minutes": "%d min después del Adhan",
+        "full.view.overview": "Resumen", "full.view.timeline": "Cronología del día",
+        "full.next_prayer": "Próxima oración", "full.timeline.title": "Ritmo de oración de hoy"
     ],
     "ar": [
         "full.open_more": "مزيد من التحكم…", "full.nawafil": "صلوات النوافل",
@@ -2199,7 +2205,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "حجم تلقائي", "popup.text.expand": "توسيع مساحة القراءة",
         "popup.text.collapse": "إظهار عناصر التحكم", "adhkar.after_adhan": "البدء بعد الأذان",
         "adhkar.after_adhan.immediate": "مباشرة بعد الأذان",
-        "adhkar.after_adhan.minutes": "بعد الأذان بـ %d دقائق"
+        "adhkar.after_adhan.minutes": "بعد الأذان بـ %d دقائق",
+        "full.view.overview": "نظرة عامة", "full.view.timeline": "الخط الزمني لليوم",
+        "full.next_prayer": "الصلاة القادمة", "full.timeline.title": "نسق الصلوات اليوم"
     ],
     "zh": [
         "full.open_more": "更多控制…", "full.nawafil": "副功拜",
@@ -2219,7 +2227,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "自动文字大小", "popup.text.expand": "扩大阅读区域",
         "popup.text.collapse": "恢复控制", "adhkar.after_adhan": "宣礼后开始",
         "adhkar.after_adhan.immediate": "宣礼结束后立即开始",
-        "adhkar.after_adhan.minutes": "宣礼后 %d 分钟"
+        "adhkar.after_adhan.minutes": "宣礼后 %d 分钟",
+        "full.view.overview": "概览", "full.view.timeline": "全天时间线",
+        "full.next_prayer": "下一次礼拜", "full.timeline.title": "今日礼拜节奏"
     ],
     "hi": [
         "full.open_more": "और नियंत्रण…", "full.nawafil": "नफ़्ल नमाज़ें",
@@ -2239,7 +2249,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "स्वचालित पाठ आकार", "popup.text.expand": "पढ़ने का क्षेत्र बढ़ाएँ",
         "popup.text.collapse": "नियंत्रण वापस लाएँ", "adhkar.after_adhan": "अज़ान के बाद शुरू करें",
         "adhkar.after_adhan.immediate": "अज़ान के तुरंत बाद",
-        "adhkar.after_adhan.minutes": "अज़ान के %d मिनट बाद"
+        "adhkar.after_adhan.minutes": "अज़ान के %d मिनट बाद",
+        "full.view.overview": "अवलोकन", "full.view.timeline": "दिन की समयरेखा",
+        "full.next_prayer": "अगली नमाज़", "full.timeline.title": "आज की नमाज़ का क्रम"
     ],
     "bn": [
         "full.open_more": "আরও নিয়ন্ত্রণ…", "full.nawafil": "নফল নামাজ",
@@ -2259,7 +2271,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "স্বয়ংক্রিয় লেখার আকার", "popup.text.expand": "পাঠের স্থান বড় করুন",
         "popup.text.collapse": "নিয়ন্ত্রণ ফিরিয়ে আনুন", "adhkar.after_adhan": "আজানের পরে শুরু",
         "adhkar.after_adhan.immediate": "আজানের পরপরই",
-        "adhkar.after_adhan.minutes": "আজানের %d মিনিট পরে"
+        "adhkar.after_adhan.minutes": "আজানের %d মিনিট পরে",
+        "full.view.overview": "সারসংক্ষেপ", "full.view.timeline": "দিনের সময়রেখা",
+        "full.next_prayer": "পরবর্তী নামাজ", "full.timeline.title": "আজকের নামাজের ছন্দ"
     ],
     "ru": [
         "full.open_more": "Больше настроек…", "full.nawafil": "Дополнительные молитвы",
@@ -2279,7 +2293,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "Автоматический размер", "popup.text.expand": "Расширить область чтения",
         "popup.text.collapse": "Вернуть элементы управления", "adhkar.after_adhan": "Начать после азана",
         "adhkar.after_adhan.immediate": "Сразу после азана",
-        "adhkar.after_adhan.minutes": "Через %d мин после азана"
+        "adhkar.after_adhan.minutes": "Через %d мин после азана",
+        "full.view.overview": "Обзор", "full.view.timeline": "Распорядок дня",
+        "full.next_prayer": "Следующая молитва", "full.timeline.title": "Ритм молитв сегодня"
     ],
     "pt": [
         "full.open_more": "Mais controlos…", "full.nawafil": "Orações voluntárias",
@@ -2299,7 +2315,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "Tamanho automático", "popup.text.expand": "Ampliar área de leitura",
         "popup.text.collapse": "Restaurar controlos", "adhkar.after_adhan": "Começar após o Adhan",
         "adhkar.after_adhan.immediate": "Imediatamente após o Adhan",
-        "adhkar.after_adhan.minutes": "%d min após o Adhan"
+        "adhkar.after_adhan.minutes": "%d min após o Adhan",
+        "full.view.overview": "Visão geral", "full.view.timeline": "Cronologia do dia",
+        "full.next_prayer": "Próxima oração", "full.timeline.title": "Ritmo das orações de hoje"
     ],
     "ur": [
         "full.open_more": "مزید کنٹرول…", "full.nawafil": "نفل نمازیں",
@@ -2319,7 +2337,9 @@ private let featureTranslations: [String: [String: String]] = [
         "popup.text.automatic": "خودکار متن", "popup.text.expand": "مطالعہ کی جگہ بڑھائیں",
         "popup.text.collapse": "کنٹرول واپس لائیں", "adhkar.after_adhan": "اذان کے بعد شروع کریں",
         "adhkar.after_adhan.immediate": "اذان کے فوراً بعد",
-        "adhkar.after_adhan.minutes": "اذان کے %d منٹ بعد"
+        "adhkar.after_adhan.minutes": "اذان کے %d منٹ بعد",
+        "full.view.overview": "جائزہ", "full.view.timeline": "دن کی وقت بندی",
+        "full.next_prayer": "اگلی نماز", "full.timeline.title": "آج کی نمازوں کی ترتیب"
     ]
 ]
 
@@ -5244,9 +5264,316 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 // MARK: Full Adhan dashboard — prayer times + Nawafil guidance
 // ============================================================================
 
+/// Eight-point geometry is the one deliberate Moroccan signature in the full
+/// dashboard. It is drawn as a quiet lattice instead of using a decorative
+/// image so it remains crisp at every window size and never competes with the
+/// prayer information.
+private func zelligeStarPath(center: NSPoint, outer: CGFloat,
+                              inner: CGFloat) -> NSBezierPath {
+    let path = NSBezierPath()
+    for point in 0..<16 {
+        let angle = CGFloat(point) * .pi / 8 - .pi / 2
+        let radius = point.isMultiple(of: 2) ? outer : inner
+        let value = NSPoint(x: center.x + cos(angle) * radius,
+                            y: center.y + sin(angle) * radius)
+        point == 0 ? path.move(to: value) : path.line(to: value)
+    }
+    path.close()
+    return path
+}
+
+final class MoroccanPatternView: NSView {
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let ink = NSColor.appAccent.withAlphaComponent(isDark ? 0.085 : 0.048)
+        ink.setStroke()
+
+        var row = 0
+        var y: CGFloat = 28
+        while y < bounds.height + 30 {
+            var x: CGFloat = row.isMultiple(of: 2) ? 30 : 64
+            while x < bounds.width + 30 {
+                let star = zelligeStarPath(center: NSPoint(x: x, y: y),
+                                            outer: 12, inner: 5.2)
+                star.lineWidth = 0.7
+                star.stroke()
+
+                let diamond = NSBezierPath()
+                diamond.move(to: NSPoint(x: x + 22, y: y))
+                diamond.line(to: NSPoint(x: x + 30, y: y + 8))
+                diamond.line(to: NSPoint(x: x + 38, y: y))
+                diamond.line(to: NSPoint(x: x + 30, y: y - 8))
+                diamond.close()
+                diamond.lineWidth = 0.55
+                diamond.stroke()
+                x += 68
+            }
+            y += 54
+            row += 1
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+final class MoroccanHeroView: NSView {
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.16
+        layer?.shadowRadius = 9
+        layer?.shadowOffset = NSSize(width: 0, height: -2)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel(featureText("full.next_prayer"))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let cardRect = bounds.insetBy(dx: 1, dy: 1)
+        let card = NSBezierPath(roundedRect: cardRect, xRadius: 18, yRadius: 18)
+        let accent = currentAccentPair().light
+        let deepGreen = NSColor(red: 0.025, green: 0.19, blue: 0.135, alpha: 1)
+        NSGraphicsContext.saveGraphicsState()
+        card.addClip()
+        NSGradient(starting: accent, ending: deepGreen)?.draw(in: card, angle: 0)
+
+        NSColor.white.withAlphaComponent(0.10).setStroke()
+        var x = bounds.width * 0.56
+        while x < bounds.width + 30 {
+            var y: CGFloat = 12
+            while y < bounds.height + 24 {
+                let star = zelligeStarPath(center: NSPoint(x: x, y: y),
+                                            outer: 19, inner: 8)
+                star.lineWidth = 0.8
+                star.stroke()
+                y += 44
+            }
+            x += 48
+        }
+        NSGraphicsContext.restoreGraphicsState()
+
+        NSColor.white.withAlphaComponent(0.18).setStroke()
+        card.lineWidth = 0.8
+        card.stroke()
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+/// A 24-hour visualization that makes the relationship between the obligatory
+/// prayers and the Nawafil windows visible at a glance. The overview remains
+/// available for users who prefer a conventional list.
+final class PrayerDayTimelineView: NSView {
+    private let info: MosqueInfo
+    private let prayerNames: [String]
+
+    override var isFlipped: Bool { true }
+
+    init(frame: NSRect, info: MosqueInfo, prayerNames: [String]) {
+        self.info = info
+        self.prayerNames = prayerNames
+        super.init(frame: frame)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel(featureText("full.timeline.title"))
+        let summary = zip(prayerNames, info.times).map {
+            "\($0.0) \(displayTime($0.1))"
+        }.joined(separator: ", ")
+        setAccessibilityValue(summary)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func minute(_ hhmm: String) -> Int? {
+        let parts = hhmm.split(separator: ":")
+        guard parts.count == 2, let hour = Int(parts[0]),
+              let minute = Int(parts[1]) else { return nil }
+        return max(0, min(1439, hour * 60 + minute))
+    }
+
+    private func drawText(_ value: String, in rect: NSRect, size: CGFloat,
+                          weight: NSFont.Weight = .regular,
+                          color: NSColor = .labelColor,
+                          alignment: NSTextAlignment = .left,
+                          lineBreak: NSLineBreakMode = .byTruncatingTail) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        paragraph.lineBreakMode = lineBreak
+        paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        NSAttributedString(string: value, attributes: [
+            .font: Localizer.shared.font(size: size, weight: weight),
+            .foregroundColor: color,
+            .paragraphStyle: paragraph,
+        ]).draw(in: rect)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
+                                xRadius: 16, yRadius: 16)
+        (isDark ? NSColor(white: 1, alpha: 0.07)
+                : NSColor(white: 1, alpha: 0.86)).setFill()
+        card.fill()
+        (isDark ? NSColor.white.withAlphaComponent(0.13)
+                : NSColor.black.withAlphaComponent(0.10)).setStroke()
+        card.lineWidth = 0.7
+        card.stroke()
+
+        let leading = Localizer.shared.isRTL ? NSTextAlignment.right : .left
+        drawText(featureText("full.timeline.title"),
+                 in: NSRect(x: 22, y: 18, width: bounds.width - 44, height: 26),
+                 size: 18, weight: .semibold, alignment: leading)
+        drawText(featureText("full.guidance"),
+                 in: NSRect(x: 22, y: 46, width: bounds.width - 44, height: 18),
+                 size: 9.5, color: .secondaryLabelColor, alignment: leading)
+
+        let left: CGFloat = 38
+        let right: CGFloat = bounds.width - 38
+        let timelineWidth = max(1, right - left)
+        func xFor(_ value: Int) -> CGFloat {
+            left + timelineWidth * CGFloat(max(0, min(1440, value))) / 1440
+        }
+        func drawBand(from start: Int, to end: Int, color: NSColor,
+                      title: String, showsTitle: Bool = true) {
+            guard end > start else { return }
+            let rect = NSRect(x: xFor(start), y: 82,
+                              width: max(3, xFor(end) - xFor(start)), height: 25)
+            color.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
+            if showsTitle && rect.width > 44 {
+                drawText(title, in: rect.insetBy(dx: 5, dy: 5), size: 8.5,
+                         weight: .semibold,
+                         color: isDark ? .white : .labelColor,
+                         alignment: .center)
+            }
+        }
+
+        let fajr = info.times.indices.contains(0) ? minute(info.times[0]) : nil
+        let dhuhr = info.times.indices.contains(1) ? minute(info.times[1]) : nil
+        let maghrib = info.times.indices.contains(3) ? minute(info.times[3]) : nil
+        let isha = info.times.indices.contains(4) ? minute(info.times[4]) : nil
+        let shuruq = minute(info.shuruq)
+        let nightColor = NSColor.systemIndigo.withAlphaComponent(isDark ? 0.30 : 0.16)
+        if let fajr { drawBand(from: 0, to: fajr, color: nightColor,
+                               title: featureText("nawafil.qiyam"), showsTitle: fajr > 100) }
+        if let isha { drawBand(from: isha, to: 1440, color: nightColor,
+                               title: featureText("nawafil.qiyam")) }
+        if let shuruq, let dhuhr {
+            drawBand(from: min(1440, shuruq + 20), to: max(0, dhuhr - 10),
+                     color: NSColor.appAccent.withAlphaComponent(isDark ? 0.28 : 0.17),
+                     title: featureText("nawafil.duha"))
+        }
+
+        let lineY: CGFloat = 184
+        let line = NSBezierPath()
+        line.move(to: NSPoint(x: left, y: lineY))
+        line.line(to: NSPoint(x: right, y: lineY))
+        (isDark ? NSColor.white.withAlphaComponent(0.30)
+                : NSColor.black.withAlphaComponent(0.24)).setStroke()
+        line.lineWidth = 1.2
+        line.stroke()
+
+        let gold = NSColor(red: 0.79, green: 0.57, blue: 0.18, alpha: 1)
+        func rawatib(_ start: Int, _ end: Int) {
+            let rect = NSRect(x: xFor(max(0, start)), y: lineY - 12,
+                              width: max(3, xFor(min(1440, end)) - xFor(max(0, start))),
+                              height: 4)
+            gold.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
+        }
+        if let fajr { rawatib(fajr - 35, fajr - 5) }
+        if let dhuhr { rawatib(dhuhr - 50, dhuhr - 5); rawatib(dhuhr + 5, dhuhr + 30) }
+        if let maghrib { rawatib(maghrib + 5, maghrib + 32) }
+        if let isha { rawatib(isha + 5, isha + 35) }
+
+        var points: [(name: String, raw: String, minute: Int, sunrise: Bool)] = []
+        for index in 0..<min(5, info.times.count, prayerNames.count) {
+            if let value = minute(info.times[index]) {
+                points.append((prayerNames[index], info.times[index], value, false))
+            }
+        }
+        if let value = shuruq, !info.shuruq.isEmpty {
+            points.append((t("adhkar.editor.schedule.shuruq"), info.shuruq, value, true))
+        }
+        points.sort { $0.minute < $1.minute }
+
+        for (index, point) in points.enumerated() {
+            let x = xFor(point.minute)
+            let upper = !index.isMultiple(of: 2)
+            let stem = NSBezierPath()
+            stem.move(to: NSPoint(x: x, y: lineY))
+            stem.line(to: NSPoint(x: x, y: upper ? 132 : 214))
+            (point.sunrise ? gold : NSColor.appAccent).withAlphaComponent(0.78).setStroke()
+            stem.lineWidth = 1
+            stem.stroke()
+
+            let marker = NSBezierPath(ovalIn: NSRect(x: x - 4.5, y: lineY - 4.5,
+                                                     width: 9, height: 9))
+            (point.sunrise ? gold : NSColor.appAccent).setFill()
+            marker.fill()
+            let labelX = max(8, min(bounds.width - 98, x - 45))
+            let labelY: CGFloat = upper ? 112 : 220
+            drawText("\(point.name)\n\(displayTime(point.raw))",
+                     in: NSRect(x: labelX, y: labelY, width: 90, height: 38),
+                     size: 9.5, weight: .medium,
+                     color: point.sunrise ? gold : .labelColor,
+                     alignment: .center, lineBreak: .byWordWrapping)
+        }
+
+        for hour in stride(from: 0, through: 24, by: 6) {
+            let x = xFor(hour * 60)
+            let tick = NSBezierPath()
+            tick.move(to: NSPoint(x: x, y: lineY - 4))
+            tick.line(to: NSPoint(x: x, y: lineY + 4))
+            NSColor.secondaryLabelColor.setStroke()
+            tick.lineWidth = 0.7
+            tick.stroke()
+            let labelX = max(5, min(bounds.width - 39, x - 18))
+            drawText(String(format: "%02d:00", hour % 24),
+                     in: NSRect(x: labelX, y: 272, width: 36, height: 14),
+                     size: 8, color: .tertiaryLabelColor, alignment: .center)
+        }
+
+        gold.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 22, y: 310, width: 24, height: 4),
+                     xRadius: 2, yRadius: 2).fill()
+        drawText(featureText("nawafil.rawatib"),
+                 in: NSRect(x: 54, y: 303, width: bounds.width - 76, height: 18),
+                 size: 9.5, color: .secondaryLabelColor, alignment: leading)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
 final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private weak var appDelegate: AppDelegate?
     private var scrollView: NSScrollView!
+    private var modeControl: NSSegmentedControl!
+    private var displayMode = 0
+    private var lastRenderedWidth: CGFloat = 0
+
+    private typealias NawafilData = (title: String, count: String, window: String,
+                                     best: String, source: String)
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -5257,6 +5584,19 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     override func loadView() {
         let root = NSView()
+        modeControl = NSSegmentedControl(labels: [featureText("full.view.overview"),
+                                                  featureText("full.view.timeline")],
+                                         trackingMode: .selectOne,
+                                         target: self,
+                                         action: #selector(modeChanged(_:)))
+        modeControl.segmentStyle = .texturedRounded
+        modeControl.selectedSegment = displayMode
+        modeControl.setWidth(150, forSegment: 0)
+        modeControl.setWidth(150, forSegment: 1)
+        modeControl.translatesAutoresizingMaskIntoConstraints = false
+        modeControl.setAccessibilityLabel(t("main.tab.prayer_times"))
+        root.addSubview(modeControl)
+
         scrollView = NSScrollView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -5265,123 +5605,225 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         if Localizer.shared.isRTL { scrollView.userInterfaceLayoutDirection = .rightToLeft }
         root.addSubview(scrollView)
         NSLayoutConstraint.activate([
+            modeControl.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
+            modeControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            modeControl.widthAnchor.constraint(equalToConstant: 300),
+            modeControl.heightAnchor.constraint(equalToConstant: 30),
+
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
+            scrollView.topAnchor.constraint(equalTo: modeControl.bottomAnchor, constant: 8),
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         self.view = root
         rebuild()
     }
 
-    func tabDidActivate() { rebuild() }
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        guard scrollView != nil else { return }
+        let width = max(760, scrollView.contentSize.width)
+        if abs(width - lastRenderedWidth) > 2 { rebuild() }
+    }
+
+    func tabDidActivate() {
+        modeControl?.setLabel(featureText("full.view.overview"), forSegment: 0)
+        modeControl?.setLabel(featureText("full.view.timeline"), forSegment: 1)
+        rebuild()
+    }
+
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        displayMode = max(0, sender.selectedSegment)
+        rebuild()
+        scrollView.contentView.scroll(to: .zero)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
 
     private func rebuild() {
         guard scrollView != nil else { return }
-        let width: CGFloat = 960
-        let body = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 850))
+        let width = max(760, scrollView.contentSize.width)
+        lastRenderedWidth = width
+        let bodyHeight: CGFloat = displayMode == 0 ? 1035 : 1085
+        let body = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: bodyHeight))
+        body.autoresizingMask = [.width]
         scrollView.documentView = body
         guard let app = appDelegate else { return }
-        let isRTL = Localizer.shared.isRTL
+        let contentWidth = min(856, max(680, width - 64))
+        let contentX = (width - contentWidth) / 2
 
-        func label(_ text: String, frame: NSRect, size: CGFloat,
-                   weight: NSFont.Weight = .regular,
-                   color: NSColor = .labelColor,
-                   alignment: NSTextAlignment? = nil) -> NSTextField {
-            let field = NSTextField(labelWithString: text)
-            field.frame = frame
-            field.font = Localizer.shared.font(size: size, weight: weight)
-            field.textColor = color
-            field.alignment = alignment ?? (isRTL ? .right : .left)
-            field.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
-            field.lineBreakMode = .byTruncatingTail
-            return field
+        let pattern = MoroccanPatternView(frame: body.bounds)
+        pattern.autoresizingMask = [.width, .height]
+        body.addSubview(pattern)
+
+        if displayMode == 0 {
+            buildOverview(in: body, app: app, x: contentX, width: contentWidth)
+        } else {
+            buildTimeline(in: body, app: app, x: contentX, width: contentWidth)
         }
+    }
 
-        let heading = label(t("main.tab.prayer_times"),
-                            frame: NSRect(x: 80, y: 22, width: 800, height: 30),
-                            size: 22, weight: .bold)
-        body.addSubview(heading)
+    private func dashboardLabel(_ text: String, frame: NSRect, size: CGFloat,
+                                weight: NSFont.Weight = .regular,
+                                color: NSColor = .labelColor,
+                                alignment: NSTextAlignment? = nil,
+                                wrapping: Bool = false) -> NSTextField {
+        let isRTL = Localizer.shared.isRTL
+        let field = wrapping ? NSTextField(wrappingLabelWithString: text)
+                             : NSTextField(labelWithString: text)
+        field.frame = frame
+        field.font = Localizer.shared.font(size: size, weight: weight)
+        field.textColor = color
+        field.alignment = alignment ?? (isRTL ? .right : .left)
+        field.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+        field.lineBreakMode = wrapping ? .byWordWrapping : .byTruncatingTail
+        if wrapping { field.maximumNumberOfLines = 2 }
+        return field
+    }
 
-        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        let mosque = label(mosqueName, frame: NSRect(x: 80, y: 50, width: 800, height: 18),
-                           size: 11, color: .secondaryLabelColor)
-        body.addSubview(mosque)
+    private func localizedLongDate() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: Localizer.shared.current.code)
+        formatter.dateStyle = .full
+        formatter.timeStyle = .none
+        return formatter.string(from: Date())
+    }
 
-        let prayerCard = AdaptiveCardView(frame: NSRect(x: 80, y: 76, width: 800, height: 282))
-        prayerCard.addsDepth = true
-        body.addSubview(prayerCard)
-
-        let headerFields = [
-            label(t("col.prayer"), frame: NSRect(x: 20, y: 13, width: 250, height: 18),
-                  size: 10, weight: .semibold, color: .secondaryLabelColor),
-            label(t("col.adhan"), frame: NSRect(x: 340, y: 13, width: 120, height: 18),
-                  size: 10, weight: .semibold, color: .secondaryLabelColor),
-            label(t("col.iqama"), frame: NSRect(x: 520, y: 13, width: 120, height: 18),
-                  size: 10, weight: .semibold, color: .secondaryLabelColor),
-        ]
-        headerFields.forEach { prayerCard.addSubview($0) }
-        let topSep = NSBox(frame: NSRect(x: 16, y: 41, width: 768, height: 1))
-        topSep.boxType = .separator
-        prayerCard.addSubview(topSep)
-
+    private func buildOverview(in body: NSView, app: AppDelegate,
+                               x: CGFloat, width: CGFloat) {
+        let isRTL = Localizer.shared.isRTL
         let nextIndex = app.info.times.count >= 5 ? app.nextPrayer().index : -1
-        for i in 0..<5 {
-            let rowY = 42 + CGFloat(i) * 48
-            if i == nextIndex {
+        let validNext = (0..<5).contains(nextIndex)
+        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
+        let nextName = validNext ? app.localizedPrayerName(at: nextIndex) : "—"
+        let nextRaw = validNext && app.info.times.indices.contains(nextIndex)
+                    ? app.info.times[nextIndex] : ""
+        let nextTime = nextRaw.isEmpty ? "—" : displayTime(nextRaw)
+        let iqamaRaw = validNext ? (app.iqamaTimeAt(nextIndex) ?? "") : ""
+
+        let hero = MoroccanHeroView(frame: NSRect(x: x, y: 22, width: width, height: 166))
+        body.addSubview(hero)
+        let primaryX = isRTL ? width * 0.40 : 26
+        let primaryWidth = width * 0.54
+        let timeX = isRTL ? 26 : width * 0.66
+        let timeWidth = width * 0.28
+        hero.addSubview(dashboardLabel(mosqueName,
+            frame: NSRect(x: primaryX, y: 18, width: primaryWidth, height: 20),
+            size: 11, weight: .medium, color: NSColor.white.withAlphaComponent(0.82)))
+        hero.addSubview(dashboardLabel(featureText("full.next_prayer").uppercased(),
+            frame: NSRect(x: primaryX, y: 54, width: primaryWidth, height: 16),
+            size: 9.5, weight: .bold, color: NSColor.white.withAlphaComponent(0.72)))
+        hero.addSubview(dashboardLabel(nextName,
+            frame: NSRect(x: primaryX, y: 72, width: primaryWidth, height: 34),
+            size: 25, weight: .bold, color: .white))
+        hero.addSubview(dashboardLabel(localizedLongDate(),
+            frame: NSRect(x: primaryX, y: 124, width: primaryWidth, height: 18),
+            size: 10.5, color: NSColor.white.withAlphaComponent(0.74)))
+
+        let time = dashboardLabel(nextTime,
+            frame: NSRect(x: timeX, y: 53, width: timeWidth, height: 52),
+            size: 38, weight: .semibold, color: .white, alignment: .center)
+        time.font = NSFont.monospacedDigitSystemFont(ofSize: 38, weight: .semibold)
+        hero.addSubview(time)
+        let iqamaText = iqamaRaw.isEmpty ? t("col.adhan")
+            : "\(t("col.iqama")) · \(displayTime(iqamaRaw))"
+        hero.addSubview(dashboardLabel(iqamaText,
+            frame: NSRect(x: timeX, y: 111, width: timeWidth, height: 18),
+            size: 10, weight: .medium,
+            color: NSColor.white.withAlphaComponent(0.76), alignment: .center))
+
+        body.addSubview(dashboardLabel(t("main.tab.prayer_times"),
+            frame: NSRect(x: x, y: 215, width: width, height: 28),
+            size: 20, weight: .bold))
+
+        let gap: CGFloat = 10
+        let tileWidth = (width - gap * 4) / 5
+        for index in 0..<5 {
+            let tileX = x + CGFloat(index) * (tileWidth + gap)
+            let card = AdaptiveCardView(frame: NSRect(x: tileX, y: 252,
+                                                       width: tileWidth, height: 128))
+            card.cornerRadius = 14
+            card.addsDepth = index == nextIndex
+            body.addSubview(card)
+            if index == nextIndex {
                 let pair = currentAccentPair()
-                let highlight = AdaptiveBackgroundView(
-                    frame: NSRect(x: 10, y: rowY + 3, width: 780, height: 42),
-                    light: pair.light.withAlphaComponent(0.12),
-                    dark: pair.dark.withAlphaComponent(0.20), radius: 9)
-                prayerCard.addSubview(highlight)
+                card.addSubview(AdaptiveBackgroundView(frame: card.bounds,
+                    light: pair.light.withAlphaComponent(0.13),
+                    dark: pair.dark.withAlphaComponent(0.18), radius: 14))
             }
-            if i > 0 {
-                let sep = NSBox(frame: NSRect(x: 16, y: rowY, width: 768, height: 1))
-                sep.boxType = .separator
-                prayerCard.addSubview(sep)
-            }
+            let content = FlippedView(frame: card.bounds)
+            content.autoresizingMask = [.width, .height]
+            card.addSubview(content)
 
-            let name = label(app.localizedPrayerName(at: i),
-                             frame: NSRect(x: 20, y: rowY + 14, width: 250, height: 22),
-                             size: 15, weight: i == nextIndex ? .semibold : .medium,
-                             color: i == nextIndex ? .appGreenAccent : .labelColor)
-            prayerCard.addSubview(name)
-
-            let adhanRaw = app.info.times.indices.contains(i) ? app.info.times[i] : ""
-            let adhan = label(adhanRaw.isEmpty ? "—" : displayTime(adhanRaw),
-                              frame: NSRect(x: 340, y: rowY + 12, width: 130, height: 24),
-                              size: 16, weight: .semibold,
-                              color: i == nextIndex ? .appGreenAccent : .labelColor)
-            adhan.font = NSFont.monospacedDigitSystemFont(ofSize: 16, weight: .semibold)
-            prayerCard.addSubview(adhan)
-
-            let iqamaRaw = app.iqamaTimeAt(i) ?? ""
-            let iqama = label(iqamaRaw.isEmpty ? "—" : displayTime(iqamaRaw),
-                              frame: NSRect(x: 520, y: rowY + 13, width: 130, height: 22),
-                              size: 14, color: .secondaryLabelColor)
-            iqama.font = NSFont.monospacedDigitSystemFont(ofSize: 14, weight: .regular)
-            prayerCard.addSubview(iqama)
-
-            let mode = NSButton(frame: NSRect(x: isRTL ? 20 : 744,
-                                              y: rowY + 9, width: 32, height: 30))
+            let mode = NSButton(frame: NSRect(x: isRTL ? 7 : tileWidth - 39,
+                                              y: 6, width: 32, height: 32))
             mode.isBordered = false
             mode.title = ""
-            mode.tag = i
+            mode.tag = index
             mode.target = app
             mode.action = #selector(AppDelegate.adhanModeButtonTapped(_:))
             mode.imagePosition = .imageOnly
-            mode.focusRingType = .none
-            app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(i))
-            prayerCard.addSubview(mode)
+            mode.focusRingType = .default
+            app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(index))
+            content.addSubview(mode)
+
+            let nameX: CGFloat = isRTL ? 42 : 12
+            content.addSubview(dashboardLabel(app.localizedPrayerName(at: index),
+                frame: NSRect(x: nameX, y: 13, width: tileWidth - 54, height: 21),
+                size: 13, weight: .semibold,
+                color: index == nextIndex ? .appGreenAccent : .labelColor))
+            let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
+            let adhan = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
+                frame: NSRect(x: 12, y: 47, width: tileWidth - 24, height: 31),
+                size: 22, weight: .semibold,
+                color: index == nextIndex ? .appGreenAccent : .labelColor,
+                alignment: .center)
+            adhan.font = NSFont.monospacedDigitSystemFont(ofSize: 22, weight: .semibold)
+            content.addSubview(adhan)
+            let iqama = app.iqamaTimeAt(index).map(displayTime) ?? "—"
+            content.addSubview(dashboardLabel("\(t("col.iqama")) · \(iqama)",
+                frame: NSRect(x: 8, y: 94, width: tileWidth - 16, height: 18),
+                size: 9.5, color: .secondaryLabelColor, alignment: .center))
         }
-        if isRTL { applyRTL(prayerCard) }
 
-        let nawafilHeading = label(featureText("full.nawafil"),
-                                   frame: NSRect(x: 80, y: 388, width: 800, height: 28),
-                                   size: 20, weight: .bold)
-        body.addSubview(nawafilHeading)
+        body.addSubview(dashboardLabel(featureText("full.nawafil"),
+            frame: NSRect(x: x, y: 412, width: width, height: 28),
+            size: 20, weight: .bold))
+        let rows = nawafilData(app: app)
+        for (index, row) in rows.enumerated() {
+            addNawafilRow(to: body,
+                          frame: NSRect(x: x, y: 450 + CGFloat(index) * 128,
+                                        width: width, height: 116), data: row)
+        }
+        addGuidance(to: body, frame: NSRect(x: x, y: 972, width: width, height: 34))
+    }
 
+    private func buildTimeline(in body: NSView, app: AppDelegate,
+                               x: CGFloat, width: CGFloat) {
+        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
+        body.addSubview(dashboardLabel(t("main.tab.prayer_times"),
+            frame: NSRect(x: x, y: 20, width: width, height: 30),
+            size: 22, weight: .bold))
+        body.addSubview(dashboardLabel("\(mosqueName) · \(localizedLongDate())",
+            frame: NSRect(x: x, y: 50, width: width, height: 18),
+            size: 10.5, color: .secondaryLabelColor))
+        let names = (0..<5).map { app.localizedPrayerName(at: $0) }
+        body.addSubview(PrayerDayTimelineView(
+            frame: NSRect(x: x, y: 84, width: width, height: 342),
+            info: app.info, prayerNames: names))
+
+        body.addSubview(dashboardLabel(featureText("full.nawafil"),
+            frame: NSRect(x: x, y: 458, width: width, height: 28),
+            size: 20, weight: .bold))
+        let rows = nawafilData(app: app)
+        for (index, row) in rows.enumerated() {
+            addNawafilRow(to: body,
+                          frame: NSRect(x: x, y: 496 + CGFloat(index) * 128,
+                                        width: width, height: 116), data: row)
+        }
+        addGuidance(to: body, frame: NSRect(x: x, y: 1018, width: width, height: 34))
+    }
+
+    private func nawafilData(app: AppDelegate) -> [NawafilData] {
         let duhaWindow: String = {
             guard !app.info.shuruq.isEmpty, app.info.times.indices.contains(1) else { return "—" }
             return "\(displayTime(app.addMinutes(to: app.info.shuruq, minutes: 20))) – "
@@ -5391,12 +5833,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             guard app.info.times.indices.contains(4), app.info.times.indices.contains(0) else { return "—" }
             return "\(displayTime(app.info.times[4])) – \(displayTime(app.info.times[0]))"
         }()
-        let finalThird = lastThirdStart(using: app.info)
-        let finalThirdBest = finalThird.map {
+        let finalThirdBest = lastThirdStart(using: app.info).map {
             "\(featureText("nawafil.qiyam.best")) · \(displayTime($0)) – \(displayTime(app.info.times[0]))"
         } ?? featureText("nawafil.qiyam.best")
-
-        let cards: [(String, String, String, String, String)] = [
+        return [
             (featureText("nawafil.rawatib"), featureText("nawafil.rawatib.count"),
              featureText("nawafil.rawatib.window"), featureText("nawafil.rawatib.best"),
              "Jāmiʿ at-Tirmidhī 415"),
@@ -5407,63 +5847,60 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             (featureText("nawafil.witr"), featureText("nawafil.witr.count"),
              nightWindow, featureText("nawafil.witr.best"), "Ṣaḥīḥ Muslim 752a"),
         ]
-        let cardFrames = [NSRect(x: 80, y: 430, width: 390, height: 164),
-                          NSRect(x: 490, y: 430, width: 390, height: 164),
-                          NSRect(x: 80, y: 610, width: 390, height: 164),
-                          NSRect(x: 490, y: 610, width: 390, height: 164)]
-        for (index, item) in cards.enumerated() {
-            addNawafilCard(to: body, frame: cardFrames[index], data: item)
-        }
-
-        let guidance = NSTextField(wrappingLabelWithString: featureText("full.guidance"))
-        guidance.frame = NSRect(x: 80, y: 798, width: 800, height: 34)
-        guidance.font = Localizer.shared.font(size: 10)
-        guidance.textColor = .tertiaryLabelColor
-        guidance.alignment = .center
-        guidance.maximumNumberOfLines = 2
-        body.addSubview(guidance)
     }
 
-    private func addNawafilCard(to parent: NSView, frame: NSRect,
-                                data: (String, String, String, String, String)) {
+    private func addNawafilRow(to parent: NSView, frame: NSRect, data: NawafilData) {
         let isRTL = Localizer.shared.isRTL
         let card = AdaptiveCardView(frame: frame)
-        card.addsDepth = true
+        card.cornerRadius = 13
         parent.addSubview(card)
+        let content = FlippedView(frame: card.bounds)
+        content.autoresizingMask = [.width, .height]
+        card.addSubview(content)
 
-        func field(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat,
-                   height: CGFloat, size: CGFloat, weight: NSFont.Weight = .regular,
-                   color: NSColor = .labelColor) -> NSTextField {
-            let value = NSTextField(wrappingLabelWithString: text)
-            value.frame = NSRect(x: x, y: y, width: width, height: height)
-            value.font = Localizer.shared.font(size: size, weight: weight)
-            value.textColor = color
-            value.alignment = isRTL ? .right : .left
-            value.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
-            value.maximumNumberOfLines = 2
-            return value
-        }
-
-        card.addSubview(field(data.0, x: 16, y: 12, width: 215, height: 25,
-                              size: 16, weight: .semibold))
-        card.addSubview(field(data.1, x: 236, y: 14, width: 138, height: 20,
-                              size: 11, weight: .medium, color: .appGreenAccent))
-        let sep = NSBox(frame: NSRect(x: 14, y: 43, width: 362, height: 1))
+        let countWidth: CGFloat = 160
+        let titleX: CGFloat = isRTL ? countWidth + 18 : 18
+        let countX: CGFloat = isRTL ? 18 : frame.width - countWidth - 18
+        content.addSubview(dashboardLabel(data.title,
+            frame: NSRect(x: titleX, y: 12,
+                          width: frame.width - countWidth - 54, height: 23),
+            size: 15, weight: .semibold))
+        content.addSubview(dashboardLabel(data.count,
+            frame: NSRect(x: countX, y: 14, width: countWidth, height: 19),
+            size: 10.5, weight: .semibold, color: .appGreenAccent,
+            alignment: isRTL ? .left : .right))
+        let sep = NSBox(frame: NSRect(x: 16, y: 42, width: frame.width - 32, height: 1))
         sep.boxType = .separator
-        card.addSubview(sep)
-        card.addSubview(field(featureText("full.window"), x: 16, y: 52,
-                              width: 358, height: 15, size: 9, weight: .semibold,
-                              color: .tertiaryLabelColor))
-        card.addSubview(field(data.2, x: 16, y: 68, width: 358, height: 35,
-                              size: 11, color: .secondaryLabelColor))
-        card.addSubview(field(featureText("full.best"), x: 16, y: 105,
-                              width: 358, height: 15, size: 9, weight: .semibold,
-                              color: .tertiaryLabelColor))
-        card.addSubview(field(data.3, x: 16, y: 121, width: 358, height: 25,
-                              size: 11, color: .secondaryLabelColor))
-        card.addSubview(field(data.4, x: 16, y: 146, width: 358, height: 14,
-                              size: 9, color: .tertiaryLabelColor))
-        if isRTL { applyRTL(card) }
+        content.addSubview(sep)
+
+        let columnGap: CGFloat = 30
+        let columnWidth = (frame.width - 36 - columnGap) / 2
+        let firstX: CGFloat = isRTL ? 18 + columnWidth + columnGap : 18
+        let secondX: CGFloat = isRTL ? 18 : 18 + columnWidth + columnGap
+        content.addSubview(dashboardLabel(featureText("full.window").uppercased(),
+            frame: NSRect(x: firstX, y: 52, width: columnWidth, height: 14),
+            size: 8.5, weight: .bold, color: .tertiaryLabelColor))
+        content.addSubview(dashboardLabel(data.window,
+            frame: NSRect(x: firstX, y: 68, width: columnWidth, height: 28),
+            size: 10.5, color: .secondaryLabelColor, wrapping: true))
+        content.addSubview(dashboardLabel(featureText("full.best").uppercased(),
+            frame: NSRect(x: secondX, y: 52, width: columnWidth, height: 14),
+            size: 8.5, weight: .bold, color: .tertiaryLabelColor))
+        content.addSubview(dashboardLabel(data.best,
+            frame: NSRect(x: secondX, y: 68, width: columnWidth, height: 28),
+            size: 10.5, color: .secondaryLabelColor, wrapping: true))
+        content.addSubview(dashboardLabel(data.source,
+            frame: NSRect(x: 18, y: 100, width: frame.width - 36, height: 13),
+            size: 8.5, color: .tertiaryLabelColor,
+            alignment: isRTL ? .right : .left))
+    }
+
+    private func addGuidance(to parent: NSView, frame: NSRect) {
+        let guidance = dashboardLabel(featureText("full.guidance"), frame: frame,
+                                       size: 9.5, color: .tertiaryLabelColor,
+                                       alignment: .center, wrapping: true)
+        guidance.maximumNumberOfLines = 2
+        parent.addSubview(guidance)
     }
 
     private func lastThirdStart(using info: MosqueInfo) -> String? {
