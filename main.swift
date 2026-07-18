@@ -113,8 +113,9 @@ let kQuranReaderLayout           = "quranReaderLayout"
 let kQuranReaderTextScale        = "quranReaderTextScale"
 let kQuranTranslationVisible     = "quranTranslationVisible"
 let kQuranTranslationKey         = "quranTranslationKey"
+let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 
-let kAppVersion          = "3.19.1"
+let kAppVersion          = "3.20.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -11901,6 +11902,10 @@ private let quranReaderEnglish: [String: String] = [
     "exact.warsh": "Warsh · exact KFGQPC Uthmanic text",
     "offline": "Offline", "close": "Close", "unavailable": "Verified reader unavailable",
     "unavailable.detail": "A required verified Qur'an text or font resource is unavailable. Rebuild the app to restore it.",
+    "reader.settings": "Reading preferences", "riwaya": "Riwayah",
+    "text.size": "Text size", "theme": "Theme", "sidebar": "Show or hide surah list",
+    "surah.filter": "Filter surahs", "copy": "Copy verse", "juz": "Juz",
+    "results": "Search results", "meccan": "Meccan", "medinan": "Medinan",
 ]
 
 private let quranReaderArabic: [String: String] = [
@@ -11920,6 +11925,10 @@ private let quranReaderArabic: [String: String] = [
     "exact.warsh": "ورش · نص عثماني مطابق لمجمع الملك فهد",
     "offline": "دون اتصال", "close": "إغلاق", "unavailable": "القارئ الموثّق غير متاح",
     "unavailable.detail": "أحد موارد نص القرآن أو خطه الموثّق مفقود. أعد بناء التطبيق لاستعادته.",
+    "reader.settings": "تفضيلات القراءة", "riwaya": "الرواية",
+    "text.size": "حجم النص", "theme": "المظهر", "sidebar": "إظهار قائمة السور أو إخفاؤها",
+    "surah.filter": "تصفية السور", "copy": "نسخ الآية", "juz": "الجزء",
+    "results": "نتائج البحث", "meccan": "مكية", "medinan": "مدنية",
 ]
 
 private func quranReaderText(_ key: String) -> String {
@@ -11930,13 +11939,23 @@ private func quranReaderText(_ key: String) -> String {
                "background":"Arrière-plan", "reading.style":"Style de lecture",
                "flow":"Continu", "study":"Étude", "focus":"Focus",
                "ivory":"Ivoire", "sage":"Sauge", "night":"Nuit",
-               "no.results":"Aucun verset correspondant", "offline":"Hors ligne"],
+               "no.results":"Aucun verset correspondant", "offline":"Hors ligne",
+               "reader.settings":"Préférences de lecture", "riwaya":"Riwaya",
+               "text.size":"Taille du texte", "theme":"Thème", "juz":"Juz",
+               "sidebar":"Afficher ou masquer les sourates",
+               "surah.filter":"Filtrer les sourates", "copy":"Copier le verset",
+               "results":"Résultats de recherche"],
         "es": ["translation":"Traducción de los significados", "show.translation":"Mostrar traducción",
                "surah":"Sura", "search":"Buscar en árabe o escribir 2:255",
                "background":"Fondo", "reading.style":"Estilo de lectura",
                "flow":"Flujo", "study":"Estudio", "focus":"Enfoque",
                "ivory":"Marfil", "sage":"Salvia", "night":"Noche",
-               "no.results":"No hay aleyas coincidentes", "offline":"Sin conexión"],
+               "no.results":"No hay aleyas coincidentes", "offline":"Sin conexión",
+               "reader.settings":"Preferencias de lectura", "riwaya":"Riwaya",
+               "text.size":"Tamaño del texto", "theme":"Tema", "juz":"Yuz",
+               "sidebar":"Mostrar u ocultar las suras",
+               "surah.filter":"Filtrar suras", "copy":"Copiar aleya",
+               "results":"Resultados de búsqueda"],
         "pt": ["translation":"Tradução dos significados", "show.translation":"Mostrar tradução",
                "surah":"Surata", "search":"Pesquisar em árabe ou escrever 2:255",
                "background":"Fundo", "reading.style":"Estilo de leitura",
@@ -12072,103 +12091,308 @@ private final class QuranReadingBackdropView: NSView {
     }
 }
 
-private final class QuranReaderHeroView: NSView {
-    let titleLabel = NSTextField(labelWithString: "")
-    let subtitleLabel = NSTextField(labelWithString: "")
-    let progressLabel = NSTextField(labelWithString: "")
-    var palette: QuranReaderPalette = .ivory { didSet { updateColors(); needsDisplay = true } }
+/// Circular theme swatch inside the reading-preferences popover — the same
+/// pattern the Settings accent picker uses, so themes read as colors instead
+/// of words.
+private final class QuranPaletteSwatchButton: NSButton {
+    let paletteValue: QuranReaderPalette
+    var isSelectedSwatch = false { didSet { needsDisplay = true } }
+
+    init(palette: QuranReaderPalette, target: AnyObject?, action: Selector) {
+        paletteValue = palette
+        super.init(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
+        self.target = target
+        self.action = action
+        isBordered = false
+        title = ""
+        setButtonType(.momentaryChange)
+        let name = ["ivory", "sage", "night"][palette.rawValue]
+        toolTip = quranReaderText(name)
+        setAccessibilityLabel(quranReaderText(name))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 5, dy: 5))
+        paletteValue.background.setFill()
+        circle.fill()
+        paletteValue.primary.withAlphaComponent(0.35).setStroke()
+        circle.lineWidth = 1
+        circle.stroke()
+        if isSelectedSwatch {
+            let ring = NSBezierPath(ovalIn: bounds.insetBy(dx: 1.5, dy: 1.5))
+            NSColor.appGreenAccent.setStroke()
+            ring.lineWidth = 2
+            ring.stroke()
+        }
+    }
+}
+
+/// Thin status bar under the reading surface: current juz/page position on
+/// one side, the verified-source line on the other, both palette-tinted.
+private final class QuranReaderFooterView: NSView {
+    let positionLabel = NSTextField(labelWithString: "")
+    let sourceLabel = NSTextField(labelWithString: "")
+    var palette: QuranReaderPalette = .ivory { didSet { applyPalette(); needsDisplay = true } }
     override var isFlipped: Bool { true }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        wantsLayer = true
-        titleLabel.font = Localizer.shared.font(size: 25, weight: .bold)
-        titleLabel.alignment = .center
-        titleLabel.maximumNumberOfLines = 1
-        subtitleLabel.font = Localizer.shared.font(size: 12, weight: .medium)
-        subtitleLabel.alignment = .center
-        progressLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
-        progressLabel.alignment = .center
-        for label in [titleLabel, subtitleLabel, progressLabel] {
+        positionLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        positionLabel.lineBreakMode = .byTruncatingTail
+        sourceLabel.font = Localizer.shared.font(size: 10.5, weight: .medium)
+        sourceLabel.lineBreakMode = .byTruncatingMiddle
+        sourceLabel.alignment = Localizer.shared.isRTL ? .left : .right
+        for label in [positionLabel, sourceLabel] {
             label.translatesAutoresizingMaskIntoConstraints = false
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             addSubview(label)
         }
+        positionLabel.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 20),
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 72),
-            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -72),
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 5),
-            subtitleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            progressLabel.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 7),
-            progressLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            positionLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            positionLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            sourceLabel.leadingAnchor.constraint(greaterThanOrEqualTo: positionLabel.trailingAnchor,
+                                                 constant: 16),
+            sourceLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+            sourceLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
-        updateColors()
+        applyPalette()
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    private func updateColors() {
-        titleLabel.textColor = palette.primary
-        subtitleLabel.textColor = palette.secondary
-        progressLabel.textColor = .appGreenAccent
+    private func applyPalette() {
+        positionLabel.textColor = palette.secondary
+        sourceLabel.textColor = palette.secondary.withAlphaComponent(0.85)
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 1, dy: 1)
-        let path = NSBezierPath(roundedRect: rect, xRadius: 20, yRadius: 20)
-        palette.surface.setFill()
-        path.fill()
+        palette.surface.withAlphaComponent(palette == .night ? 0.55 : 0.72).setFill()
+        bounds.fill()
         palette.divider.setStroke()
-        path.lineWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1.5 : 0.8
-        path.stroke()
-        palette.motif.setStroke()
-        for x in [CGFloat(38), bounds.width - 38] {
-            let motif = zelligeStarPath(center: NSPoint(x: x, y: bounds.midY), outer: 20, inner: 9)
-            motif.lineWidth = 1
-            motif.stroke()
-        }
+        let line = NSBezierPath()
+        line.move(to: NSPoint(x: 0, y: 0.5))
+        line.line(to: NSPoint(x: bounds.width, y: 0.5))
+        line.lineWidth = 1
+        line.stroke()
     }
 }
 
+/// One surah in the navigation sidebar: star-numbered medallion, Latin name
+/// with verse count, and the Arabic calligraphic name on the far side. The
+/// sidebar stays in system materials so it reads as native macOS chrome.
+private final class QuranSurahListRowView: NSTableCellView {
+    private let highlight = NSView()
+    private let numberLabel = NSTextField(labelWithString: "")
+    private let latinLabel = NSTextField(labelWithString: "")
+    private let metaLabel = NSTextField(labelWithString: "")
+    private let arabicNameLabel = NSTextField(labelWithString: "")
+    private var isCurrent = false
+    override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        highlight.wantsLayer = true
+        highlight.layer?.cornerRadius = 8
+        addSubview(highlight)
+        numberLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
+        numberLabel.alignment = .center
+        latinLabel.font = Localizer.shared.font(size: 12.5, weight: .semibold)
+        latinLabel.lineBreakMode = .byTruncatingTail
+        metaLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+        metaLabel.textColor = .tertiaryLabelColor
+        metaLabel.lineBreakMode = .byTruncatingTail
+        arabicNameLabel.font = Localizer.shared.font(size: 15, weight: .semibold)
+        arabicNameLabel.alignment = .right
+        for label in [numberLabel, latinLabel, metaLabel, arabicNameLabel] { addSubview(label) }
+        setAccessibilityElement(true)
+        setAccessibilityRole(.button)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    func configure(sura: Int, arabic: String, english: String, count: Int,
+                   isCurrent: Bool) {
+        self.isCurrent = isCurrent
+        numberLabel.stringValue = localizedInterfaceDigits(String(sura))
+        latinLabel.stringValue = english
+        metaLabel.stringValue = String(format: quranReaderText("verses"),
+                                       localizedInterfaceDigits(String(count)))
+        arabicNameLabel.stringValue = arabic
+        highlight.layer?.backgroundColor = isCurrent
+            ? NSColor.appGreenAccent.withAlphaComponent(0.16).cgColor
+            : NSColor.clear.cgColor
+        numberLabel.textColor = isCurrent ? .appGreenAccent : .secondaryLabelColor
+        latinLabel.textColor = .labelColor
+        arabicNameLabel.textColor = isCurrent ? .appGreenAccent : .labelColor
+        setAccessibilityLabel("\(sura) · \(english)")
+        needsLayout = true
+        needsDisplay = true
+    }
+
+    override func layout() {
+        super.layout()
+        let isRTL = Localizer.shared.isRTL
+        highlight.frame = bounds.insetBy(dx: 8, dy: 2)
+        let medallion: CGFloat = 26
+        let numberX: CGFloat = isRTL ? bounds.width - 16 - medallion : 16
+        numberLabel.frame = NSRect(x: numberX, y: (bounds.height - 16) / 2,
+                                   width: medallion, height: 16)
+        let textX: CGFloat = isRTL ? 16 : 16 + medallion + 8
+        let textW = bounds.width - medallion - 32 - 8
+        let arabicW: CGFloat = min(120, textW * 0.45)
+        let latinW = textW - arabicW - 6
+        let latinX = isRTL ? textX + arabicW + 6 : textX
+        latinLabel.frame = NSRect(x: latinX, y: 9, width: latinW, height: 17)
+        metaLabel.frame = NSRect(x: latinX, y: 27, width: latinW, height: 14)
+        arabicNameLabel.frame = NSRect(x: isRTL ? textX : textX + latinW + 6,
+                                       y: (bounds.height - 22) / 2,
+                                       width: arabicW, height: 22)
+        arabicNameLabel.alignment = isRTL ? .left : .right
+        latinLabel.alignment = isRTL ? .right : .left
+        metaLabel.alignment = isRTL ? .right : .left
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard isCurrent else { return }
+        NSColor.appGreenAccent.withAlphaComponent(0.85).setStroke()
+        let star = zelligeStarPath(center: NSPoint(x: numberLabel.frame.midX,
+                                                   y: bounds.midY),
+                                   outer: 13, inner: 10)
+        star.lineWidth = 1
+        star.stroke()
+    }
+}
+
+/// Traditional ayah-end medallion: an eight-pointed rosette with the verse
+/// number inside, echoing printed Mushaf ornamentation. Highlights with the
+/// app accent when it marks the reader's current verse.
 private final class QuranVerseNumberView: NSView {
     var value = "" { didSet { needsDisplay = true; setAccessibilityLabel(value) } }
     var palette: QuranReaderPalette = .ivory { didSet { needsDisplay = true } }
+    var isCurrent = false { didSet { needsDisplay = true } }
     override var isFlipped: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
-        let rect = bounds.insetBy(dx: 5, dy: 5)
-        let outer = NSBezierPath(ovalIn: rect)
-        palette.motif.withAlphaComponent(0.95).setFill()
-        outer.fill()
-        palette.divider.withAlphaComponent(0.9).setStroke()
-        outer.lineWidth = 1
-        outer.stroke()
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let rosette = zelligeStarPath(center: center,
+                                      outer: min(bounds.width, bounds.height) / 2 - 3,
+                                      inner: min(bounds.width, bounds.height) / 2 - 7)
+        if isCurrent {
+            NSColor.appGreenAccent.withAlphaComponent(0.22).setFill()
+            rosette.fill()
+            NSColor.appGreenAccent.setStroke()
+        } else {
+            palette.motif.withAlphaComponent(0.85).setFill()
+            rosette.fill()
+            palette.divider.withAlphaComponent(0.9).setStroke()
+        }
+        rosette.lineWidth = 1
+        rosette.stroke()
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         NSAttributedString(string: value, attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: palette.primary, .paragraphStyle: paragraph,
+            .foregroundColor: isCurrent ? NSColor.appGreenAccent : palette.primary,
+            .paragraphStyle: paragraph,
         ]).draw(in: NSRect(x: 2, y: bounds.midY - 7, width: bounds.width - 4, height: 16))
     }
 }
 
+/// Strips only the Unicode presentation-form ayah markers (U+FC00–U+FDFF)
+/// that require the publisher font to render. No Qur'an letter, diacritic,
+/// or pause mark is touched.
+private func strippedAyahMarkers(_ text: String) -> String {
+    text.unicodeScalars
+        .filter { !(0xFC00...0xFDFF).contains($0.value) }
+        .map(String.init).joined()
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+/// Unbounded wrapping measurement for reader text. `localizedTextHeight` is
+/// built for one-or-two-line interface labels (it clamps to `maximumLines`
+/// and short-circuits for non-Arabic UI languages), which silently clipped
+/// long verses to a single line. The reader always needs the full wrapped
+/// height of Qur'an text and translations, in every interface language.
+private func quranWrappedTextHeight(_ text: String, font: NSFont, width: CGFloat,
+                                    lineSpacing: CGFloat) -> CGFloat {
+    guard !text.isEmpty else { return 0 }
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineBreakMode = .byWordWrapping
+    paragraph.lineSpacing = lineSpacing
+    let measured = (text as NSString).boundingRect(
+        with: NSSize(width: max(1, width), height: .greatestFiniteMagnitude),
+        options: [.usesLineFragmentOrigin, .usesFontLeading],
+        attributes: [.font: font, .paragraphStyle: paragraph])
+    return ceil(measured.height) + 4
+}
+
 private final class QuranVerseRowView: NSTableCellView {
-    private let surahHeader = NSTextField(labelWithString: "")
+    static let numberColumn: CGFloat = 56
+    static let headerHeight: CGFloat = 96
+    static func inset(for layout: QuranReaderLayout) -> CGFloat {
+        layout == .flow ? 34 : 46
+    }
+
+    /// Single source of truth for row height — `layout()` positions views
+    /// with exactly the same arithmetic so measured and drawn heights can
+    /// never drift apart.
+    static func expectedHeight(rowWidth: CGFloat,
+                               layout: QuranReaderLayout,
+                               arabicText: String, arabicFont: NSFont,
+                               translationText: String?, translationFont: NSFont,
+                               isSurahStart: Bool,
+                               bismillah: String?, bismillahFont: NSFont) -> CGFloat {
+        let inset = Self.inset(for: layout)
+        let contentWidth = max(280, rowWidth - inset * 2 - numberColumn)
+        var height: CGFloat = 12
+        if isSurahStart {
+            height += headerHeight + 12
+            if let bismillah, !bismillah.isEmpty {
+                height += quranWrappedTextHeight(bismillah, font: bismillahFont,
+                                                 width: contentWidth, lineSpacing: 0) + 10 + 14
+            }
+        }
+        height += quranWrappedTextHeight(arabicText, font: arabicFont,
+                                         width: contentWidth,
+                                         lineSpacing: layout == .flow ? 9 : 13) + 16 + 6
+        if let translationText, !translationText.isEmpty {
+            height += quranWrappedTextHeight(translationText, font: translationFont,
+                                             width: contentWidth, lineSpacing: 0) + 8 + 8
+        }
+        height += 40
+        height += layout == .flow ? 6 : 18
+        return height
+    }
+
+    private let surahNameLabel = NSTextField(labelWithString: "")
+    private let surahMetaLabel = NSTextField(labelWithString: "")
+    private let bismillahLabel = NSTextField(wrappingLabelWithString: "")
     private let arabicLabel = NSTextField(wrappingLabelWithString: "")
     private let translationLabel = NSTextField(wrappingLabelWithString: "")
     private let referenceLabel = NSTextField(labelWithString: "")
     private let numberView = QuranVerseNumberView()
     private let bookmarkImage = NSImageView()
     private var notesButton: HoverIconButton!
+    private var copyButton: HoverIconButton!
     private var notesHandler: (() -> Void)?
+    private var copyHandler: (() -> Void)?
     private var palette: QuranReaderPalette = .ivory
     private var layoutMode: QuranReaderLayout = .flow
     private var isSurahStart = false
+    private var isCurrent = false
+    private var headerRect = NSRect.zero
+    private var cardRect = NSRect.zero
     override var isFlipped: Bool { true }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        surahHeader.alignment = .center
-        surahHeader.maximumNumberOfLines = 1
+        surahNameLabel.alignment = .center
+        surahNameLabel.maximumNumberOfLines = 1
+        surahMetaLabel.alignment = .center
+        surahMetaLabel.maximumNumberOfLines = 1
+        bismillahLabel.maximumNumberOfLines = 0
+        bismillahLabel.alignment = .center
+        bismillahLabel.baseWritingDirection = .rightToLeft
         arabicLabel.maximumNumberOfLines = 0
         arabicLabel.isSelectable = true
         arabicLabel.baseWritingDirection = .rightToLeft
@@ -12177,11 +12401,15 @@ private final class QuranVerseRowView: NSTableCellView {
         referenceLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
         notesButton = HoverIconButton(symbol: "text.bubble", toolTip: quranReaderText("notes"),
                                       target: self, action: #selector(showNotes(_:)),
-                                      pointSize: 13, size: NSSize(width: 44, height: 44))
+                                      pointSize: 12.5, size: NSSize(width: 32, height: 32))
+        copyButton = HoverIconButton(symbol: "doc.on.doc", toolTip: quranReaderText("copy"),
+                                     target: self, action: #selector(copyVerse(_:)),
+                                     pointSize: 12.5, size: NSSize(width: 32, height: 32))
         bookmarkImage.image = templateSymbol("bookmark.fill", pointSize: 11, weight: .semibold)
         bookmarkImage.contentTintColor = .appGreenAccent
-        for child in [surahHeader, arabicLabel, translationLabel, referenceLabel,
-                      numberView, notesButton as NSView, bookmarkImage] {
+        for child in [surahNameLabel, surahMetaLabel, bismillahLabel, arabicLabel,
+                      translationLabel, referenceLabel, numberView,
+                      notesButton as NSView, copyButton as NSView, bookmarkImage] {
             addSubview(child)
         }
         setAccessibilityElement(true)
@@ -12190,67 +12418,81 @@ private final class QuranVerseRowView: NSTableCellView {
     required init?(coder: NSCoder) { fatalError() }
 
     func configure(verse: OfflineQuranVerse,
+                   renderedArabic: String,
+                   arabicFont: NSFont,
                    translation: QuranTranslationVerse?,
+                   translationFont: NSFont,
                    descriptor: QuranTranslationDescriptor?,
                    palette: QuranReaderPalette,
                    layout: QuranReaderLayout,
-                   textScale: CGFloat,
                    isSurahStart: Bool,
+                   surahMeta: String,
+                   bismillah: String?,
+                   bismillahFont: NSFont,
+                   referenceText: String,
                    isBookmarked: Bool,
-                   officialFont: NSFont?,
-                   onNotes: @escaping () -> Void) {
+                   isCurrent: Bool,
+                   onNotes: (() -> Void)?,
+                   onCopy: @escaping () -> Void) {
         self.palette = palette
         self.layoutMode = layout
         self.isSurahStart = isSurahStart
+        self.isCurrent = isCurrent
         self.notesHandler = onNotes
-        surahHeader.stringValue = Localizer.shared.isRTL
-            ? verse.suraNameArabic : "\(verse.suraNameArabic)  ·  \(verse.suraNameEnglish)"
-        surahHeader.font = Localizer.shared.font(size: 18, weight: .bold)
-        surahHeader.textColor = palette.primary
-        // With the publisher font present, the terminal KFG ayah marker is
-        // rendered exactly. The build is expected to bundle that verified font.
-        // A tightly-scoped fallback removes only the presentation marker and
-        // draws the separate, source-provided ayah number medallion.
-        let hasOfficialFont = officialFont != nil
-        let renderedArabic: String
-        if hasOfficialFont {
-            renderedArabic = verse.uthmanicText
-        } else {
-            renderedArabic = verse.uthmanicText.unicodeScalars
-                .filter { !(0xFC00...0xFDFF).contains($0.value) }
-                .map(String.init).joined()
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.copyHandler = onCopy
+
+        surahNameLabel.isHidden = !isSurahStart
+        surahMetaLabel.isHidden = !isSurahStart
+        surahNameLabel.stringValue = verse.suraNameArabic
+        surahNameLabel.font = Localizer.shared.font(size: 27, weight: .bold)
+        surahNameLabel.textColor = palette.primary
+        surahMetaLabel.stringValue = surahMeta
+        surahMetaLabel.font = Localizer.shared.font(size: 11.5, weight: .medium)
+        surahMetaLabel.textColor = palette.secondary
+        let showsBismillah = isSurahStart && bismillah?.isEmpty == false
+        bismillahLabel.isHidden = !showsBismillah
+        bismillahLabel.font = bismillahFont
+        if let bismillah, showsBismillah {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            paragraph.baseWritingDirection = .rightToLeft
+            paragraph.lineBreakMode = .byWordWrapping
+            bismillahLabel.attributedStringValue = NSAttributedString(
+                string: bismillah, attributes: [
+                    .font: bismillahFont,
+                    .foregroundColor: palette.primary.withAlphaComponent(0.92),
+                    .paragraphStyle: paragraph,
+                ])
         }
-        arabicLabel.stringValue = renderedArabic
-        arabicLabel.font = officialFont ?? NSFont(name: "Geeza Pro", size: 30 * textScale)
-            ?? Localizer.shared.font(size: 30 * textScale)
+
+        arabicLabel.font = arabicFont
         arabicLabel.alignment = layout == .focus ? .center : .right
-        arabicLabel.textColor = palette.primary
         let arabicParagraph = NSMutableParagraphStyle()
         arabicParagraph.alignment = arabicLabel.alignment
         arabicParagraph.baseWritingDirection = .rightToLeft
         arabicParagraph.lineBreakMode = .byWordWrapping
-        arabicParagraph.lineSpacing = layout == .flow ? 8 : 12
+        arabicParagraph.lineSpacing = layout == .flow ? 9 : 13
         arabicLabel.attributedStringValue = NSAttributedString(string: renderedArabic, attributes: [
-            .font: arabicLabel.font!, .foregroundColor: palette.primary,
+            .font: arabicFont, .foregroundColor: palette.primary,
             .paragraphStyle: arabicParagraph,
         ])
 
         translationLabel.stringValue = translation?.text ?? ""
         translationLabel.isHidden = translation == nil
-        translationLabel.font = Localizer.shared.font(size: 14.5 * min(1.2, textScale), weight: .regular)
+        translationLabel.font = translationFont
         translationLabel.textColor = palette.secondary
         translationLabel.baseWritingDirection = descriptor?.isRTL == true ? .rightToLeft : .leftToRight
         translationLabel.alignment = layout == .focus ? .center
             : (descriptor?.isRTL == true ? .right : .left)
-        referenceLabel.stringValue = "\(localizedInterfaceDigits(String(verse.suraNumber))):\(localizedInterfaceDigits(String(verse.ayahNumber)))  ·  Juz \(localizedInterfaceDigits(String(verse.jozz)))"
-        referenceLabel.textColor = palette.secondary
+        referenceLabel.stringValue = referenceText
+        referenceLabel.textColor = palette.secondary.withAlphaComponent(0.9)
         numberView.value = localizedInterfaceDigits(String(verse.ayahNumber))
         numberView.palette = palette
+        numberView.isCurrent = isCurrent
         bookmarkImage.isHidden = !isBookmarked
-        notesButton.isHidden = translation?.footnotes.isEmpty != false
+        notesButton.isHidden = onNotes == nil
         notesButton.setAccessibilityLabel(quranReaderText("notes"))
-        surahHeader.isHidden = !isSurahStart
+        copyButton.setAccessibilityLabel(quranReaderText("copy"))
         setAccessibilityLabel("\(verse.suraNameEnglish), \(verse.ayahNumber)")
         setAccessibilityHelp(quranReaderText("source"))
         needsLayout = true
@@ -12258,59 +12500,110 @@ private final class QuranVerseRowView: NSTableCellView {
     }
 
     @objc private func showNotes(_ sender: Any?) { notesHandler?() }
+    @objc private func copyVerse(_ sender: Any?) { copyHandler?() }
 
     override func layout() {
         super.layout()
-        let inset: CGFloat = layoutMode == .flow ? 30 : 42
-        var top: CGFloat = 14
+        let isRTL = Localizer.shared.isRTL
+        let inset = Self.inset(for: layoutMode)
+        let contentWidth = max(280, bounds.width - inset * 2 - Self.numberColumn)
+        let contentX = isRTL ? inset : inset + Self.numberColumn
+        var top: CGFloat = 12
         if isSurahStart {
-            surahHeader.frame = NSRect(x: inset, y: top, width: bounds.width - inset * 2,
-                                       height: 28)
-            top += 45
+            headerRect = NSRect(x: inset, y: top,
+                                width: bounds.width - inset * 2, height: Self.headerHeight)
+            surahNameLabel.frame = NSRect(x: headerRect.minX + 64, y: top + 18,
+                                          width: headerRect.width - 128, height: 36)
+            surahMetaLabel.frame = NSRect(x: headerRect.minX + 64, y: top + 60,
+                                          width: headerRect.width - 128, height: 18)
+            top += Self.headerHeight + 12
+            if !bismillahLabel.isHidden {
+                let bismillahHeight = quranWrappedTextHeight(
+                    bismillahLabel.attributedStringValue.string,
+                    font: bismillahLabel.font ?? Localizer.shared.font(size: 21),
+                    width: contentWidth, lineSpacing: 0) + 10
+                bismillahLabel.frame = NSRect(x: contentX, y: top,
+                                              width: contentWidth, height: bismillahHeight)
+                top += bismillahHeight + 14
+            }
+        } else {
+            headerRect = .zero
         }
-        let numberX = Localizer.shared.isRTL ? bounds.width - inset - 44 : inset
-        numberView.frame = NSRect(x: numberX, y: top, width: 44, height: 44)
-        let contentX = Localizer.shared.isRTL ? inset : inset + 56
-        let contentRight = Localizer.shared.isRTL ? inset + 56 : inset
-        let contentWidth = max(260, bounds.width - contentX - contentRight)
-        let arabicHeight = localizedTextHeight(arabicLabel.stringValue,
-                                               font: arabicLabel.font!,
-                                               width: contentWidth,
-                                               maximumLines: 0) + 16
+        let verseTop = top
+        let numberSize: CGFloat = 42
+        numberView.frame = NSRect(x: isRTL ? bounds.width - inset - numberSize : inset,
+                                  y: top, width: numberSize, height: numberSize)
+        bookmarkImage.frame = NSRect(x: numberView.frame.midX - 7,
+                                     y: top + numberSize + 6, width: 14, height: 14)
+        let arabicHeight = quranWrappedTextHeight(arabicLabel.attributedStringValue.string,
+                                                  font: arabicLabel.font!,
+                                                  width: contentWidth,
+                                                  lineSpacing: layoutMode == .flow ? 9 : 13) + 16
         arabicLabel.frame = NSRect(x: contentX, y: top,
                                    width: contentWidth, height: arabicHeight)
-        top += arabicHeight + 8
+        top += arabicHeight + 6
         if !translationLabel.isHidden {
-            let translationHeight = localizedTextHeight(translationLabel.stringValue,
-                                                         font: translationLabel.font!,
-                                                         width: contentWidth,
-                                                         maximumLines: 0) + 8
+            let translationHeight = quranWrappedTextHeight(translationLabel.stringValue,
+                                                           font: translationLabel.font!,
+                                                           width: contentWidth,
+                                                           lineSpacing: 0) + 8
             translationLabel.frame = NSRect(x: contentX, y: top,
-                                             width: contentWidth, height: translationHeight)
+                                            width: contentWidth, height: translationHeight)
             top += translationHeight + 8
         }
-        referenceLabel.frame = NSRect(x: contentX, y: bounds.height - 33,
-                                      width: min(210, contentWidth), height: 18)
-        bookmarkImage.frame = NSRect(x: bounds.width - inset - 18, y: bounds.height - 32,
-                                     width: 14, height: 14)
-        notesButton.frame = NSRect(x: Localizer.shared.isRTL ? inset : bounds.width - inset - 44,
-                                   y: bounds.height - 46, width: 44, height: 44)
+        let bandY = top + 4
+        let referenceWidth = min(280, contentWidth - 84)
+        referenceLabel.frame = NSRect(x: isRTL ? contentX + contentWidth - referenceWidth : contentX,
+                                      y: bandY + 8, width: referenceWidth, height: 16)
+        referenceLabel.alignment = isRTL ? .right : .left
+        var buttonX = isRTL ? inset : bounds.width - inset - 32
+        for button in [copyButton!, notesButton!] where !button.isHidden {
+            button.frame = NSRect(x: buttonX, y: bandY, width: 32, height: 32)
+            buttonX += isRTL ? 36 : -36
+        }
+        cardRect = NSRect(x: inset - 18, y: max(0, verseTop - 10),
+                          width: bounds.width - (inset - 18) * 2,
+                          height: bandY + 40 - max(0, verseTop - 10))
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        if isSurahStart, headerRect != .zero {
+            let frame = NSBezierPath(roundedRect: headerRect, xRadius: 18, yRadius: 18)
+            palette.surface.setFill()
+            frame.fill()
+            palette.motif.withAlphaComponent(0.8).setStroke()
+            frame.lineWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1.5 : 1
+            frame.stroke()
+            let innerFrame = NSBezierPath(roundedRect: headerRect.insetBy(dx: 5, dy: 5),
+                                          xRadius: 14, yRadius: 14)
+            palette.divider.setStroke()
+            innerFrame.lineWidth = 0.6
+            innerFrame.stroke()
+            palette.motif.setStroke()
+            for x in [headerRect.minX + 34, headerRect.maxX - 34] {
+                let motif = zelligeStarPath(center: NSPoint(x: x, y: headerRect.midY),
+                                            outer: 19, inner: 9)
+                motif.lineWidth = 1
+                motif.stroke()
+            }
+        }
         if layoutMode != .flow {
-            let rect = bounds.insetBy(dx: 14, dy: 5)
-            let path = NSBezierPath(roundedRect: rect, xRadius: 18, yRadius: 18)
+            let path = NSBezierPath(roundedRect: cardRect, xRadius: 18, yRadius: 18)
             palette.surface.setFill()
             path.fill()
-            palette.divider.setStroke()
-            path.lineWidth = 0.8
+            if isCurrent {
+                NSColor.appGreenAccent.withAlphaComponent(0.55).setStroke()
+                path.lineWidth = 1.2
+            } else {
+                palette.divider.setStroke()
+                path.lineWidth = 0.8
+            }
             path.stroke()
         } else {
             palette.divider.setStroke()
             let line = NSBezierPath()
-            line.move(to: NSPoint(x: 30, y: bounds.maxY - 1))
-            line.line(to: NSPoint(x: bounds.width - 30, y: bounds.maxY - 1))
+            line.move(to: NSPoint(x: 34, y: bounds.maxY - 1))
+            line.line(to: NSPoint(x: bounds.width - 34, y: bounds.maxY - 1))
             line.lineWidth = 0.7
             line.stroke()
         }
@@ -12319,38 +12612,50 @@ private final class QuranVerseRowView: NSTableCellView {
 
 /// Modern native reader driven exclusively by the verified KFG JSON corpus.
 /// PDF assets remain bundled for independent audit, but no PDFView or network
-/// content is part of this surface.
+/// content is part of this surface. The chrome follows dedicated Qur'an apps:
+/// a searchable surah sidebar, one calm toolbar, a reading-preferences
+/// popover, and a status footer carrying position and provenance.
 final class QuranViewController: NSViewController, MainTabContent,
                                  NSTableViewDataSource, NSTableViewDelegate,
                                  NSSearchFieldDelegate {
     private var backdrop: QuranReadingBackdropView!
     private var header: NSVisualEffectView!
-    private var hero: QuranReaderHeroView!
-    private var editionControl: NSSegmentedControl!
-    private var surahPopup: NSPopUpButton!
+    private var sidebar: NSVisualEffectView!
+    private var sidebarWidthConstraint: NSLayoutConstraint!
+    private var surahFilterField: NSSearchField!
+    private var surahTable: NSTableView!
+    private var crumbLabel: NSTextField!
     private var searchField: NSSearchField!
-    private var translationSwitch: NSSwitch!
-    private var translationPopup: NSPopUpButton!
-    private var palettePopup: NSPopUpButton!
-    private var layoutPopup: NSPopUpButton!
     private var tableView: NSTableView!
     private var scrollView: NSScrollView!
-    private var sourceLabel: NSTextField!
+    private var footer: QuranReaderFooterView!
     private var unavailableOverlay: NSVisualEffectView!
     private var unavailableTitle: NSTextField!
     private var unavailableDetail: NSTextField!
+    private var sidebarButton: HoverIconButton!
     private var previousButton: HoverIconButton!
     private var nextButton: HoverIconButton!
     private var bookmarkButton: HoverIconButton!
     private var bookmarksButton: HoverIconButton!
-    private var provenanceButton: HoverIconButton!
     private var meaningsButton: HoverIconButton!
+    private var readerSettingsButton: HoverIconButton!
+
+    private var settingsPopover: NSPopover?
+    private weak var editionSegment: NSSegmentedControl?
+    private weak var layoutSegment: NSSegmentedControl?
+    private weak var textSlider: NSSlider?
+    private weak var translationSwitchControl: NSSwitch?
+    private weak var translationPopupControl: NSPopUpButton?
+    private var paletteSwatches: [QuranPaletteSwatchButton] = []
 
     private var verses: [OfflineQuranVerse] = []
     private var surahVerses: [Int: [OfflineQuranVerse]] = [:]
     private var visibleVerses: [OfflineQuranVerse] = []
+    private var surahIndex: [(sura: Int, arabic: String, english: String, count: Int)] = []
+    private var filteredSurahs: [Int] = []
     private var translations: [String: QuranTranslationVerse] = [:]
     private var wordMeanings: [OfflineQuranWordMeaning] = []
+    private var bismillahText = ""
     private var selectedSurah = max(1, min(114,
         UserDefaults.standard.integer(forKey: kQuranReaderSurah) == 0
             ? 1 : UserDefaults.standard.integer(forKey: kQuranReaderSurah)))
@@ -12363,33 +12668,33 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var bookmarks: [OfflineQuranBookmark] = []
     private var bookmarkMenuItems: [Int: OfflineQuranBookmark] = [:]
     private var currentTranslation = QuranTranslationDescriptor.preferred
+    private var edition = (UserDefaults.standard.string(forKey: kQuranEditionKey)
+                           ?? "hafs") == "warsh" ? "warsh" : "hafs"
 
-    private var edition: String { editionControl?.selectedSegment == 1 ? "warsh" : "hafs" }
     private var palette: QuranReaderPalette {
-        QuranReaderPalette(rawValue: palettePopup?.indexOfSelectedItem
-                           ?? UserDefaults.standard.integer(forKey: kQuranReaderPalette)) ?? .ivory
+        QuranReaderPalette(rawValue: max(0, min(2,
+            UserDefaults.standard.integer(forKey: kQuranReaderPalette)))) ?? .ivory
     }
     private var readerLayout: QuranReaderLayout {
-        QuranReaderLayout(rawValue: layoutPopup?.indexOfSelectedItem
-                          ?? UserDefaults.standard.integer(forKey: kQuranReaderLayout)) ?? .flow
+        QuranReaderLayout(rawValue: max(0, min(2,
+            UserDefaults.standard.integer(forKey: kQuranReaderLayout)))) ?? .flow
     }
     private var textScale: CGFloat {
         let saved = UserDefaults.standard.double(forKey: kQuranReaderTextScale)
         return CGFloat(saved == 0 ? 1 : max(0.78, min(1.55, saved)))
     }
-    private var wantsTranslation: Bool {
-        translationSwitch?.state == .on && edition == "hafs"
+    private var translationVisible: Bool {
+        UserDefaults.standard.object(forKey: kQuranTranslationVisible) as? Bool ?? false
     }
+    private var wantsTranslation: Bool { translationVisible && edition == "hafs" }
+
+    deinit { NotificationCenter.default.removeObserver(self) }
 
     override func loadView() {
         registerVerifiedQuranFonts()
         bookmarks = loadBookmarks()
         let root = NSView()
         root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-
-        backdrop = QuranReadingBackdropView()
-        backdrop.translatesAutoresizingMaskIntoConstraints = false
-        root.addSubview(backdrop)
 
         header = NSVisualEffectView()
         header.material = .headerView
@@ -12398,26 +12703,39 @@ final class QuranViewController: NSViewController, MainTabContent,
         header.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(header)
 
-        editionControl = NSSegmentedControl(labels: ["Hafs", "Warsh"], trackingMode: .selectOne,
-                                             target: self, action: #selector(editionChanged(_:)))
-        editionControl.segmentStyle = .texturedRounded
-        editionControl.selectedSegment = (UserDefaults.standard.string(forKey: kQuranEditionKey)
-                                          ?? "hafs") == "warsh" ? 1 : 0
-        editionControl.setAccessibilityLabel(featureText("quran.tab"))
+        sidebar = NSVisualEffectView()
+        sidebar.material = .sidebar
+        sidebar.blendingMode = .behindWindow
+        sidebar.state = .followsWindowActiveState
+        sidebar.wantsLayer = true
+        sidebar.layer?.masksToBounds = true
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(sidebar)
 
-        surahPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        surahPopup.target = self
-        surahPopup.action = #selector(surahChanged(_:))
-        surahPopup.setAccessibilityLabel(quranReaderText("surah"))
+        backdrop = QuranReadingBackdropView()
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(backdrop)
 
+        sidebarButton = HoverIconButton(symbol: "sidebar.leading",
+                                        toolTip: quranReaderText("sidebar"),
+                                        target: self, action: #selector(toggleSurahSidebar(_:)),
+                                        pointSize: 14, size: NSSize(width: 36, height: 32))
         previousButton = HoverIconButton(symbol: Localizer.shared.isRTL ? "chevron.right" : "chevron.left",
                                          toolTip: quranReaderText("previous"), target: self,
-                                         action: #selector(previousVerse(_:)), pointSize: 14,
-                                         size: NSSize(width: 44, height: 44))
+                                         action: #selector(previousVerse(_:)), pointSize: 13,
+                                         size: NSSize(width: 36, height: 32))
         nextButton = HoverIconButton(symbol: Localizer.shared.isRTL ? "chevron.left" : "chevron.right",
                                      toolTip: quranReaderText("next"), target: self,
-                                     action: #selector(nextVerse(_:)), pointSize: 14,
-                                     size: NSSize(width: 44, height: 44))
+                                     action: #selector(nextVerse(_:)), pointSize: 13,
+                                     size: NSSize(width: 36, height: 32))
+        crumbLabel = NSTextField(labelWithString: "")
+        crumbLabel.font = Localizer.shared.font(size: 13, weight: .semibold)
+        crumbLabel.textColor = .labelColor
+        crumbLabel.lineBreakMode = .byTruncatingTail
+        crumbLabel.maximumNumberOfLines = 1
+        crumbLabel.setContentHuggingPriority(NSLayoutConstraint.Priority(1), for: .horizontal)
+        crumbLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+
         searchField = NSSearchField()
         searchField.placeholderString = quranReaderText("search")
         searchField.delegate = self
@@ -12427,90 +12745,66 @@ final class QuranViewController: NSViewController, MainTabContent,
 
         bookmarkButton = HoverIconButton(symbol: "bookmark", toolTip: quranReaderText("bookmark.add"),
                                          target: self, action: #selector(toggleBookmark(_:)),
-                                         pointSize: 14, size: NSSize(width: 44, height: 44))
+                                         pointSize: 14, size: NSSize(width: 36, height: 32))
         bookmarksButton = HoverIconButton(symbol: "books.vertical", toolTip: quranReaderText("bookmarks"),
                                           target: self, action: #selector(showBookmarks(_:)),
-                                          pointSize: 14, size: NSSize(width: 44, height: 44))
-        provenanceButton = HoverIconButton(symbol: "checkmark.seal", toolTip: quranReaderText("source"),
-                                           target: self, action: #selector(showProvenance(_:)),
-                                           pointSize: 14, size: NSSize(width: 44, height: 44))
+                                          pointSize: 14, size: NSSize(width: 36, height: 32))
         meaningsButton = HoverIconButton(symbol: "character.book.closed",
                                          toolTip: quranReaderText("word.meanings"),
                                          target: self, action: #selector(showWordMeanings(_:)),
-                                         pointSize: 14, size: NSSize(width: 44, height: 44))
+                                         pointSize: 14, size: NSSize(width: 36, height: 32))
         meaningsButton.setAccessibilityLabel(quranReaderText("word.meanings"))
+        readerSettingsButton = HoverIconButton(symbol: "textformat.size",
+                                               toolTip: quranReaderText("reader.settings"),
+                                               target: self,
+                                               action: #selector(showReaderSettings(_:)),
+                                               pointSize: 14, size: NSSize(width: 36, height: 32))
 
-        translationSwitch = NSSwitch()
-        translationSwitch.state = (UserDefaults.standard.object(forKey: kQuranTranslationVisible)
-                                   as? Bool ?? false) ? .on : .off
-        translationSwitch.target = self
-        translationSwitch.action = #selector(translationVisibilityChanged(_:))
-        translationSwitch.setAccessibilityLabel(quranReaderText("show.translation"))
-        let translationLabel = NSTextField(labelWithString: quranReaderText("show.translation"))
-        translationLabel.font = Localizer.shared.font(size: 12, weight: .medium)
-
-        translationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        for descriptor in QuranTranslationDescriptor.verified {
-            translationPopup.addItem(withTitle: "\(descriptor.nativeLanguage) · \(descriptor.title) · v\(descriptor.version)")
-        }
-        translationPopup.selectItem(at: QuranTranslationDescriptor.verified.firstIndex(of: currentTranslation) ?? 0)
-        translationPopup.target = self
-        translationPopup.action = #selector(translationChanged(_:))
-        translationPopup.setAccessibilityLabel(quranReaderText("translation"))
-
-        palettePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        palettePopup.addItems(withTitles: [quranReaderText("ivory"), quranReaderText("sage"),
-                                            quranReaderText("night")])
-        palettePopup.selectItem(at: max(0, min(2,
-            UserDefaults.standard.integer(forKey: kQuranReaderPalette))))
-        palettePopup.target = self
-        palettePopup.action = #selector(paletteChanged(_:))
-        palettePopup.setAccessibilityLabel(quranReaderText("background"))
-
-        layoutPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        layoutPopup.addItems(withTitles: [quranReaderText("flow"), quranReaderText("study"),
-                                           quranReaderText("focus")])
-        layoutPopup.selectItem(at: max(0, min(2,
-            UserDefaults.standard.integer(forKey: kQuranReaderLayout))))
-        layoutPopup.target = self
-        layoutPopup.action = #selector(layoutChanged(_:))
-        layoutPopup.setAccessibilityLabel(quranReaderText("reading.style"))
-
-        let smaller = HoverIconButton(symbol: "textformat.size.smaller", toolTip: quranReaderText("smaller"),
-                                      target: self, action: #selector(decreaseText(_:)), pointSize: 14,
-                                      size: NSSize(width: 44, height: 44))
-        let larger = HoverIconButton(symbol: "textformat.size.larger", toolTip: quranReaderText("larger"),
-                                     target: self, action: #selector(increaseText(_:)), pointSize: 14,
-                                     size: NSSize(width: 44, height: 44))
-        sourceLabel = NSTextField(labelWithString: "")
-        sourceLabel.font = Localizer.shared.font(size: 10.5, weight: .medium)
-        sourceLabel.textColor = .secondaryLabelColor
-        sourceLabel.lineBreakMode = .byTruncatingMiddle
-        sourceLabel.setAccessibilityLabel(quranReaderText("source"))
-
-        let rowOne = NSStackView(views: [editionControl, surahPopup, previousButton, nextButton,
-                                          searchField, bookmarkButton, bookmarksButton,
-                                          meaningsButton, provenanceButton])
-        rowOne.orientation = .horizontal
-        rowOne.alignment = .centerY
-        rowOne.spacing = 6
-        rowOne.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        let rowTwo = NSStackView(views: [translationLabel, translationSwitch, translationPopup,
-                                          sourceLabel, palettePopup, layoutPopup, smaller, larger])
-        rowTwo.orientation = .horizontal
-        rowTwo.alignment = .centerY
-        rowTwo.spacing = 6
-        rowTwo.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        let controls = NSStackView(views: [rowOne, rowTwo])
-        controls.orientation = .vertical
-        controls.alignment = .leading
-        controls.spacing = 7
+        let controls = NSStackView(views: [sidebarButton, previousButton, nextButton, crumbLabel,
+                                           searchField, bookmarkButton, bookmarksButton,
+                                           meaningsButton, readerSettingsButton])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.spacing = 6
+        controls.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
         controls.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(controls)
+        for button in [sidebarButton!, previousButton!, nextButton!, bookmarkButton!,
+                       bookmarksButton!, meaningsButton!, readerSettingsButton!] {
+            button.widthAnchor.constraint(equalToConstant: 36).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        }
 
-        hero = QuranReaderHeroView()
-        hero.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.addSubview(hero)
+        surahFilterField = NSSearchField()
+        surahFilterField.placeholderString = quranReaderText("surah.filter")
+        surahFilterField.delegate = self
+        surahFilterField.controlSize = .small
+        surahFilterField.font = Localizer.shared.font(size: 11.5)
+        surahFilterField.translatesAutoresizingMaskIntoConstraints = false
+        surahFilterField.setAccessibilityLabel(quranReaderText("surah.filter"))
+        sidebar.addSubview(surahFilterField)
+
+        surahTable = NSTableView()
+        let surahColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("surah"))
+        surahColumn.resizingMask = .autoresizingMask
+        surahTable.addTableColumn(surahColumn)
+        surahTable.headerView = nil
+        surahTable.backgroundColor = .clear
+        surahTable.selectionHighlightStyle = .none
+        surahTable.intercellSpacing = .zero
+        surahTable.rowHeight = 48
+        surahTable.dataSource = self
+        surahTable.delegate = self
+        surahTable.target = self
+        surahTable.action = #selector(surahRowClicked(_:))
+        surahTable.setAccessibilityLabel(quranReaderText("surah"))
+        let surahScroll = NSScrollView()
+        surahScroll.documentView = surahTable
+        surahScroll.drawsBackground = false
+        surahScroll.hasVerticalScroller = true
+        surahScroll.autohidesScrollers = true
+        surahScroll.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(surahScroll)
 
         tableView = NSTableView()
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("verse"))
@@ -12533,6 +12827,10 @@ final class QuranViewController: NSViewController, MainTabContent,
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         backdrop.addSubview(scrollView)
 
+        footer = QuranReaderFooterView()
+        footer.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(footer)
+
         unavailableOverlay = NSVisualEffectView()
         unavailableOverlay.material = .popover
         unavailableOverlay.blendingMode = .withinWindow
@@ -12553,42 +12851,47 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         root.addSubview(unavailableOverlay)
 
-        for control in [editionControl!, surahPopup!, searchField!, translationSwitch!,
-                        translationPopup!, palettePopup!, layoutPopup!] {
-            control.translatesAutoresizingMaskIntoConstraints = false
-        }
+        let sidebarVisible = UserDefaults.standard.object(forKey: kQuranReaderSidebar)
+            as? Bool ?? true
+        sidebarWidthConstraint = sidebar.widthAnchor.constraint(
+            equalToConstant: sidebarVisible ? 258 : 0)
+        let readingWidth = scrollView.widthAnchor.constraint(equalTo: backdrop.widthAnchor,
+                                                             constant: -56)
+        readingWidth.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
-            backdrop.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            backdrop.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            backdrop.topAnchor.constraint(equalTo: header.bottomAnchor),
-            backdrop.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             header.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             header.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             header.topAnchor.constraint(equalTo: root.topAnchor),
-            header.heightAnchor.constraint(equalToConstant: 105),
-            controls.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 18),
-            controls.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -18),
-            controls.topAnchor.constraint(equalTo: header.topAnchor, constant: 7),
-            controls.bottomAnchor.constraint(equalTo: header.bottomAnchor, constant: -7),
-            rowOne.widthAnchor.constraint(equalTo: controls.widthAnchor),
-            rowTwo.widthAnchor.constraint(equalTo: controls.widthAnchor),
-            editionControl.widthAnchor.constraint(equalToConstant: 130),
-            editionControl.heightAnchor.constraint(equalToConstant: 32),
-            surahPopup.widthAnchor.constraint(equalToConstant: 170),
-            surahPopup.heightAnchor.constraint(equalToConstant: 32),
-            searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 120),
-            searchField.heightAnchor.constraint(equalToConstant: 32),
-            translationPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 190),
-            palettePopup.widthAnchor.constraint(equalToConstant: 100),
-            layoutPopup.widthAnchor.constraint(equalToConstant: 100),
-            hero.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 54),
-            hero.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -54),
-            hero.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 16),
-            hero.heightAnchor.constraint(equalToConstant: 102),
-            scrollView.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor, constant: 42),
-            scrollView.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor, constant: -42),
-            scrollView.topAnchor.constraint(equalTo: hero.bottomAnchor, constant: 10),
-            scrollView.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+            header.heightAnchor.constraint(equalToConstant: 52),
+            controls.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 14),
+            controls.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -14),
+            controls.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            searchField.widthAnchor.constraint(equalToConstant: 230),
+            sidebarWidthConstraint,
+            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: header.bottomAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            surahFilterField.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 10),
+            surahFilterField.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
+            surahFilterField.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -12),
+            surahScroll.topAnchor.constraint(equalTo: surahFilterField.bottomAnchor, constant: 8),
+            surahScroll.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor),
+            surahScroll.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            surahScroll.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            backdrop.topAnchor.constraint(equalTo: header.bottomAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            scrollView.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
+            scrollView.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 6),
+            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            readingWidth,
+            scrollView.widthAnchor.constraint(lessThanOrEqualToConstant: 940),
+            footer.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
+            footer.heightAnchor.constraint(equalToConstant: 30),
             unavailableOverlay.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             unavailableOverlay.centerYAnchor.constraint(equalTo: root.centerYAnchor),
             unavailableOverlay.widthAnchor.constraint(equalToConstant: 440),
@@ -12601,6 +12904,10 @@ final class QuranViewController: NSViewController, MainTabContent,
             unavailableDetail.bottomAnchor.constraint(equalTo: unavailableOverlay.bottomAnchor, constant: -24),
         ])
         self.view = root
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(readerDidScroll(_:)),
+                                               name: NSView.boundsDidChangeNotification,
+                                               object: scrollView.contentView)
         applyPalette()
         updateTranslationAvailability()
         loadEdition(restorePosition: true)
@@ -12611,15 +12918,18 @@ final class QuranViewController: NSViewController, MainTabContent,
         guard tableView != nil else { return }
         if abs(tableView.bounds.width - currentWidth) > 8 {
             currentWidth = tableView.bounds.width
-            tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<visibleVerses.count))
+            noteAllHeights()
         }
     }
 
     func tabDidActivate() {
         applyPalette()
-        updateHero()
+        updateChrome()
         tableView?.reloadData()
+        surahTable?.reloadData()
     }
+
+    // MARK: - corpus loading
 
     private func corpusURL(for edition: String) -> URL? {
         let component = edition == "warsh" ? "Warsh/warshData_v2-1.json"
@@ -12635,7 +12945,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         let generation = UUID()
         loadGeneration = generation
         unavailableOverlay.isHidden = true
-        sourceLabel.stringValue = quranReaderText("offline") + " · "
+        footer.sourceLabel.stringValue = quranReaderText("offline") + " · "
             + quranReaderText(selectedEdition == "warsh" ? "exact.warsh" : "exact.hafs")
         guard let url = corpusURL(for: selectedEdition) else {
             unavailableOverlay.isHidden = false
@@ -12657,9 +12967,15 @@ final class QuranViewController: NSViewController, MainTabContent,
                           self.edition == selectedEdition else { return }
                     self.verses = decoded
                     self.surahVerses = grouped
+                    // The bismillah header is the publisher's own text: the
+                    // exact first ayah of Al-Fātiḥah for the loaded riwayah,
+                    // with only its presentation-form ayah marker removed.
+                    self.bismillahText = decoded
+                        .first(where: { $0.suraNumber == 1 && $0.ayahNumber == 1 })
+                        .map { strippedAyahMarkers($0.uthmanicText) } ?? ""
                     self.migrateLegacyPageBookmarks(using: decoded,
                                                      edition: selectedEdition)
-                    self.populateSurahPopup()
+                    self.rebuildSurahIndex()
                     self.loadWordMeaningsIfNeeded()
                     if !restorePosition { self.selectedAyah = 1 }
                     self.rebuildVisibleVerses(scrollToSelection: true)
@@ -12671,19 +12987,13 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
     }
 
-    private func populateSurahPopup() {
-        surahPopup.removeAllItems()
-        for sura in 1...114 {
-            guard let verse = surahVerses[sura]?.first else { continue }
-            let title = Localizer.shared.isRTL
-                ? "\(localizedInterfaceDigits(String(sura))) · \(verse.suraNameArabic)"
-                : "\(localizedInterfaceDigits(String(sura))) · \(verse.suraNameArabic) · \(verse.suraNameEnglish)"
-            surahPopup.addItem(withTitle: title)
-            surahPopup.lastItem?.tag = sura
+    private func rebuildSurahIndex() {
+        surahIndex = (1...114).compactMap { sura in
+            guard let list = surahVerses[sura], let first = list.first else { return nil }
+            return (sura: sura, arabic: first.suraNameArabic,
+                    english: first.suraNameEnglish, count: list.count)
         }
-        if let item = surahPopup.itemArray.first(where: { $0.tag == selectedSurah }) {
-            surahPopup.select(item)
-        }
+        applySurahFilter()
     }
 
     private func migrateLegacyPageBookmarks(using corpus: [OfflineQuranVerse],
@@ -12701,6 +13011,68 @@ final class QuranViewController: NSViewController, MainTabContent,
         if changed { saveBookmarks() }
     }
 
+    // MARK: - fonts and per-verse text
+
+    private func officialFont() -> NSFont? {
+        verifiedQuranFont(edition: edition, size: 30 * textScale)
+    }
+
+    private func currentArabicFont() -> NSFont {
+        officialFont()
+            ?? NSFont(name: "Geeza Pro", size: 30 * textScale)
+            ?? Localizer.shared.font(size: 30 * textScale)
+    }
+
+    private func currentTranslationFont() -> NSFont {
+        Localizer.shared.font(size: 14.5 * min(1.2, textScale), weight: .regular)
+    }
+
+    private func currentBismillahFont() -> NSFont {
+        verifiedQuranFont(edition: edition, size: 22 * textScale)
+            ?? NSFont(name: "Geeza Pro", size: 22 * textScale)
+            ?? Localizer.shared.font(size: 22 * textScale)
+    }
+
+    /// With the publisher font present the terminal KFG ayah marker renders
+    /// exactly; without it, only the presentation marker is removed and the
+    /// separate source-provided medallion carries the ayah number.
+    private func renderedArabic(for verse: OfflineQuranVerse) -> String {
+        officialFont() != nil ? verse.uthmanicText : strippedAyahMarkers(verse.uthmanicText)
+    }
+
+    private func rowIsSurahStart(_ row: Int) -> Bool {
+        guard visibleVerses.indices.contains(row) else { return false }
+        let verse = visibleVerses[row]
+        if readerLayout == .focus && !searchActive { return verse.ayahNumber == 1 }
+        return row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber
+    }
+
+    private func bismillah(for verse: OfflineQuranVerse, isSurahStart: Bool) -> String? {
+        guard isSurahStart, verse.ayahNumber == 1,
+              verse.suraNumber != 1, verse.suraNumber != 9,
+              !bismillahText.isEmpty else { return nil }
+        return bismillahText
+    }
+
+    private func surahMetaText(for verse: OfflineQuranVerse) -> String {
+        let count = surahVerses[verse.suraNumber]?.count ?? 0
+        let versesText = String(format: quranReaderText("verses"),
+                                localizedInterfaceDigits(String(count)))
+        let juzText = "\(quranReaderText("juz")) \(localizedInterfaceDigits(String(verse.jozz)))"
+        return Localizer.shared.isRTL
+            ? "\(versesText) · \(juzText)"
+            : "\(verse.suraNameEnglish) · \(versesText) · \(juzText)"
+    }
+
+    private func referenceText(for verse: OfflineQuranVerse) -> String {
+        let locator = "\(localizedInterfaceDigits(String(verse.suraNumber))):\(localizedInterfaceDigits(String(verse.ayahNumber)))"
+        let juzText = "\(quranReaderText("juz")) \(localizedInterfaceDigits(String(verse.jozz)))"
+        let pageText = "\(offlineQuranText("page")) \(localizedInterfaceDigits(String(verse.pageStart)))"
+        return "\(locator) · \(juzText) · \(pageText)"
+    }
+
+    // MARK: - visible verses and chrome
+
     private func rebuildVisibleVerses(scrollToSelection: Bool) {
         let base = surahVerses[selectedSurah] ?? []
         if readerLayout == .focus {
@@ -12710,9 +13082,10 @@ final class QuranViewController: NSViewController, MainTabContent,
             visibleVerses = base
         }
         tableView.reloadData()
-        tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<visibleVerses.count))
-        updateHero()
+        noteAllHeights()
+        updateChrome()
         updateBookmarkButton()
+        syncSidebarSelection()
         if scrollToSelection, let index = visibleVerses.firstIndex(where: {
             $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah
         }) {
@@ -12723,33 +13096,81 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
     }
 
-    private func updateHero() {
-        guard let first = surahVerses[selectedSurah]?.first else { return }
-        hero.titleLabel.stringValue = first.suraNameArabic
-        hero.subtitleLabel.stringValue = Localizer.shared.isRTL
-            ? quranReaderText(edition == "warsh" ? "exact.warsh" : "exact.hafs")
-            : "\(first.suraNameEnglish) · \(quranReaderText(edition == "warsh" ? "exact.warsh" : "exact.hafs"))"
-        let count = surahVerses[selectedSurah]?.count ?? 0
-        hero.progressLabel.stringValue = String(format: quranReaderText("verses"),
-            localizedInterfaceDigits(String(count)))
+    private func noteAllHeights() {
+        guard tableView != nil else { return }
+        tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<visibleVerses.count))
     }
 
+    private func updateChrome() {
+        guard crumbLabel != nil, let first = surahVerses[selectedSurah]?.first else { return }
+        let number = localizedInterfaceDigits(String(selectedSurah))
+        crumbLabel.stringValue = Localizer.shared.isRTL
+            ? "\(number) · \(first.suraNameArabic)"
+            : "\(number) · \(first.suraNameArabic) · \(first.suraNameEnglish)"
+        updateFooterPosition()
+    }
+
+    private func updateFooterPosition() {
+        guard footer != nil else { return }
+        if searchActive {
+            footer.positionLabel.stringValue = String(format: quranReaderText("verses"),
+                localizedInterfaceDigits(String(visibleVerses.count)))
+            return
+        }
+        guard let verse = topVisibleVerse() ?? currentVerse() else {
+            footer.positionLabel.stringValue = ""
+            return
+        }
+        footer.positionLabel.stringValue = referenceText(for: verse)
+    }
+
+    private func topVisibleVerse() -> OfflineQuranVerse? {
+        guard tableView != nil else { return nil }
+        let range = tableView.rows(in: tableView.visibleRect)
+        guard range.length > 0, visibleVerses.indices.contains(range.location) else { return nil }
+        return visibleVerses[range.location]
+    }
+
+    @objc private func readerDidScroll(_ notification: Notification) {
+        updateFooterPosition()
+    }
+
+    private func syncSidebarSelection() {
+        guard surahTable != nil else { return }
+        surahTable.reloadData()
+        if let row = filteredSurahs.firstIndex(of: selectedSurah) {
+            surahTable.scrollRowToVisible(row)
+        }
+    }
+
+    private func refreshCurrentRows(previous: Int?, current: Int?) {
+        var rows = IndexSet()
+        if let previous, visibleVerses.indices.contains(previous) { rows.insert(previous) }
+        if let current, visibleVerses.indices.contains(current) { rows.insert(current) }
+        guard !rows.isEmpty else { return }
+        tableView.reloadData(forRowIndexes: rows, columnIndexes: IndexSet(integer: 0))
+    }
+
+    // MARK: - translations
+
     private func updateTranslationAvailability() {
-        guard translationSwitch != nil else { return }
+        guard footer != nil else { return }
         let hafs = edition == "hafs"
         meaningsButton.isEnabled = hafs
-        translationSwitch.isEnabled = hafs
-        translationPopup.isEnabled = hafs && translationSwitch.state == .on
+        updatePopoverEnabledState()
         if !hafs {
-            sourceLabel.stringValue = quranReaderText("hafs.only")
             translations = [:]
+            footer.sourceLabel.stringValue = quranReaderText("hafs.only")
             tableView?.reloadData()
-        } else if translationSwitch.state == .on {
+            noteAllHeights()
+        } else if translationVisible {
             loadCurrentTranslation()
         } else {
             translations = [:]
-            sourceLabel.stringValue = quranReaderText("offline") + " · " + quranReaderText("exact.hafs")
+            footer.sourceLabel.stringValue = quranReaderText("offline") + " · "
+                + quranReaderText("exact.hafs")
             tableView?.reloadData()
+            noteAllHeights()
         }
     }
 
@@ -12757,19 +13178,18 @@ final class QuranViewController: NSViewController, MainTabContent,
         let descriptor = currentTranslation
         let generation = UUID()
         translationGeneration = generation
-        sourceLabel.stringValue = "\(quranReaderText("translation")) · \(descriptor.title) · v\(descriptor.version) · QuranEnc.com"
+        footer.sourceLabel.stringValue = "\(quranReaderText("translation")) · \(descriptor.title) · v\(descriptor.version) · QuranEnc.com"
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let value = try? loadQuranTranslation(descriptor)
             DispatchQueue.main.async {
                 guard let self, self.translationGeneration == generation,
-                      self.edition == "hafs", self.translationSwitch.state == .on else { return }
+                      self.edition == "hafs", self.translationVisible else { return }
                 self.translations = value ?? [:]
                 if value == nil {
-                    self.sourceLabel.stringValue = quranReaderText("unavailable.detail")
+                    self.footer.sourceLabel.stringValue = quranReaderText("unavailable.detail")
                 }
                 self.tableView.reloadData()
-                self.tableView.noteHeightOfRows(withIndexesChanged:
-                    IndexSet(integersIn: 0..<self.visibleVerses.count))
+                self.noteAllHeights()
             }
         }
     }
@@ -12790,19 +13210,239 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
     }
 
-    @objc private func editionChanged(_ sender: NSSegmentedControl) {
-        searchField.stringValue = ""
-        searchActive = false
-        loadEdition(restorePosition: true)
+    // MARK: - sidebar
+
+    @objc private func toggleSurahSidebar(_ sender: Any?) {
+        let show = sidebarWidthConstraint.constant < 1
+        UserDefaults.standard.set(show, forKey: kQuranReaderSidebar)
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            sidebarWidthConstraint.constant = show ? 258 : 0
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            context.allowsImplicitAnimation = true
+            sidebarWidthConstraint.animator().constant = show ? 258 : 0
+            view.layoutSubtreeIfNeeded()
+        }
     }
 
-    @objc private func surahChanged(_ sender: NSPopUpButton) {
-        selectedSurah = max(1, sender.selectedItem?.tag ?? 1)
+    private func applySurahFilter() {
+        let raw = surahFilterField?.stringValue
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if raw.isEmpty {
+            filteredSurahs = surahIndex.map(\.sura)
+        } else {
+            let normalized = normalizedQuranSearch(raw)
+            let western = westernQuranDigits(raw)
+            filteredSurahs = surahIndex.filter { entry in
+                String(entry.sura) == western
+                    || entry.english.localizedCaseInsensitiveContains(raw)
+                    || normalizedQuranSearch(entry.arabic).contains(normalized)
+            }.map(\.sura)
+        }
+        surahTable?.reloadData()
+    }
+
+    @objc private func surahRowClicked(_ sender: Any?) {
+        let row = surahTable.clickedRow >= 0 ? surahTable.clickedRow : surahTable.selectedRow
+        guard filteredSurahs.indices.contains(row) else { return }
+        let sura = filteredSurahs[row]
+        selectedSurah = sura
         selectedAyah = 1
         searchField.stringValue = ""
         searchActive = false
         persistLocator()
         rebuildVisibleVerses(scrollToSelection: true)
+    }
+
+    // MARK: - reading preferences popover
+
+    @objc private func showReaderSettings(_ sender: NSButton) {
+        if let popover = settingsPopover, popover.isShown {
+            popover.close()
+            settingsPopover = nil
+            return
+        }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        popover.contentViewController = makeReaderSettingsController()
+        popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+        settingsPopover = popover
+    }
+
+    private func makeReaderSettingsController() -> NSViewController {
+        let isRTL = Localizer.shared.isRTL
+
+        func rowLabel(_ text: String) -> NSTextField {
+            let label = NSTextField(labelWithString: text)
+            label.font = Localizer.shared.font(size: 12, weight: .medium)
+            label.textColor = .secondaryLabelColor
+            label.alignment = isRTL ? .right : .left
+            return label
+        }
+
+        let editionControl = NSSegmentedControl(labels: ["Hafs · حفص", "Warsh · ورش"],
+                                                trackingMode: .selectOne,
+                                                target: self,
+                                                action: #selector(editionChanged(_:)))
+        editionControl.selectedSegment = edition == "warsh" ? 1 : 0
+        editionControl.setAccessibilityLabel(quranReaderText("riwaya"))
+        editionSegment = editionControl
+
+        paletteSwatches = QuranReaderPalette.allCases.map { value in
+            let swatch = QuranPaletteSwatchButton(palette: value, target: self,
+                                                  action: #selector(paletteChanged(_:)))
+            swatch.isSelectedSwatch = value == palette
+            swatch.widthAnchor.constraint(equalToConstant: 32).isActive = true
+            swatch.heightAnchor.constraint(equalToConstant: 32).isActive = true
+            return swatch
+        }
+        let swatchRow = NSStackView(views: paletteSwatches)
+        swatchRow.orientation = .horizontal
+        swatchRow.spacing = 6
+
+        let layoutControl = NSSegmentedControl(labels: [quranReaderText("flow"),
+                                                        quranReaderText("study"),
+                                                        quranReaderText("focus")],
+                                               trackingMode: .selectOne,
+                                               target: self,
+                                               action: #selector(layoutChanged(_:)))
+        layoutControl.selectedSegment = readerLayout.rawValue
+        layoutControl.setAccessibilityLabel(quranReaderText("reading.style"))
+        layoutSegment = layoutControl
+
+        let slider = NSSlider(value: Double(textScale), minValue: 0.78, maxValue: 1.55,
+                              target: self, action: #selector(textScaleChanged(_:)))
+        slider.isContinuous = false
+        slider.setAccessibilityLabel(quranReaderText("text.size"))
+        slider.widthAnchor.constraint(greaterThanOrEqualToConstant: 150).isActive = true
+        textSlider = slider
+        let smallSample = NSTextField(labelWithString: "ا")
+        smallSample.font = NSFont.systemFont(ofSize: 11)
+        smallSample.textColor = .secondaryLabelColor
+        let largeSample = NSTextField(labelWithString: "ا")
+        largeSample.font = NSFont.systemFont(ofSize: 18)
+        largeSample.textColor = .secondaryLabelColor
+        let sliderRow = NSStackView(views: [smallSample, slider, largeSample])
+        sliderRow.orientation = .horizontal
+        sliderRow.alignment = .centerY
+        sliderRow.spacing = 8
+
+        let translationToggle = NSSwitch()
+        translationToggle.state = translationVisible ? .on : .off
+        translationToggle.target = self
+        translationToggle.action = #selector(translationVisibilityChanged(_:))
+        translationToggle.setAccessibilityLabel(quranReaderText("show.translation"))
+        translationSwitchControl = translationToggle
+
+        let translationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for descriptor in QuranTranslationDescriptor.verified {
+            translationPopup.addItem(withTitle:
+                "\(descriptor.nativeLanguage) · \(descriptor.title)")
+        }
+        translationPopup.selectItem(at:
+            QuranTranslationDescriptor.verified.firstIndex(of: currentTranslation) ?? 0)
+        translationPopup.target = self
+        translationPopup.action = #selector(translationChanged(_:))
+        translationPopup.setAccessibilityLabel(quranReaderText("translation"))
+        translationPopupControl = translationPopup
+
+        let grid = NSGridView(views: [
+            [rowLabel(quranReaderText("riwaya")), editionControl],
+            [rowLabel(quranReaderText("theme")), swatchRow],
+            [rowLabel(quranReaderText("reading.style")), layoutControl],
+            [rowLabel(quranReaderText("text.size")), sliderRow],
+            [rowLabel(quranReaderText("show.translation")), translationToggle],
+            [rowLabel(quranReaderText("translation")), translationPopup],
+        ])
+        grid.rowSpacing = 12
+        grid.columnSpacing = 14
+        grid.column(at: 0).xPlacement = isRTL ? .trailing : .leading
+        for row in 0..<grid.numberOfRows { grid.row(at: row).yPlacement = .center }
+
+        let title = NSTextField(labelWithString: quranReaderText("reader.settings"))
+        title.font = Localizer.shared.font(size: 13, weight: .bold)
+
+        let separator = NSBox()
+        separator.boxType = .separator
+
+        let provenance = NSButton(title: quranReaderText("source"), target: self,
+                                  action: #selector(showProvenance(_:)))
+        provenance.bezelStyle = .rounded
+        provenance.controlSize = .small
+        provenance.font = Localizer.shared.font(size: 11)
+        if let seal = templateSymbol("checkmark.seal", pointSize: 11) {
+            provenance.image = seal
+            provenance.imagePosition = isRTL ? .imageTrailing : .imageLeading
+        }
+
+        let stack = NSStackView(views: [title, grid, separator, provenance])
+        stack.orientation = .vertical
+        stack.alignment = isRTL ? .trailing : .leading
+        stack.spacing = 14
+        stack.translatesAutoresizingMaskIntoConstraints = false
+
+        let container = NSView()
+        container.userInterfaceLayoutDirection = isRTL ? .rightToLeft : .leftToRight
+        container.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 18),
+            stack.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -18),
+            stack.topAnchor.constraint(equalTo: container.topAnchor, constant: 16),
+            stack.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -16),
+            separator.widthAnchor.constraint(equalTo: grid.widthAnchor),
+        ])
+        let controller = NSViewController()
+        controller.view = container
+        controller.view.layoutSubtreeIfNeeded()
+        controller.preferredContentSize = container.fittingSize
+        updatePopoverEnabledState()
+        return controller
+    }
+
+    private func updatePopoverEnabledState() {
+        let hafs = edition == "hafs"
+        translationSwitchControl?.isEnabled = hafs
+        translationPopupControl?.isEnabled = hafs && translationVisible
+    }
+
+    // MARK: - preference actions
+
+    @objc private func editionChanged(_ sender: NSSegmentedControl) {
+        edition = sender.selectedSegment == 1 ? "warsh" : "hafs"
+        searchField.stringValue = ""
+        searchActive = false
+        loadEdition(restorePosition: true)
+        updatePopoverEnabledState()
+    }
+
+    @objc private func paletteChanged(_ sender: NSButton) {
+        guard let swatch = sender as? QuranPaletteSwatchButton else { return }
+        UserDefaults.standard.set(swatch.paletteValue.rawValue, forKey: kQuranReaderPalette)
+        paletteSwatches.forEach { $0.isSelectedSwatch = $0.paletteValue == swatch.paletteValue }
+        applyPalette()
+        tableView.reloadData()
+    }
+
+    private func applyPalette() {
+        guard backdrop != nil else { return }
+        backdrop.palette = palette
+        footer.palette = palette
+    }
+
+    @objc private func layoutChanged(_ sender: NSSegmentedControl) {
+        UserDefaults.standard.set(max(0, sender.selectedSegment), forKey: kQuranReaderLayout)
+        rebuildVisibleVerses(scrollToSelection: true)
+    }
+
+    @objc private func textScaleChanged(_ sender: NSSlider) {
+        let value = max(0.78, min(1.55, sender.doubleValue))
+        UserDefaults.standard.set(value, forKey: kQuranReaderTextScale)
+        tableView.reloadData()
+        noteAllHeights()
     }
 
     @objc private func translationVisibilityChanged(_ sender: NSSwitch) {
@@ -12818,32 +13458,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         if wantsTranslation { loadCurrentTranslation() }
     }
 
-    @objc private func paletteChanged(_ sender: NSPopUpButton) {
-        UserDefaults.standard.set(sender.indexOfSelectedItem, forKey: kQuranReaderPalette)
-        applyPalette()
-        tableView.reloadData()
-    }
-
-    private func applyPalette() {
-        guard backdrop != nil else { return }
-        backdrop.palette = palette
-        hero.palette = palette
-        tableView?.backgroundColor = .clear
-    }
-
-    @objc private func layoutChanged(_ sender: NSPopUpButton) {
-        UserDefaults.standard.set(sender.indexOfSelectedItem, forKey: kQuranReaderLayout)
-        rebuildVisibleVerses(scrollToSelection: true)
-    }
-
-    @objc private func decreaseText(_ sender: Any?) { changeTextScale(by: -0.1) }
-    @objc private func increaseText(_ sender: Any?) { changeTextScale(by: 0.1) }
-    private func changeTextScale(by delta: CGFloat) {
-        let next = max(0.78, min(1.55, textScale + delta))
-        UserDefaults.standard.set(Double(next), forKey: kQuranReaderTextScale)
-        tableView.reloadData()
-        tableView.noteHeightOfRows(withIndexesChanged: IndexSet(integersIn: 0..<visibleVerses.count))
-    }
+    // MARK: - navigation
 
     @objc private func previousVerse(_ sender: Any?) { moveVerse(by: -1) }
     @objc private func nextVerse(_ sender: Any?) { moveVerse(by: 1) }
@@ -12852,20 +13467,37 @@ final class QuranViewController: NSViewController, MainTabContent,
         let current = verses.firstIndex { $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah }
             ?? 0
         let index = max(0, min(verses.count - 1, current + delta))
+        let previousRow = visibleVerses.firstIndex {
+            $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah
+        }
+        let surahChanged = verses[index].suraNumber != selectedSurah
+        let wasSearch = searchActive
         selectedSurah = verses[index].suraNumber
         selectedAyah = verses[index].ayahNumber
-        if let item = surahPopup.itemArray.first(where: { $0.tag == selectedSurah }) {
-            surahPopup.select(item)
-        }
         searchField.stringValue = ""
         searchActive = false
         persistLocator()
-        rebuildVisibleVerses(scrollToSelection: true)
+        if surahChanged || wasSearch || readerLayout == .focus {
+            rebuildVisibleVerses(scrollToSelection: true)
+        } else if let row = visibleVerses.firstIndex(where: {
+            $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah
+        }) {
+            refreshCurrentRows(previous: previousRow, current: row)
+            tableView.scrollRowToVisible(row)
+            updateChrome()
+            updateBookmarkButton()
+        }
     }
 
+    // MARK: - search
+
     func controlTextDidChange(_ obj: Notification) {
-        guard let field = obj.object as? NSSearchField, field === searchField else { return }
-        scheduleSearch(field.stringValue)
+        guard let field = obj.object as? NSSearchField else { return }
+        if field === searchField {
+            scheduleSearch(field.stringValue)
+        } else if field === surahFilterField {
+            applySurahFilter()
+        }
     }
 
     @objc private func searchChanged(_ sender: NSSearchField) { scheduleSearch(sender.stringValue) }
@@ -12883,9 +13515,6 @@ final class QuranViewController: NSViewController, MainTabContent,
             selectedSurah = match.suraNumber
             selectedAyah = match.ayahNumber
             searchActive = false
-            if let item = surahPopup.itemArray.first(where: { $0.tag == selectedSurah }) {
-                surahPopup.select(item)
-            }
             persistLocator()
             rebuildVisibleVerses(scrollToSelection: true)
             return
@@ -12907,78 +13536,103 @@ final class QuranViewController: NSViewController, MainTabContent,
                 self.searchActive = true
                 self.visibleVerses = Array(matches.prefix(500))
                 self.tableView.reloadData()
-                self.tableView.noteHeightOfRows(withIndexesChanged:
-                    IndexSet(integersIn: 0..<self.visibleVerses.count))
-                if self.visibleVerses.isEmpty {
-                    self.hero.titleLabel.stringValue = quranReaderText("no.results")
-                    self.hero.subtitleLabel.stringValue = query
-                    self.hero.progressLabel.stringValue = ""
-                } else {
-                    self.hero.titleLabel.stringValue = quranReaderText("search")
-                    self.hero.subtitleLabel.stringValue = query
-                    self.hero.progressLabel.stringValue = String(format: quranReaderText("verses"),
-                        localizedInterfaceDigits(String(self.visibleVerses.count)))
-                }
+                self.noteAllHeights()
+                self.crumbLabel.stringValue = self.visibleVerses.isEmpty
+                    ? quranReaderText("no.results")
+                    : "\(quranReaderText("results")) · \(query)"
+                self.updateFooterPosition()
             }
         }
     }
 
-    func numberOfRows(in tableView: NSTableView) -> Int { visibleVerses.count }
+    // MARK: - tables
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        tableView === surahTable ? filteredSurahs.count : visibleVerses.count
+    }
 
     func tableView(_ tableView: NSTableView,
                    viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        if tableView === surahTable {
+            let identifier = NSUserInterfaceItemIdentifier("riwaq.surah")
+            let cell = (tableView.makeView(withIdentifier: identifier, owner: self)
+                        as? QuranSurahListRowView) ?? QuranSurahListRowView()
+            cell.identifier = identifier
+            guard filteredSurahs.indices.contains(row),
+                  let entry = surahIndex.first(where: { $0.sura == filteredSurahs[row] })
+            else { return cell }
+            cell.configure(sura: entry.sura, arabic: entry.arabic, english: entry.english,
+                           count: entry.count, isCurrent: entry.sura == selectedSurah)
+            return cell
+        }
         guard visibleVerses.indices.contains(row) else { return nil }
         let identifier = NSUserInterfaceItemIdentifier("riwaq.verse")
         let cell = (tableView.makeView(withIdentifier: identifier, owner: self)
                     as? QuranVerseRowView) ?? QuranVerseRowView()
         cell.identifier = identifier
         let verse = visibleVerses[row]
-        let translated = wantsTranslation ? translations["\(verse.suraNumber):\(verse.ayahNumber)"] : nil
-        let startsSurah = searchActive
-            && (row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber)
-        let font = verifiedQuranFont(edition: edition, size: 30 * textScale)
-        cell.configure(verse: verse, translation: translated,
+        let translated = wantsTranslation
+            ? translations["\(verse.suraNumber):\(verse.ayahNumber)"] : nil
+        let isStart = rowIsSurahStart(row)
+        cell.configure(verse: verse,
+                       renderedArabic: renderedArabic(for: verse),
+                       arabicFont: currentArabicFont(),
+                       translation: translated,
+                       translationFont: currentTranslationFont(),
                        descriptor: translated == nil ? nil : currentTranslation,
-                       palette: palette, layout: readerLayout, textScale: textScale,
-                       isSurahStart: startsSurah, isBookmarked: isBookmarked(verse),
-                       officialFont: font) { [weak self, weak cell] in
-            guard let self, let translated, let cell else { return }
-            self.showTranslationNotes(translated, from: cell)
-        }
+                       palette: palette,
+                       layout: readerLayout,
+                       isSurahStart: isStart,
+                       surahMeta: surahMetaText(for: verse),
+                       bismillah: bismillah(for: verse, isSurahStart: isStart),
+                       bismillahFont: currentBismillahFont(),
+                       referenceText: referenceText(for: verse),
+                       isBookmarked: isBookmarked(verse),
+                       isCurrent: verse.suraNumber == selectedSurah
+                           && verse.ayahNumber == selectedAyah,
+                       onNotes: translated?.footnotes.isEmpty == false
+                           ? { [weak self, weak cell] in
+                               guard let self, let translated, let cell else { return }
+                               self.showTranslationNotes(translated, from: cell)
+                           } : nil,
+                       onCopy: { [weak self] in self?.copyVerse(verse) })
         return cell
     }
 
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        if tableView === surahTable { return 48 }
         guard visibleVerses.indices.contains(row) else { return 120 }
         let verse = visibleVerses[row]
-        let width = max(420, tableView.bounds.width - 150)
-        let font = verifiedQuranFont(edition: edition, size: 30 * textScale)
-            ?? NSFont(name: "Geeza Pro", size: 30 * textScale)
-            ?? Localizer.shared.font(size: 30 * textScale)
-        var height = localizedTextHeight(verse.uthmanicText, font: font,
-                                         width: width, maximumLines: 0) + 78
-        if wantsTranslation,
-           let translated = translations["\(verse.suraNumber):\(verse.ayahNumber)"] {
-            let translationFont = Localizer.shared.font(size: 14.5 * min(1.2, textScale))
-            height += localizedTextHeight(translated.text, font: translationFont,
-                                          width: width, maximumLines: 0) + 18
-        }
-        if searchActive,
-           row == 0 || visibleVerses[row - 1].suraNumber != verse.suraNumber {
-            height += 45
-        }
-        if readerLayout != .flow { height += 24 }
+        let isStart = rowIsSurahStart(row)
+        let translated = wantsTranslation
+            ? translations["\(verse.suraNumber):\(verse.ayahNumber)"]?.text : nil
+        var height = QuranVerseRowView.expectedHeight(
+            rowWidth: tableView.bounds.width,
+            layout: readerLayout,
+            arabicText: renderedArabic(for: verse),
+            arabicFont: currentArabicFont(),
+            translationText: translated,
+            translationFont: currentTranslationFont(),
+            isSurahStart: isStart,
+            bismillah: bismillah(for: verse, isSurahStart: isStart),
+            bismillahFont: currentBismillahFont())
         if readerLayout == .focus { height = max(height, tableView.bounds.height - 20) }
-        return max(128, height)
+        return max(120, height)
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let table = notification.object as? NSTableView, table === tableView else { return }
         let row = tableView.selectedRow
         guard visibleVerses.indices.contains(row) else { return }
+        let previousRow = visibleVerses.firstIndex {
+            $0.suraNumber == selectedSurah && $0.ayahNumber == selectedAyah
+        }
         selectedSurah = visibleVerses[row].suraNumber
         selectedAyah = visibleVerses[row].ayahNumber
         persistLocator()
         updateBookmarkButton()
+        refreshCurrentRows(previous: previousRow, current: row)
+        updateFooterPosition()
     }
 
     private func persistLocator() {
@@ -12992,6 +13646,8 @@ final class QuranViewController: NSViewController, MainTabContent,
         }) { return selected }
         return visibleVerses.first
     }
+
+    // MARK: - bookmarks
 
     private func loadBookmarks() -> [OfflineQuranBookmark] {
         guard let data = UserDefaults.standard.data(forKey: kQuranBookmarksKey),
@@ -13030,7 +13686,12 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         saveBookmarks()
         updateBookmarkButton()
-        tableView.reloadData()
+        if let row = visibleVerses.firstIndex(where: {
+            $0.suraNumber == verse.suraNumber && $0.ayahNumber == verse.ayahNumber
+        }) {
+            tableView.reloadData(forRowIndexes: IndexSet(integer: row),
+                                 columnIndexes: IndexSet(integer: 0))
+        }
     }
 
     private func updateBookmarkButton() {
@@ -13065,7 +13726,8 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     @objc private func openBookmark(_ sender: NSMenuItem) {
         guard let bookmark = bookmarkMenuItems[sender.tag] else { return }
-        editionControl.selectedSegment = bookmark.edition == "warsh" ? 1 : 0
+        edition = bookmark.edition == "warsh" ? "warsh" : "hafs"
+        editionSegment?.selectedSegment = edition == "warsh" ? 1 : 0
         selectedSurah = bookmark.sura ?? selectedSurah
         selectedAyah = bookmark.ayah ?? selectedAyah
         if bookmark.sura == nil {
@@ -13077,6 +13739,22 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         persistLocator()
         loadEdition(restorePosition: true)
+    }
+
+    // MARK: - verse actions
+
+    private func copyVerse(_ verse: OfflineQuranVerse) {
+        var lines = [strippedAyahMarkers(verse.uthmanicText)]
+        if wantsTranslation,
+           let translated = translations["\(verse.suraNumber):\(verse.ayahNumber)"] {
+            lines.append("")
+            lines.append(translated.text)
+        }
+        lines.append("")
+        lines.append("— \(verse.suraNameArabic) (\(verse.suraNameEnglish)) \(verse.suraNumber):\(verse.ayahNumber)")
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(lines.joined(separator: "\n"), forType: .string)
     }
 
     private func showTranslationNotes(_ value: QuranTranslationVerse, from source: NSView) {
@@ -15865,6 +16543,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         fetchData()
         tick()
         updateUI()
+
+        // TEMP-DEV: auto-open a destination for visual verification.
+        if let destination = ProcessInfo.processInfo.environment["SALAT_OPEN_TAB"],
+           let index = Int(destination) {
+            openMainWindow(selecting: index)
+        }
+        // TEMP-DEV: self-snapshot the main window then quit.
+        if let snapshotPath = ProcessInfo.processInfo.environment["SALAT_SNAPSHOT"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                if let view = self?.mainWindow?.contentView,
+                   let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                    view.cacheDisplay(in: view.bounds, to: rep)
+                    try? rep.representation(using: .png, properties: [:])?
+                        .write(to: URL(fileURLWithPath: snapshotPath))
+                }
+                NSApp.terminate(nil)
+            }
+        }
     }
 
     /// Reopening the already-running accessory app from Finder, Spotlight,
