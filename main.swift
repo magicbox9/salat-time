@@ -89,7 +89,7 @@ let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbo
 let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
 let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
 
-let kAppVersion          = "3.13.0"
+let kAppVersion          = "3.13.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -10104,6 +10104,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         fetchData()
         tick()
         updateUI()
+    }
+
+    /// Reopening the already-running accessory app from Finder, Spotlight,
+    /// or the Dock should reveal the full experience instead of appearing to
+    /// do nothing. This also makes the standard macOS reopen gesture match
+    /// the "Open Main Window…" menu item.
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        openMainWindow()
+        return true
     }
 
     func requestNotificationAuthorization() {
