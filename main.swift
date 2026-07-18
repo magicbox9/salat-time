@@ -106,7 +106,7 @@ let kQuranLastWarshPage          = "quranLastWarshPage"
 let kQuranViewMode               = "quranOfflineViewMode"
 let kQuranSidebarVisible         = "quranOfflineSidebarVisible"
 
-let kAppVersion          = "3.17.3"
+let kAppVersion          = "3.17.4"
 
 // ============================================================================
 // MARK: Theme palette
@@ -10428,6 +10428,7 @@ final class QuranViewController: NSViewController, MainTabContent,
                     self.isSearchReady = true
                     self.updatePageState()
                     self.updateCurrentPageContent()
+                    self.refreshLoadedSearchIfReady()
                 }
             } catch {
                 DispatchQueue.main.async { [weak self] in
@@ -10520,6 +10521,7 @@ final class QuranViewController: NSViewController, MainTabContent,
                 self.suppressPagePersistence = false
                 self.isLoadingEdition = false
                 self.updatePageState()
+                self.refreshLoadedSearchIfReady()
                 return
             }
 
@@ -10722,6 +10724,20 @@ final class QuranViewController: NSViewController, MainTabContent,
             let count = localizedInterfaceDigits(String(searchMatchCount))
             sidebarStatus.stringValue = offlineQuranText("search.count")
                 .replacingOccurrences(of: "%@", with: count)
+        }
+    }
+
+    /// A PDF restore and its local verse index finish independently. Refresh a
+    /// retained query only after both are stable so search navigation cannot be
+    /// snapped back to the restored page by a late PDFKit layout notification.
+    private func refreshLoadedSearchIfReady() {
+        guard isSearchReady, !isLoadingEdition,
+              sidebarMode?.selectedSegment == 1 else { return }
+        let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if query.isEmpty {
+            updateSearchStatus()
+        } else {
+            runSearch()
         }
     }
 
