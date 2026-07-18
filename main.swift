@@ -66,8 +66,12 @@ let kAdhkarVolume        = "adhkarVolume"
 /// CoreAudio device UID for adhkar audio output ("" = system default).
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
+/// Extra wait after an Adhan finishes before a queued Adhkar collection
+/// begins. This is applied only when both were scheduled for the same time.
+let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
+let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 
-let kAppVersion          = "3.8.3"
+let kAppVersion          = "3.9.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2130,7 +2134,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "Final third of the night",
         "nawafil.witr": "Witr", "nawafil.witr.count": "Odd number, minimum 1",
         "nawafil.witr.best": "The last prayer of the night",
-        "popup.adhkar.empty": "This collection has no adhkar yet."
+        "popup.adhkar.empty": "This collection has no adhkar yet.",
+        "popup.text.smaller": "Smaller text", "popup.text.larger": "Larger text",
+        "popup.text.automatic": "Automatic text size", "popup.text.expand": "Expand reading area",
+        "popup.text.collapse": "Restore controls", "adhkar.after_adhan": "Start after Adhan",
+        "adhkar.after_adhan.immediate": "Immediately after Adhan",
+        "adhkar.after_adhan.minutes": "%d min after Adhan"
     ],
     "fr": [
         "full.open_more": "Plus de contrôles…", "full.nawafil": "Prières surérogatoires",
@@ -2145,7 +2154,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "Dernier tiers de la nuit",
         "nawafil.witr": "Witr", "nawafil.witr.count": "Nombre impair, minimum 1",
         "nawafil.witr.best": "La dernière prière de la nuit",
-        "popup.adhkar.empty": "Cette collection ne contient encore aucun adhkār."
+        "popup.adhkar.empty": "Cette collection ne contient encore aucun adhkār.",
+        "popup.text.smaller": "Réduire le texte", "popup.text.larger": "Agrandir le texte",
+        "popup.text.automatic": "Taille automatique", "popup.text.expand": "Agrandir la zone de lecture",
+        "popup.text.collapse": "Rétablir les contrôles", "adhkar.after_adhan": "Commencer après l’Adhan",
+        "adhkar.after_adhan.immediate": "Juste après l’Adhan",
+        "adhkar.after_adhan.minutes": "%d min après l’Adhan"
     ],
     "es": [
         "full.open_more": "Más controles…", "full.nawafil": "Oraciones voluntarias",
@@ -2160,7 +2174,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "Último tercio de la noche",
         "nawafil.witr": "Witr", "nawafil.witr.count": "Número impar, mínimo 1",
         "nawafil.witr.best": "La última oración de la noche",
-        "popup.adhkar.empty": "Esta colección todavía no contiene adhkār."
+        "popup.adhkar.empty": "Esta colección todavía no contiene adhkār.",
+        "popup.text.smaller": "Texto más pequeño", "popup.text.larger": "Texto más grande",
+        "popup.text.automatic": "Tamaño automático", "popup.text.expand": "Ampliar área de lectura",
+        "popup.text.collapse": "Restaurar controles", "adhkar.after_adhan": "Comenzar después del Adhan",
+        "adhkar.after_adhan.immediate": "Inmediatamente después del Adhan",
+        "adhkar.after_adhan.minutes": "%d min después del Adhan"
     ],
     "ar": [
         "full.open_more": "مزيد من التحكم…", "full.nawafil": "صلوات النوافل",
@@ -2175,7 +2194,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "الثلث الأخير من الليل",
         "nawafil.witr": "الوتر", "nawafil.witr.count": "عدد فردي، أقله ركعة",
         "nawafil.witr.best": "آخر صلاة الليل",
-        "popup.adhkar.empty": "لا تحتوي هذه المجموعة على أذكار بعد."
+        "popup.adhkar.empty": "لا تحتوي هذه المجموعة على أذكار بعد.",
+        "popup.text.smaller": "تصغير النص", "popup.text.larger": "تكبير النص",
+        "popup.text.automatic": "حجم تلقائي", "popup.text.expand": "توسيع مساحة القراءة",
+        "popup.text.collapse": "إظهار عناصر التحكم", "adhkar.after_adhan": "البدء بعد الأذان",
+        "adhkar.after_adhan.immediate": "مباشرة بعد الأذان",
+        "adhkar.after_adhan.minutes": "بعد الأذان بـ %d دقائق"
     ],
     "zh": [
         "full.open_more": "更多控制…", "full.nawafil": "副功拜",
@@ -2190,7 +2214,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "夜晚最后三分之一",
         "nawafil.witr": "奇数拜", "nawafil.witr.count": "奇数，至少1拜",
         "nawafil.witr.best": "作为夜间最后的礼拜",
-        "popup.adhkar.empty": "此合集中还没有赞词。"
+        "popup.adhkar.empty": "此合集中还没有赞词。",
+        "popup.text.smaller": "缩小文字", "popup.text.larger": "放大文字",
+        "popup.text.automatic": "自动文字大小", "popup.text.expand": "扩大阅读区域",
+        "popup.text.collapse": "恢复控制", "adhkar.after_adhan": "宣礼后开始",
+        "adhkar.after_adhan.immediate": "宣礼结束后立即开始",
+        "adhkar.after_adhan.minutes": "宣礼后 %d 分钟"
     ],
     "hi": [
         "full.open_more": "और नियंत्रण…", "full.nawafil": "नफ़्ल नमाज़ें",
@@ -2205,7 +2234,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "रात का आख़िरी तिहाई",
         "nawafil.witr": "वित्र", "nawafil.witr.count": "विषम संख्या, कम से कम 1",
         "nawafil.witr.best": "रात की आख़िरी नमाज़",
-        "popup.adhkar.empty": "इस संग्रह में अभी कोई अज़्कार नहीं है।"
+        "popup.adhkar.empty": "इस संग्रह में अभी कोई अज़्कार नहीं है।",
+        "popup.text.smaller": "छोटा पाठ", "popup.text.larger": "बड़ा पाठ",
+        "popup.text.automatic": "स्वचालित पाठ आकार", "popup.text.expand": "पढ़ने का क्षेत्र बढ़ाएँ",
+        "popup.text.collapse": "नियंत्रण वापस लाएँ", "adhkar.after_adhan": "अज़ान के बाद शुरू करें",
+        "adhkar.after_adhan.immediate": "अज़ान के तुरंत बाद",
+        "adhkar.after_adhan.minutes": "अज़ान के %d मिनट बाद"
     ],
     "bn": [
         "full.open_more": "আরও নিয়ন্ত্রণ…", "full.nawafil": "নফল নামাজ",
@@ -2220,7 +2254,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "রাতের শেষ তৃতীয়াংশ",
         "nawafil.witr": "বিতর", "nawafil.witr.count": "বিজোড়, কমপক্ষে ১",
         "nawafil.witr.best": "রাতের শেষ নামাজ",
-        "popup.adhkar.empty": "এই সংগ্রহে এখনও কোনো আজকার নেই।"
+        "popup.adhkar.empty": "এই সংগ্রহে এখনও কোনো আজকার নেই।",
+        "popup.text.smaller": "ছোট লেখা", "popup.text.larger": "বড় লেখা",
+        "popup.text.automatic": "স্বয়ংক্রিয় লেখার আকার", "popup.text.expand": "পাঠের স্থান বড় করুন",
+        "popup.text.collapse": "নিয়ন্ত্রণ ফিরিয়ে আনুন", "adhkar.after_adhan": "আজানের পরে শুরু",
+        "adhkar.after_adhan.immediate": "আজানের পরপরই",
+        "adhkar.after_adhan.minutes": "আজানের %d মিনিট পরে"
     ],
     "ru": [
         "full.open_more": "Больше настроек…", "full.nawafil": "Дополнительные молитвы",
@@ -2235,7 +2274,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "Последняя треть ночи",
         "nawafil.witr": "Витр", "nawafil.witr.count": "Нечётное число, минимум 1",
         "nawafil.witr.best": "Последняя молитва ночи",
-        "popup.adhkar.empty": "В этой коллекции пока нет азкаров."
+        "popup.adhkar.empty": "В этой коллекции пока нет азкаров.",
+        "popup.text.smaller": "Уменьшить текст", "popup.text.larger": "Увеличить текст",
+        "popup.text.automatic": "Автоматический размер", "popup.text.expand": "Расширить область чтения",
+        "popup.text.collapse": "Вернуть элементы управления", "adhkar.after_adhan": "Начать после азана",
+        "adhkar.after_adhan.immediate": "Сразу после азана",
+        "adhkar.after_adhan.minutes": "Через %d мин после азана"
     ],
     "pt": [
         "full.open_more": "Mais controlos…", "full.nawafil": "Orações voluntárias",
@@ -2250,7 +2294,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "Último terço da noite",
         "nawafil.witr": "Witr", "nawafil.witr.count": "Número ímpar, mínimo 1",
         "nawafil.witr.best": "A última oração da noite",
-        "popup.adhkar.empty": "Esta coleção ainda não contém adhkār."
+        "popup.adhkar.empty": "Esta coleção ainda não contém adhkār.",
+        "popup.text.smaller": "Texto menor", "popup.text.larger": "Texto maior",
+        "popup.text.automatic": "Tamanho automático", "popup.text.expand": "Ampliar área de leitura",
+        "popup.text.collapse": "Restaurar controlos", "adhkar.after_adhan": "Começar após o Adhan",
+        "adhkar.after_adhan.immediate": "Imediatamente após o Adhan",
+        "adhkar.after_adhan.minutes": "%d min após o Adhan"
     ],
     "ur": [
         "full.open_more": "مزید کنٹرول…", "full.nawafil": "نفل نمازیں",
@@ -2265,7 +2314,12 @@ private let featureTranslations: [String: [String: String]] = [
         "nawafil.qiyam.best": "رات کا آخری تہائی",
         "nawafil.witr": "وتر", "nawafil.witr.count": "طاق عدد، کم از کم ۱",
         "nawafil.witr.best": "رات کی آخری نماز",
-        "popup.adhkar.empty": "اس مجموعے میں ابھی کوئی اذکار نہیں ہیں۔"
+        "popup.adhkar.empty": "اس مجموعے میں ابھی کوئی اذکار نہیں ہیں۔",
+        "popup.text.smaller": "متن چھوٹا کریں", "popup.text.larger": "متن بڑا کریں",
+        "popup.text.automatic": "خودکار متن", "popup.text.expand": "مطالعہ کی جگہ بڑھائیں",
+        "popup.text.collapse": "کنٹرول واپس لائیں", "adhkar.after_adhan": "اذان کے بعد شروع کریں",
+        "adhkar.after_adhan.immediate": "اذان کے فوراً بعد",
+        "adhkar.after_adhan.minutes": "اذان کے %d منٹ بعد"
     ]
 ]
 
@@ -5463,6 +5517,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     private var adhkarAutoPlayCheck: NSButton!
     private var morningPopup: NSPopUpButton!
     private var eveningPopup: NSPopUpButton!
+    private var afterAdhanDelayPopup: NSPopUpButton!
     private let adhkarTestSession = AdhkarSession()
 
     private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
@@ -5732,7 +5787,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
             sectionHeader(t("settings.section.adhkar"))
-            let (adhkarCard, adhkarH) = beginCard(rows: 6)
+            let (adhkarCard, adhkarH) = beginCard(rows: 7)
         adhkarAutoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                       target: self,
                                       action: #selector(adhkarAutoPlayChanged(_:)))
@@ -5778,6 +5833,21 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         eveningPopup.target = self
         eveningPopup.action = #selector(eveningAnchorChanged(_:))
         addRow(adhkarCard, label: t("adhkar.settings.evening_anchor"), control: eveningPopup)
+
+        afterAdhanDelayPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for minutes in kAdhkarAfterAdhanOptions {
+            let title = minutes == 0
+                ? featureText("adhkar.after_adhan.immediate")
+                : String(format: featureText("adhkar.after_adhan.minutes"), minutes)
+            afterAdhanDelayPopup.addItem(withTitle: title)
+        }
+        let savedDelay = UserDefaults.standard.integer(forKey: kAdhkarAfterAdhanDelay)
+        afterAdhanDelayPopup.selectItem(at:
+            kAdhkarAfterAdhanOptions.firstIndex(of: savedDelay) ?? 0)
+        afterAdhanDelayPopup.target = self
+        afterAdhanDelayPopup.action = #selector(afterAdhanDelayChanged(_:))
+        addRow(adhkarCard, label: featureText("adhkar.after_adhan"),
+               control: afterAdhanDelayPopup)
             endCard(adhkarH)
         }
 
@@ -5912,6 +5982,11 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     @objc private func eveningAnchorChanged(_ sender: NSPopUpButton) {
         updateBuiltInAdhkarSchedule(.evening,
             anchor: sender.indexOfSelectedItem == 1 ? "maghrib" : "asr")
+    }
+    @objc private func afterAdhanDelayChanged(_ sender: NSPopUpButton) {
+        guard kAdhkarAfterAdhanOptions.indices.contains(sender.indexOfSelectedItem) else { return }
+        UserDefaults.standard.set(kAdhkarAfterAdhanOptions[sender.indexOfSelectedItem],
+                                  forKey: kAdhkarAfterAdhanDelay)
     }
 }
 
@@ -7421,13 +7496,22 @@ final class CompactAdhkarView: FlippedView {
     private let session = AdhkarSession()
     private var collections: [AdhkarCollection] = []
     private var selectedID: UUID?
+    private var manualFontSize: CGFloat?
+    private var isExpanded = false
 
     private var collectionPopup: NSPopUpButton!
-    private var arabicLabel: NSTextField!
+    private var textCard: AdaptiveCardView!
+    private var textScrollView: NSScrollView!
+    private var arabicTextView: NSTextView!
     private var positionLabel: NSTextField!
     private var progress: NSProgressIndicator!
     private var playButton: HoverIconButton!
     private var muteButton: HoverIconButton!
+    private var expandButton: HoverIconButton!
+    private var moreButton: NSButton!
+
+    var onFinish: (() -> Void)?
+    var isReciting: Bool { session.isPlaying || session.isPaused }
 
     init(frame: NSRect, appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -7450,42 +7534,69 @@ final class CompactAdhkarView: FlippedView {
         collectionPopup.action = #selector(collectionChanged(_:))
         addSubview(collectionPopup)
 
-        let card = AdaptiveCardView(frame: NSRect(x: 12, y: 54,
-                                                   width: bounds.width - 24, height: 208))
-        card.autoresizingMask = [.width]
-        card.cornerRadius = 12
-        card.addsDepth = true
-        addSubview(card)
-
-        arabicLabel = NSTextField(wrappingLabelWithString: "")
-        arabicLabel.frame = NSRect(x: 16, y: 16, width: card.bounds.width - 32, height: 142)
-        arabicLabel.autoresizingMask = [.width]
-        arabicLabel.font = NSFont(name: "Cairo", size: 19)
-            ?? NSFont.systemFont(ofSize: 19, weight: .medium)
-        arabicLabel.textColor = .labelColor
-        arabicLabel.alignment = .right
-        arabicLabel.baseWritingDirection = .rightToLeft
-        arabicLabel.maximumNumberOfLines = 0
-        arabicLabel.cell?.wraps = true
-        arabicLabel.cell?.truncatesLastVisibleLine = true
-        card.addSubview(arabicLabel)
+        textCard = AdaptiveCardView(frame: NSRect(x: 12, y: 50,
+                                                   width: bounds.width - 24, height: 216))
+        textCard.autoresizingMask = [.width]
+        textCard.cornerRadius = 12
+        textCard.addsDepth = true
+        addSubview(textCard)
 
         positionLabel = NSTextField(labelWithString: "")
-        positionLabel.frame = NSRect(x: 16, y: 166, width: card.bounds.width - 32, height: 16)
-        positionLabel.autoresizingMask = [.width]
+        positionLabel.frame = NSRect(x: 14, y: 11, width: 70, height: 16)
         positionLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
         positionLabel.textColor = .secondaryLabelColor
-        positionLabel.alignment = .center
-        card.addSubview(positionLabel)
+        positionLabel.alignment = .left
+        textCard.addSubview(positionLabel)
 
-        progress = NSProgressIndicator(frame: NSRect(x: 22, y: 190,
-                                                      width: card.bounds.width - 44, height: 4))
+        let textTools: [(String, String, Selector)] = [
+            ("textformat.size.smaller", featureText("popup.text.smaller"), #selector(smallerTextTapped)),
+            ("arrow.counterclockwise", featureText("popup.text.automatic"), #selector(automaticTextTapped)),
+            ("textformat.size.larger", featureText("popup.text.larger"), #selector(largerTextTapped)),
+            ("arrow.up.left.and.arrow.down.right", featureText("popup.text.expand"), #selector(expandTextTapped)),
+        ]
+        for (index, item) in textTools.enumerated() {
+            let button = HoverIconButton(symbol: item.0, toolTip: item.1,
+                                         target: self, action: item.2,
+                                         pointSize: 12,
+                                         size: NSSize(width: 40, height: 36))
+            button.frame.origin = NSPoint(x: 88 + CGFloat(index) * 40, y: 2)
+            button.setAccessibilityLabel(item.1)
+            textCard.addSubview(button)
+            if index == 3 { expandButton = button }
+        }
+
+        textScrollView = NSScrollView(frame: NSRect(x: 12, y: 40,
+                                                     width: textCard.bounds.width - 24, height: 154))
+        textScrollView.autoresizingMask = [.width]
+        textScrollView.drawsBackground = false
+        textScrollView.borderType = .noBorder
+        textScrollView.hasVerticalScroller = true
+        textScrollView.autohidesScrollers = true
+
+        arabicTextView = NSTextView(frame: textScrollView.bounds)
+        arabicTextView.isEditable = false
+        arabicTextView.isSelectable = true
+        arabicTextView.drawsBackground = false
+        arabicTextView.textColor = .labelColor
+        arabicTextView.alignment = .right
+        arabicTextView.baseWritingDirection = .rightToLeft
+        arabicTextView.textContainerInset = NSSize(width: 8, height: 8)
+        arabicTextView.isHorizontallyResizable = false
+        arabicTextView.isVerticallyResizable = true
+        arabicTextView.autoresizingMask = [.width]
+        arabicTextView.textContainer?.widthTracksTextView = true
+        arabicTextView.textContainer?.lineFragmentPadding = 0
+        textScrollView.documentView = arabicTextView
+        textCard.addSubview(textScrollView)
+
+        progress = NSProgressIndicator(frame: NSRect(x: 22, y: 202,
+                                                      width: textCard.bounds.width - 44, height: 4))
         progress.autoresizingMask = [.width]
         progress.style = .bar
         progress.isIndeterminate = false
         progress.minValue = 0
         progress.maxValue = 1
-        card.addSubview(progress)
+        textCard.addSubview(progress)
 
         let controlSize = NSSize(width: 40, height: 34)
         let symbols = ["backward.fill", "play.fill", "forward.fill",
@@ -7504,6 +7615,7 @@ final class CompactAdhkarView: FlippedView {
                                          pointSize: 14, size: controlSize)
             button.frame.origin = NSPoint(x: x, y: 274)
             button.autoresizingMask = [.minXMargin, .maxXMargin]
+            button.setAccessibilityLabel(tools[i])
             addSubview(button)
             controls.append(button)
             x += controlSize.width + 7
@@ -7514,8 +7626,8 @@ final class CompactAdhkarView: FlippedView {
         controls[4].hoverTint = .systemRed
         controls[4].contentTintColor = .systemRed
 
-        let moreButton = NSButton(title: featureText("full.open_more"),
-                                  target: self, action: #selector(openMoreTapped))
+        moreButton = NSButton(title: featureText("full.open_more"),
+                              target: self, action: #selector(openMoreTapped))
         moreButton.frame = NSRect(x: 54, y: 318, width: bounds.width - 108, height: 28)
         moreButton.autoresizingMask = [.minXMargin, .maxXMargin]
         moreButton.bezelStyle = .rounded
@@ -7535,6 +7647,7 @@ final class CompactAdhkarView: FlippedView {
         session.onFinish = { [weak self] in
             self?.renderPreview()
             self?.refreshControls()
+            self?.onFinish?()
         }
     }
 
@@ -7567,9 +7680,10 @@ final class CompactAdhkarView: FlippedView {
 
     private func renderPreview() {
         guard let collection = selectedCollection, let first = collection.items.first else {
-            arabicLabel.stringValue = featureText("popup.adhkar.empty")
-            arabicLabel.alignment = .center
-            arabicLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+            arabicTextView.string = featureText("popup.adhkar.empty")
+            arabicTextView.alignment = .center
+            arabicTextView.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+            applyTextSize(for: arabicTextView.string)
             positionLabel.stringValue = ""
             progress.doubleValue = 0
             return
@@ -7578,11 +7692,45 @@ final class CompactAdhkarView: FlippedView {
     }
 
     private func render(item: AdhkarEntry, index: Int, total: Int) {
-        arabicLabel.stringValue = item.arabic
-        arabicLabel.alignment = .right
-        arabicLabel.baseWritingDirection = .rightToLeft
+        arabicTextView.string = item.arabic
+        arabicTextView.alignment = .right
+        arabicTextView.baseWritingDirection = .rightToLeft
+        applyTextSize(for: item.arabic)
+        arabicTextView.scrollToBeginningOfDocument(nil)
         positionLabel.stringValue = "\(index + 1) / \(total)"
         progress.doubleValue = total > 0 ? Double(index + 1) / Double(total) : 0
+    }
+
+    private func applyTextSize(for text: String) {
+        let automatic: CGFloat
+        switch text.count {
+        case 0...110:  automatic = 23
+        case 111...240: automatic = 20
+        case 241...430: automatic = 17
+        default:       automatic = 15
+        }
+        let size = manualFontSize ?? automatic
+        arabicTextView.font = NSFont(name: "Cairo", size: size)
+            ?? NSFont.systemFont(ofSize: size, weight: .medium)
+    }
+
+    private func updateExpandedLayout() {
+        collectionPopup.isHidden = isExpanded
+        moreButton.isHidden = isExpanded
+        textCard.frame = isExpanded
+            ? NSRect(x: 12, y: 8, width: bounds.width - 24, height: 258)
+            : NSRect(x: 12, y: 50, width: bounds.width - 24, height: 216)
+        textScrollView.frame = NSRect(x: 12, y: 40,
+                                      width: textCard.bounds.width - 24,
+                                      height: isExpanded ? 196 : 154)
+        progress.frame = NSRect(x: 22, y: isExpanded ? 246 : 202,
+                                width: textCard.bounds.width - 44, height: 4)
+        let symbol = isExpanded ? "arrow.down.right.and.arrow.up.left"
+                                : "arrow.up.left.and.arrow.down.right"
+        expandButton.image = templateSymbol(symbol, pointSize: 12)
+        let label = featureText(isExpanded ? "popup.text.collapse" : "popup.text.expand")
+        expandButton.toolTip = label
+        expandButton.setAccessibilityLabel(label)
     }
 
     private func refreshControls() {
@@ -7614,8 +7762,52 @@ final class CompactAdhkarView: FlippedView {
     @objc private func previousTapped() { session.previous() }
     @objc private func nextTapped() { session.next() }
     @objc private func muteTapped() { session.setMuted(!session.muted) }
-    @objc private func stopTapped() { session.stop(); renderPreview() }
+    @objc private func stopTapped() {
+        session.stop()
+        renderPreview()
+        onFinish?()
+    }
+    @objc private func smallerTextTapped() {
+        let current = arabicTextView.font?.pointSize ?? 19
+        manualFontSize = max(13, current - 2)
+        applyTextSize(for: arabicTextView.string)
+    }
+    @objc private func largerTextTapped() {
+        let current = arabicTextView.font?.pointSize ?? 19
+        manualFontSize = min(30, current + 2)
+        applyTextSize(for: arabicTextView.string)
+    }
+    @objc private func automaticTextTapped() {
+        manualFontSize = nil
+        applyTextSize(for: arabicTextView.string)
+    }
+    @objc private func expandTextTapped() {
+        isExpanded.toggle()
+        updateExpandedLayout()
+    }
     @objc private func openMoreTapped() { appDelegate?.openMainWindow(selecting: 1) }
+
+    /// Select and optionally begin a collection from outside the compact
+    /// view. Scheduled playback and editor handoff both use this entry point,
+    /// so no secondary reader window is needed.
+    func present(collection: AdhkarCollection, autoPlay: Bool) {
+        session.stop()
+        reloadCollections()
+        if !collections.contains(where: { $0.id == collection.id }) {
+            collections.append(collection)
+            collectionPopup.addItem(withTitle: collection.displayName)
+        }
+        selectedID = collection.id
+        if let index = collections.firstIndex(where: { $0.id == collection.id }) {
+            collectionPopup.selectItem(at: index)
+        }
+        if let first = collection.items.first {
+            render(item: first, index: 0, total: collection.items.count)
+        } else {
+            renderPreview()
+        }
+        if autoPlay { session.start(collection: collection) }
+    }
 }
 
 // ============================================================================
@@ -7638,6 +7830,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// Scheduled collections wait here so two collections sharing an anchor
     /// never replace each other in the single reader panel.
     private var scheduledAdhkarQueue: [AdhkarCollection] = []
+    private var scheduledAdhkarDelayTimer: Timer?
+    private var queuedAdhkarIsWaitingForAdhan = false
+    private var completedAdhanAllowsQueuedAdhkar = false
 
     /// Full management window (v3). Lazily instantiated on first open.
     var mainWindow: MainWindow?
@@ -7761,6 +7956,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         if UserDefaults.standard.object(forKey: kAdhkarVolume) == nil {
             UserDefaults.standard.set(1.0, forKey: kAdhkarVolume)
+        }
+        if UserDefaults.standard.object(forKey: kAdhkarAfterAdhanDelay) == nil {
+            UserDefaults.standard.set(0, forKey: kAdhkarAfterAdhanDelay)
         }
 
         registerCairoFonts()
@@ -8468,6 +8666,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let compactAdhkar = CompactAdhkarView(
             frame: NSRect(x: 0, y: 72, width: W, height: 360),
             appDelegate: self)
+        compactAdhkar.onFinish = { [weak self] in
+            DispatchQueue.main.async { self?.presentNextScheduledAdhkarIfPossible() }
+        }
         compactAdhkar.isHidden = true
         content.addSubview(compactAdhkar)
         compactAdhkarView = compactAdhkar
@@ -8551,14 +8752,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     @objc func toggleCompactAdhkar() {
-        isCompactAdhkarMode.toggle()
-        compactPrayerViews.forEach { $0.isHidden = isCompactAdhkarMode }
-        compactAdhkarView?.isHidden = !isCompactAdhkarMode
-        if isCompactAdhkarMode { compactAdhkarView?.reloadCollections() }
+        setCompactAdhkarMode(!isCompactAdhkarMode)
+    }
+
+    private func setCompactAdhkarMode(_ enabled: Bool) {
+        isCompactAdhkarMode = enabled
+        compactPrayerViews.forEach { $0.isHidden = enabled }
+        compactAdhkarView?.isHidden = !enabled
+        if enabled { compactAdhkarView?.reloadCollections() }
         updateUI()
-        let tint: NSColor = isCompactAdhkarMode ? .appGreenAccent : .secondaryLabelColor
+        let tint: NSColor = enabled ? .appGreenAccent : .secondaryLabelColor
         compactAdhkarButton?.idleTint = tint
         compactAdhkarButton?.contentTintColor = tint
+    }
+
+    private func showCompactAdhkar(_ collection: AdhkarCollection, autoPlay: Bool) {
+        pickerView?.isHidden = true
+        settingsView?.isHidden = true
+        mainContent.isHidden = false
+        setCompactAdhkarMode(true)
+        compactAdhkarView?.present(collection: collection, autoPlay: autoPlay)
+        guard !popover.isShown, let button = statusItem.button else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     }
 
     /// Open the currently-selected mosque's page on mawaqit.net in the
@@ -9437,6 +9652,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     func playAdhan() {
         // Guarantee only one playback at a time — if the user spam-taps Test,
         // cut the previous player off before starting the next one.
+        scheduledAdhkarDelayTimer?.invalidate()
+        scheduledAdhkarDelayTimer = nil
+        completedAdhanAllowsQueuedAdhkar = false
+        if !scheduledAdhkarQueue.isEmpty { queuedAdhkarIsWaitingForAdhan = true }
         adhanPlayer?.stop()
         let opt = currentAdhanOption()
         let wantedUID = UserDefaults.standard.string(forKey: kAdhanAudioDevice) ?? ""
@@ -9483,18 +9702,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         adhanPlayer = nil
         onAdhanStateChanged?()
         syncStopAdhanStatusItem()
+        scheduleQueuedAdhkarAfterAdhan()
     }
 
     // MARK: - AVAudioPlayerDelegate
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        if adhanPlayer === player { adhanPlayer = nil }
+        let wasAdhan = adhanPlayer === player
+        if wasAdhan { adhanPlayer = nil }
         onAdhanStateChanged?()
         syncStopAdhanStatusItem()
+        if wasAdhan { scheduleQueuedAdhkarAfterAdhan() }
     }
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        if adhanPlayer === player { adhanPlayer = nil }
+        let wasAdhan = adhanPlayer === player
+        if wasAdhan { adhanPlayer = nil }
         onAdhanStateChanged?()
         syncStopAdhanStatusItem()
+        if wasAdhan { scheduleQueuedAdhkarAfterAdhan() }
     }
 
     // ------------------------------------------ menu-bar stop button
@@ -9617,27 +9841,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     private func presentNextScheduledAdhkarIfPossible() {
-        guard !(adhkarPanel?.isVisible ?? false), !scheduledAdhkarQueue.isEmpty else { return }
-        let next = scheduledAdhkarQueue.removeFirst()
-        if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
-        adhkarPanel?.onDismiss = { [weak self] in
-            DispatchQueue.main.async { self?.presentNextScheduledAdhkarIfPossible() }
+        guard !scheduledAdhkarQueue.isEmpty,
+              !(compactAdhkarView?.isReciting ?? false),
+              scheduledAdhkarDelayTimer == nil else { return }
+        if isAdhanPlaying || (adhanIsDueThisMinute() && !completedAdhanAllowsQueuedAdhkar) {
+            queuedAdhkarIsWaitingForAdhan = true
+            return
         }
-        adhkarPanel?.present(collection: next, autoPlay: true)
+        let next = scheduledAdhkarQueue.removeFirst()
+        queuedAdhkarIsWaitingForAdhan = false
+        completedAdhanAllowsQueuedAdhkar = false
+        showCompactAdhkar(next, autoPlay: true)
+    }
+
+    private func adhanIsDueThisMinute() -> Bool {
+        guard UserDefaults.standard.bool(forKey: kAdhanEnabled), info.times.count >= 5 else {
+            return false
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        let current = formatter.string(from: Date())
+        return (0..<5).contains { index in
+            info.times[index] == current && adhanModeForPrayer(index) == .adhan
+        }
+    }
+
+    private func scheduleQueuedAdhkarAfterAdhan() {
+        guard queuedAdhkarIsWaitingForAdhan, !scheduledAdhkarQueue.isEmpty else {
+            presentNextScheduledAdhkarIfPossible()
+            return
+        }
+        scheduledAdhkarDelayTimer?.invalidate()
+        let minutes = max(0, UserDefaults.standard.integer(forKey: kAdhkarAfterAdhanDelay))
+        let startQueued = { [weak self] in
+            guard let self else { return }
+            self.scheduledAdhkarDelayTimer = nil
+            self.completedAdhanAllowsQueuedAdhkar = true
+            self.presentNextScheduledAdhkarIfPossible()
+        }
+        if minutes == 0 {
+            DispatchQueue.main.async(execute: startQueued)
+        } else {
+            scheduledAdhkarDelayTimer = Timer.scheduledTimer(
+                withTimeInterval: TimeInterval(minutes * 60), repeats: false) { _ in
+                    startQueued()
+                }
+        }
     }
 
     /// Open the adhkar window. `autoPlay` = true on scheduled trigger; false
     /// when the user opens it manually from the menu (still autoplays because
     /// that's the point of opening it, but leaves control to the user).
     func presentAdhkar(set: AdhkarSet, autoPlay: Bool) {
-        if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
-        adhkarPanel?.present(set: set, autoPlay: autoPlay)
+        let collection = AdhkarLibrary.load().first(where: {
+            $0.categoryKey == set.rawValue || $0.name == set.arabicName
+        }) ?? AdhkarCollection(name: set.arabicName,
+                               categoryKey: set.rawValue,
+                               items: AdhkarData.items(for: set).map { AdhkarEntry(from: $0) })
+        showCompactAdhkar(collection, autoPlay: autoPlay)
     }
 
     /// v3 entry point — present a specific user collection.
     func presentAdhkar(collection: AdhkarCollection, autoPlay: Bool) {
-        if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
-        adhkarPanel?.present(collection: collection, autoPlay: autoPlay)
+        showCompactAdhkar(collection, autoPlay: autoPlay)
     }
 
     func todayString() -> String {
