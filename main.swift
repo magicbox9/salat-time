@@ -79,6 +79,7 @@ let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 /// from language makes switching Arabic/LTR locales preserve the user's view.
 let kPrayerDashboardMode   = "prayerDashboardMode"      // 0...3
 let kPrayerNawafilMode     = "prayerNawafilMode"        // 0 hide, 1 integrated, 2 separate
+let kPrayerShowCountdown   = "prayerShowCountdown"      // Bool — full dashboard, default true
 
 /// Stable Settings destinations. Using a type instead of integer literals
 /// keeps popup and dashboard shortcuts correct as new sections are added.
@@ -103,7 +104,7 @@ let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbo
 let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
 let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
 
-let kAppVersion          = "3.14.0"
+let kAppVersion          = "3.15.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2816,6 +2817,312 @@ func featureText(_ key: String) -> String {
             ?? featureTranslations["en"]?[key]
             ?? key
     }
+    return applyingArabicDigitPreference(value, languageCode: code)
+}
+
+/// Compact offline guidance copy for all ten supported interface languages.
+/// English remains a defensive per-field fallback for migrated preferences or
+/// future language additions that have not yet supplied a new key.
+private let prayerInfoTranslations: [String: [String: String]] = [
+    "en": [
+        "category.obligatory": "Obligatory prayer",
+        "category.nawafil": "Voluntary prayer",
+        "info.when": "When", "info.how": "How", "info.why": "Why",
+        "info.evidence": "Evidence", "info.open": "Prayer information",
+        "obligatory.when.iqama": "Prayer time enters at %@. This mosque’s iqama is %@.",
+        "obligatory.when.no_iqama": "Prayer time enters at %@. No iqama is published; pray within its valid time.",
+        "obligatory.how": "Pray %@ obligatory rak‘ahs facing the qibla; follow the imam in congregation.",
+        "obligatory.why": "One of the five daily obligations, prescribed at appointed times.",
+        "rawatib.before.window": "From prayer entry %@ until the published iqama %@.",
+        "rawatib.before.marker": "Prayer time enters at %@. Pray before the Fard; no iqama end time is published.",
+        "rawatib.after.iqama": "After the obligatory prayer beginning at iqama %@; this is a marker, not a timed window.",
+        "rawatib.after.no_iqama": "After the obligatory prayer whose time enters at %@; no iqama is published.",
+        "rawatib.how": "Pray in units of two. Keep the two before Fajr brief.",
+        "rawatib.why": "Keeping twelve Rawatib daily is a means to a house in Paradise.",
+        "nawafil.rawatib.fajr.count": "2 rak‘ahs",
+        "nawafil.rawatib.dhuhr.before.count": "4 rak‘ahs",
+        "nawafil.rawatib.after.count": "2 rak‘ahs",
+        "duha.when": "Guidance: from about twenty minutes after sunrise (%@) until before Dhuhr (%@); avoid the zenith itself.",
+        "duha.how": "Pray at least two rak‘ahs in units of two; eight are also authentically reported.",
+        "duha.why": "Two rak‘ahs of Duha fulfill the morning charity due from the body’s joints.",
+        "qiyam.when.no_iqama": "After Isha (entry %@) until Fajr %@; no iqama is published.",
+        "qiyam.when.iqama": "After the Isha congregation (iqama %@) until Fajr %@.",
+        "qiyam.how": "Pray two by two; if dawn is near, conclude with one Witr.",
+        "qiyam.why": "The best voluntary prayer after the obligations; the final third of night is especially virtuous.",
+        "witr.how": "Pray an odd number of rak‘ahs and make it the final prayer of the night.",
+        "witr.why": "Witr closes the night prayer with an odd-numbered prayer.",
+        "visual.countdown.show": "Show next-prayer countdown in every view",
+        "visual.countdown.help": "Keeps a live countdown visible above Overview, List, Timeline, and Clock.",
+        "visual.countdown.accessibility": "Time remaining until the next prayer",
+    ],
+    "fr": [
+        "category.obligatory": "Prière obligatoire", "category.nawafil": "Prière surérogatoire",
+        "info.when": "Quand", "info.how": "Comment", "info.why": "Pourquoi",
+        "info.evidence": "Référence", "info.open": "Informations sur la prière",
+        "obligatory.when.iqama": "L’heure de la prière commence à %@. L’iqama de cette mosquée est à %@.",
+        "obligatory.when.no_iqama": "L’heure de la prière commence à %@. Aucune iqama n’est publiée ; priez dans sa plage valide.",
+        "obligatory.how": "Accomplissez %@ rak‘āt obligatoires face à la qibla ; en groupe, suivez l’imam.",
+        "obligatory.why": "L’une des cinq obligations quotidiennes prescrites à des heures déterminées.",
+        "rawatib.before.window": "De l’entrée de l’heure à %@ jusqu’à l’iqama publiée à %@.",
+        "rawatib.before.marker": "L’heure entre à %@. Priez avant le Fard ; aucune fin par iqama n’est publiée.",
+        "rawatib.after.iqama": "Après la prière obligatoire commençant à l’iqama de %@ ; c’est un repère, pas une plage chronométrée.",
+        "rawatib.after.no_iqama": "Après la prière obligatoire dont l’heure entre à %@ ; aucune iqama n’est publiée.",
+        "rawatib.how": "Priez par unités de deux. Gardez brèves les deux rak‘āt avant Fajr.",
+        "rawatib.why": "La régularité dans les douze Rawatib est une cause d’une demeure au Paradis.",
+        "nawafil.rawatib.fajr.count": "2 rak‘āt", "nawafil.rawatib.dhuhr.before.count": "4 rak‘āt",
+        "nawafil.rawatib.after.count": "2 rak‘āt",
+        "duha.when": "Repère : environ vingt minutes après le lever du soleil (%@) jusqu’avant Dhuhr (%@) ; évitez le zénith.",
+        "duha.how": "Priez au moins deux rak‘āt, deux par deux ; huit sont aussi authentiquement rapportées.",
+        "duha.why": "Deux rak‘āt de Duha acquittent l’aumône matinale due pour les articulations du corps.",
+        "qiyam.when.no_iqama": "Après l’entrée de Isha à %@ jusqu’à Fajr %@ ; aucune iqama n’est publiée.",
+        "qiyam.when.iqama": "Après la prière de Isha (iqama %@) jusqu’à Fajr %@.",
+        "qiyam.how": "Priez deux par deux ; à l’approche de l’aube, terminez par un Witr.",
+        "qiyam.why": "La meilleure prière volontaire après les obligations ; le dernier tiers est particulièrement méritoire.",
+        "witr.how": "Priez un nombre impair de rak‘āt et faites-en la dernière prière de la nuit.",
+        "witr.why": "Le Witr clôt la prière nocturne par un nombre impair.",
+        "visual.countdown.show": "Afficher le compte à rebours dans chaque vue",
+        "visual.countdown.help": "Garde le compte à rebours visible dans Vue d’ensemble, Liste, Chronologie et Horloge.",
+        "visual.countdown.accessibility": "Temps restant avant la prochaine prière",
+    ],
+    "es": [
+        "category.obligatory": "Oración obligatoria", "category.nawafil": "Oración voluntaria",
+        "info.when": "Cuándo", "info.how": "Cómo", "info.why": "Por qué",
+        "info.evidence": "Referencia", "info.open": "Información de la oración",
+        "obligatory.when.iqama": "El tiempo de la oración comienza a las %@. El iqama de esta mezquita es a las %@.",
+        "obligatory.when.no_iqama": "El tiempo de la oración comienza a las %@. No hay iqama publicado; reza dentro de su tiempo válido.",
+        "obligatory.how": "Reza %@ rak‘āt obligatorios hacia la qibla; en congregación, sigue al imam.",
+        "obligatory.why": "Una de las cinco obligaciones diarias prescritas en tiempos determinados.",
+        "rawatib.before.window": "Desde la entrada del tiempo a las %@ hasta el iqama publicado a las %@.",
+        "rawatib.before.marker": "El tiempo entra a las %@. Reza antes del Fard; no hay una hora de iqama publicada que cierre el intervalo.",
+        "rawatib.after.iqama": "Después de la oración obligatoria que comienza con el iqama de las %@; es una referencia, no un intervalo cronometrado.",
+        "rawatib.after.no_iqama": "Después de la oración obligatoria cuyo tiempo entra a las %@; no hay iqama publicado.",
+        "rawatib.how": "Reza de dos en dos. Haz breves las dos rak‘āt anteriores al Fajr.",
+        "rawatib.why": "Mantener doce Rawatib diarios es causa de una casa en el Paraíso.",
+        "nawafil.rawatib.fajr.count": "2 rak‘āt", "nawafil.rawatib.dhuhr.before.count": "4 rak‘āt",
+        "nawafil.rawatib.after.count": "2 rak‘āt",
+        "duha.when": "Orientación: desde unos veinte minutos después del amanecer (%@) hasta antes del Dhuhr (%@); evita el cenit.",
+        "duha.how": "Reza al menos dos rak‘āt, de dos en dos; también se han transmitido auténticamente ocho.",
+        "duha.why": "Dos rak‘āt de Duha cubren la caridad matutina debida por las articulaciones del cuerpo.",
+        "qiyam.when.no_iqama": "Después de la entrada del Isha a las %@ hasta el Fajr %@; no hay iqama publicado.",
+        "qiyam.when.iqama": "Después de la congregación del Isha (iqama %@) hasta el Fajr %@.",
+        "qiyam.how": "Reza de dos en dos; si se acerca el alba, concluye con un Witr.",
+        "qiyam.why": "La mejor oración voluntaria después de las obligatorias; el último tercio de la noche es especialmente virtuoso.",
+        "witr.how": "Reza un número impar de rak‘āt y haz que sea la última oración de la noche.",
+        "witr.why": "El Witr cierra la oración nocturna con un número impar.",
+        "visual.countdown.show": "Mostrar la cuenta atrás en todas las vistas",
+        "visual.countdown.help": "Mantiene visible la cuenta atrás en Resumen, Lista, Cronología y Reloj.",
+        "visual.countdown.accessibility": "Tiempo restante hasta la próxima oración",
+    ],
+    "ar": [
+        "category.obligatory": "صلاة مفروضة", "category.nawafil": "صلاة نافلة",
+        "info.when": "متى", "info.how": "كيف", "info.why": "لماذا",
+        "info.evidence": "الدليل", "info.open": "معلومات الصلاة",
+        "obligatory.when.iqama": "يدخل وقت الصلاة عند %@، وإقامة هذا المسجد عند %@.",
+        "obligatory.when.no_iqama": "يدخل وقت الصلاة عند %@. لا يوجد وقت إقامة منشور؛ فصلّها في وقتها المعتبر.",
+        "obligatory.how": "صلِّ %@ ركعات مفروضة مستقبلًا القبلة، واتبع الإمام في الجماعة.",
+        "obligatory.why": "واحدة من الصلوات الخمس المفروضة في أوقات محددة.",
+        "rawatib.before.window": "من دخول الوقت عند %@ إلى الإقامة المنشورة عند %@.",
+        "rawatib.before.marker": "يدخل الوقت عند %@. صلِّها قبل الفرض؛ لا يوجد وقت إقامة منشور لنهاية المدة.",
+        "rawatib.after.iqama": "بعد الفريضة التي تبدأ بإقامة %@؛ هذه علامة إرشادية وليست مدة محددة.",
+        "rawatib.after.no_iqama": "بعد الفريضة التي يدخل وقتها عند %@؛ لا يوجد وقت إقامة منشور.",
+        "rawatib.how": "تُصلّى ركعتين ركعتين، وتُخفف ركعتا سنة الفجر.",
+        "rawatib.why": "المحافظة على اثنتي عشرة ركعة من الرواتب سبب لبيت في الجنة.",
+        "nawafil.rawatib.fajr.count": "ركعتان", "nawafil.rawatib.dhuhr.before.count": "أربع ركعات",
+        "nawafil.rawatib.after.count": "ركعتان",
+        "duha.when": "إرشاد: من نحو عشرين دقيقة بعد الشروق (%@) إلى ما قبل الظهر (%@)، مع اجتناب وقت الزوال.",
+        "duha.how": "صلِّ ركعتين على الأقل، ركعتين ركعتين؛ وثبتت ثماني ركعات أيضًا.",
+        "duha.why": "ركعتا الضحى تجزئان عن صدقة الصباح عن مفاصل الجسد.",
+        "qiyam.when.no_iqama": "بعد دخول وقت العشاء عند %@ إلى الفجر %@؛ لا يوجد وقت إقامة منشور.",
+        "qiyam.when.iqama": "بعد جماعة العشاء (الإقامة %@) إلى الفجر %@.",
+        "qiyam.how": "صلِّ ركعتين ركعتين، فإذا خفت الصبح فاختم بركعة وتر.",
+        "qiyam.why": "أفضل صلاة التطوع بعد الفريضة، والثلث الأخير من الليل أفضل أوقاته.",
+        "witr.how": "صلِّ عددًا فرديًا من الركعات واجعلها آخر صلاة الليل.",
+        "witr.why": "يختم الوتر صلاة الليل بصلاة ذات عدد فردي.",
+        "visual.countdown.show": "إظهار العد التنازلي للصلاة القادمة في كل عرض",
+        "visual.countdown.help": "يبقي العد التنازلي ظاهرًا في النظرة العامة والقائمة والخط الزمني والساعة.",
+        "visual.countdown.accessibility": "الوقت المتبقي للصلاة القادمة",
+    ],
+    "zh": [
+        "category.obligatory": "主命拜", "category.nawafil": "副功拜",
+        "info.when": "时间", "info.how": "做法", "info.why": "意义",
+        "info.evidence": "依据", "info.open": "礼拜说明",
+        "obligatory.when.iqama": "礼拜时间于 %@ 进入，本清真寺的成拜时间为 %@。",
+        "obligatory.when.no_iqama": "礼拜时间于 %@ 进入。清真寺未公布成拜时间，请在有效时段内礼拜。",
+        "obligatory.how": "面向朝向礼 %@ 拜主命拜；集体礼拜时跟随伊玛目。",
+        "obligatory.why": "这是每日五番在规定时间履行的主命之一。",
+        "rawatib.before.window": "从礼拜时间进入的 %@ 到公布的成拜时间 %@。",
+        "rawatib.before.marker": "礼拜时间于 %@ 进入。请在主命拜前礼；因未公布成拜时间，无法给出结束点。",
+        "rawatib.after.iqama": "在 %@ 成拜开始的主命拜结束后；这是提示点，不是固定时段。",
+        "rawatib.after.no_iqama": "在 %@ 进入时间的主命拜结束后；未公布成拜时间。",
+        "rawatib.how": "每两拜一组。晨礼前的两拜宜简短。",
+        "rawatib.why": "坚持每日十二拜常行圣行拜，是获得乐园住宅的善因。",
+        "nawafil.rawatib.fajr.count": "2拜", "nawafil.rawatib.dhuhr.before.count": "4拜",
+        "nawafil.rawatib.after.count": "2拜",
+        "duha.when": "参考：日出约二十分钟后（%@）至晌礼前（%@）；避开正午天顶时刻。",
+        "duha.how": "至少礼两拜，每两拜一组；可靠传述中也有八拜。",
+        "duha.why": "杜哈的两拜可履行身体各关节在清晨应尽的施舍。",
+        "qiyam.when.no_iqama": "宵礼时间 %@ 进入后至晨礼 %@；未公布成拜时间。",
+        "qiyam.when.iqama": "宵礼集体礼拜（成拜 %@）后至晨礼 %@。",
+        "qiyam.how": "每两拜一组；若担心黎明将至，以一拜奇数拜结束。",
+        "qiyam.why": "主命拜之后最优的副功拜；夜晚最后三分之一尤为尊贵。",
+        "witr.how": "礼奇数拜，并将其作为夜间最后的礼拜。",
+        "witr.why": "奇数拜以奇数拜数结束夜间礼拜。",
+        "visual.countdown.show": "在所有视图显示下一次礼拜倒计时",
+        "visual.countdown.help": "在概览、列表、时间线和时钟中持续显示倒计时。",
+        "visual.countdown.accessibility": "距离下一次礼拜的剩余时间",
+    ],
+    "hi": [
+        "category.obligatory": "फ़र्ज़ नमाज़", "category.nawafil": "नफ़्ल नमाज़",
+        "info.when": "कब", "info.how": "कैसे", "info.why": "क्यों",
+        "info.evidence": "दलील", "info.open": "नमाज़ की जानकारी",
+        "obligatory.when.iqama": "नमाज़ का वक़्त %@ पर शुरू होता है। इस मस्जिद की इक़ामत %@ पर है।",
+        "obligatory.when.no_iqama": "नमाज़ का वक़्त %@ पर शुरू होता है। इक़ामत प्रकाशित नहीं है; मान्य वक़्त के भीतर नमाज़ पढ़ें।",
+        "obligatory.how": "क़िबला की ओर %@ फ़र्ज़ रकअत पढ़ें; जमाअत में इमाम की पैरवी करें।",
+        "obligatory.why": "तय वक़्तों पर फ़र्ज़ की गई पाँच रोज़ाना नमाज़ों में से एक।",
+        "rawatib.before.window": "वक़्त के %@ पर शुरू होने से प्रकाशित इक़ामत %@ तक।",
+        "rawatib.before.marker": "वक़्त %@ पर शुरू होता है। फ़र्ज़ से पहले पढ़ें; अंत बताने वाली इक़ामत प्रकाशित नहीं है।",
+        "rawatib.after.iqama": "%@ की इक़ामत से शुरू होने वाली फ़र्ज़ नमाज़ के बाद; यह संकेत है, तय अवधि नहीं।",
+        "rawatib.after.no_iqama": "उस फ़र्ज़ नमाज़ के बाद जिसका वक़्त %@ पर शुरू होता है; इक़ामत प्रकाशित नहीं है।",
+        "rawatib.how": "दो-दो रकअत पढ़ें। फ़ज्र से पहले की दो रकअत हल्की रखें।",
+        "rawatib.why": "रोज़ बारह रावतिब की पाबंदी जन्नत में घर का सबब है।",
+        "nawafil.rawatib.fajr.count": "2 रकअत", "nawafil.rawatib.dhuhr.before.count": "4 रकअत",
+        "nawafil.rawatib.after.count": "2 रकअत",
+        "duha.when": "मार्गदर्शन: सूर्योदय के लगभग बीस मिनट बाद (%@) से ज़ुहर से पहले (%@) तक; ठीक ज़वाल से बचें।",
+        "duha.how": "कम से कम दो रकअत, दो-दो करके पढ़ें; आठ रकअत भी सही रिवायत से साबित हैं।",
+        "duha.why": "दुहा की दो रकअत शरीर के जोड़ों की सुबह की सदक़ा ज़िम्मेदारी पूरी करती हैं।",
+        "qiyam.when.no_iqama": "इशा का वक़्त %@ पर शुरू होने के बाद से फ़ज्र %@ तक; इक़ामत प्रकाशित नहीं है।",
+        "qiyam.when.iqama": "इशा की जमाअत (इक़ामत %@) के बाद से फ़ज्र %@ तक।",
+        "qiyam.how": "दो-दो रकअत पढ़ें; सुबह का डर हो तो एक वित्र से समाप्त करें।",
+        "qiyam.why": "फ़र्ज़ों के बाद सबसे उत्तम नफ़्ल नमाज़; रात का आख़िरी तिहाई विशेष फ़ज़ीलत वाला है।",
+        "witr.how": "विषम संख्या में रकअत पढ़ें और इसे रात की आख़िरी नमाज़ बनाएँ।",
+        "witr.why": "वित्र रात की नमाज़ को विषम संख्या से पूरा करता है।",
+        "visual.countdown.show": "हर दृश्य में अगली नमाज़ की उलटी गिनती दिखाएँ",
+        "visual.countdown.help": "अवलोकन, सूची, समयरेखा और घड़ी में उलटी गिनती दिखाई देती रहेगी।",
+        "visual.countdown.accessibility": "अगली नमाज़ तक बचा समय",
+    ],
+    "bn": [
+        "category.obligatory": "ফরজ নামাজ", "category.nawafil": "নফল নামাজ",
+        "info.when": "কখন", "info.how": "কীভাবে", "info.why": "কেন",
+        "info.evidence": "দলিল", "info.open": "নামাজের তথ্য",
+        "obligatory.when.iqama": "নামাজের সময় %@-এ শুরু হয়। এই মসজিদের ইকামত %@-এ।",
+        "obligatory.when.no_iqama": "নামাজের সময় %@-এ শুরু হয়। ইকামতের সময় প্রকাশিত নেই; বৈধ সময়ের মধ্যে নামাজ পড়ুন।",
+        "obligatory.how": "কিবলামুখী হয়ে %@ রাকাত ফরজ পড়ুন; জামাতে ইমামকে অনুসরণ করুন।",
+        "obligatory.why": "নির্ধারিত সময়ে আদায়ের জন্য ফরজ করা দৈনিক পাঁচ নামাজের একটি।",
+        "rawatib.before.window": "ওয়াক্ত %@-এ শুরু হওয়া থেকে প্রকাশিত ইকামত %@ পর্যন্ত।",
+        "rawatib.before.marker": "ওয়াক্ত %@-এ শুরু হয়। ফরজের আগে পড়ুন; শেষ নির্ধারণের ইকামত প্রকাশিত নেই।",
+        "rawatib.after.iqama": "%@-এর ইকামতে শুরু হওয়া ফরজ নামাজের পরে; এটি নির্দেশক, নির্দিষ্ট সময়সীমা নয়।",
+        "rawatib.after.no_iqama": "যে ফরজের ওয়াক্ত %@-এ শুরু হয়, তা শেষ হওয়ার পরে; ইকামত প্রকাশিত নেই।",
+        "rawatib.how": "দুই রাকাত করে পড়ুন। ফজরের আগের দুই রাকাত সংক্ষিপ্ত রাখুন।",
+        "rawatib.why": "দৈনিক বারো রাকাত রাওয়াতিব নিয়মিত পড়া জান্নাতে ঘরের কারণ।",
+        "nawafil.rawatib.fajr.count": "২ রাকাত", "nawafil.rawatib.dhuhr.before.count": "৪ রাকাত",
+        "nawafil.rawatib.after.count": "২ রাকাত",
+        "duha.when": "নির্দেশনা: সূর্যোদয়ের প্রায় বিশ মিনিট পরে (%@) থেকে যোহরের আগে (%@) পর্যন্ত; ঠিক মধ্যাহ্ন এড়িয়ে চলুন।",
+        "duha.how": "অন্তত দুই রাকাত, দুই রাকাত করে পড়ুন; আট রাকাতও সহিহ বর্ণনায় আছে।",
+        "duha.why": "দুহার দুই রাকাত শরীরের অস্থিসন্ধিগুলোর সকালের সদকার দায় পূরণ করে।",
+        "qiyam.when.no_iqama": "ইশার ওয়াক্ত %@-এ শুরু হওয়ার পর থেকে ফজর %@ পর্যন্ত; ইকামত প্রকাশিত নেই।",
+        "qiyam.when.iqama": "ইশার জামাতের (ইকামত %@) পর থেকে ফজর %@ পর্যন্ত।",
+        "qiyam.how": "দুই রাকাত করে পড়ুন; ভোর হওয়ার আশঙ্কা হলে এক রাকাত বিতর দিয়ে শেষ করুন।",
+        "qiyam.why": "ফরজের পরে সর্বোত্তম নফল নামাজ; রাতের শেষ তৃতীয়াংশ বিশেষ মর্যাদাপূর্ণ।",
+        "witr.how": "বিজোড় সংখ্যক রাকাত পড়ুন এবং এটিকে রাতের শেষ নামাজ করুন।",
+        "witr.why": "বিতর বিজোড় নামাজ দিয়ে রাতের নামাজ সম্পন্ন করে।",
+        "visual.countdown.show": "সব দৃশ্যে পরবর্তী নামাজের কাউন্টডাউন দেখান",
+        "visual.countdown.help": "সারাংশ, তালিকা, সময়রেখা ও ঘড়িতে কাউন্টডাউন দৃশ্যমান রাখে।",
+        "visual.countdown.accessibility": "পরবর্তী নামাজ পর্যন্ত বাকি সময়",
+    ],
+    "ru": [
+        "category.obligatory": "Обязательная молитва", "category.nawafil": "Дополнительная молитва",
+        "info.when": "Когда", "info.how": "Как", "info.why": "Зачем",
+        "info.evidence": "Источник", "info.open": "Сведения о молитве",
+        "obligatory.when.iqama": "Время молитвы наступает в %@. Икама этой мечети — в %@.",
+        "obligatory.when.no_iqama": "Время молитвы наступает в %@. Икама не опубликована; совершите молитву в пределах её времени.",
+        "obligatory.how": "Совершите %@ обязательных ракаата лицом к кибле; в джамаате следуйте за имамом.",
+        "obligatory.why": "Одна из пяти ежедневных обязанностей, предписанных в установленное время.",
+        "rawatib.before.window": "С наступления времени в %@ до опубликованной икамы в %@.",
+        "rawatib.before.marker": "Время наступает в %@. Совершите до фарда; время икамы для конца интервала не опубликовано.",
+        "rawatib.after.iqama": "После обязательной молитвы, начинающейся с икамы в %@; это ориентир, а не точный интервал.",
+        "rawatib.after.no_iqama": "После обязательной молитвы, время которой наступает в %@; икама не опубликована.",
+        "rawatib.how": "Совершайте по два ракаата. Два ракаата перед Фаджром делайте краткими.",
+        "rawatib.why": "Постоянство в двенадцати рауатиб ежедневно — причина дома в Раю.",
+        "nawafil.rawatib.fajr.count": "2 ракаата", "nawafil.rawatib.dhuhr.before.count": "4 ракаата",
+        "nawafil.rawatib.after.count": "2 ракаата",
+        "duha.when": "Ориентир: примерно через двадцать минут после восхода (%@) до Зухра (%@); избегайте самого зенита.",
+        "duha.how": "Совершите не менее двух ракаатов, по два; достоверно переданы и восемь.",
+        "duha.why": "Два ракаата Духа заменяют утреннюю милостыню за суставы тела.",
+        "qiyam.when.no_iqama": "После наступления Иша в %@ до Фаджра %@; икама не опубликована.",
+        "qiyam.when.iqama": "После джамаата Иша (икама %@) до Фаджра %@.",
+        "qiyam.how": "Совершайте по два ракаата; если приближается рассвет, завершите одним Витром.",
+        "qiyam.why": "Лучшая добровольная молитва после обязательных; последняя треть ночи особенно достойна.",
+        "witr.how": "Совершите нечётное число ракаатов и сделайте Витр последней молитвой ночи.",
+        "witr.why": "Витр завершает ночную молитву нечётным числом ракаатов.",
+        "visual.countdown.show": "Показывать отсчёт до следующей молитвы во всех видах",
+        "visual.countdown.help": "Оставляет отсчёт видимым в обзоре, списке, шкале дня и часах.",
+        "visual.countdown.accessibility": "Время до следующей молитвы",
+    ],
+    "pt": [
+        "category.obligatory": "Oração obrigatória", "category.nawafil": "Oração voluntária",
+        "info.when": "Quando", "info.how": "Como", "info.why": "Porquê",
+        "info.evidence": "Referência", "info.open": "Informação da oração",
+        "obligatory.when.iqama": "O tempo da oração começa às %@. O iqama desta mesquita é às %@.",
+        "obligatory.when.no_iqama": "O tempo da oração começa às %@. Não há iqama publicado; ore dentro do período válido.",
+        "obligatory.how": "Ore %@ rak‘āt obrigatórios voltado para a qibla; em congregação, siga o imam.",
+        "obligatory.why": "Uma das cinco obrigações diárias prescritas em horários determinados.",
+        "rawatib.before.window": "Desde a entrada do tempo às %@ até ao iqama publicado às %@.",
+        "rawatib.before.marker": "O tempo entra às %@. Ore antes do Fard; não há iqama publicado para indicar o fim.",
+        "rawatib.after.iqama": "Depois da oração obrigatória iniciada pelo iqama das %@; é um marco, não um intervalo cronometrado.",
+        "rawatib.after.no_iqama": "Depois da oração obrigatória cujo tempo entra às %@; não há iqama publicado.",
+        "rawatib.how": "Ore de duas em duas. Mantenha breves as duas rak‘āt antes do Fajr.",
+        "rawatib.why": "Manter doze Rawatib diariamente é causa de uma casa no Paraíso.",
+        "nawafil.rawatib.fajr.count": "2 rak‘āt", "nawafil.rawatib.dhuhr.before.count": "4 rak‘āt",
+        "nawafil.rawatib.after.count": "2 rak‘āt",
+        "duha.when": "Orientação: cerca de vinte minutos após o nascer do sol (%@) até antes do Dhuhr (%@); evite o zénite.",
+        "duha.how": "Ore pelo menos duas rak‘āt, de duas em duas; oito também foram transmitidas autenticamente.",
+        "duha.why": "Duas rak‘āt de Duha cumprem a caridade matinal devida pelas articulações do corpo.",
+        "qiyam.when.no_iqama": "Após a entrada do Isha às %@ até ao Fajr %@; não há iqama publicado.",
+        "qiyam.when.iqama": "Após a congregação do Isha (iqama %@) até ao Fajr %@.",
+        "qiyam.how": "Ore de duas em duas; se a alvorada estiver próxima, conclua com um Witr.",
+        "qiyam.why": "A melhor oração voluntária após as obrigatórias; o último terço da noite é especialmente virtuoso.",
+        "witr.how": "Ore um número ímpar de rak‘āt e faça dela a última oração da noite.",
+        "witr.why": "O Witr encerra a oração noturna com um número ímpar.",
+        "visual.countdown.show": "Mostrar contagem para a próxima oração em todas as vistas",
+        "visual.countdown.help": "Mantém a contagem visível na Vista geral, Lista, Cronologia e Relógio.",
+        "visual.countdown.accessibility": "Tempo restante até à próxima oração",
+    ],
+    "ur": [
+        "category.obligatory": "فرض نماز", "category.nawafil": "نفل نماز",
+        "info.when": "کب", "info.how": "کیسے", "info.why": "کیوں",
+        "info.evidence": "دلیل", "info.open": "نماز کی معلومات",
+        "obligatory.when.iqama": "نماز کا وقت %@ پر شروع ہوتا ہے۔ اس مسجد کی اقامت %@ پر ہے۔",
+        "obligatory.when.no_iqama": "نماز کا وقت %@ پر شروع ہوتا ہے۔ اقامت شائع نہیں؛ معتبر وقت کے اندر نماز ادا کریں۔",
+        "obligatory.how": "قبلہ رخ ہو کر %@ فرض رکعتیں پڑھیں؛ جماعت میں امام کی پیروی کریں۔",
+        "obligatory.why": "مقررہ اوقات میں فرض کی گئی روزانہ پانچ نمازوں میں سے ایک۔",
+        "rawatib.before.window": "وقت کے %@ پر شروع ہونے سے شائع شدہ اقامت %@ تک۔",
+        "rawatib.before.marker": "وقت %@ پر شروع ہوتا ہے۔ فرض سے پہلے پڑھیں؛ اختتام کے لیے اقامت شائع نہیں۔",
+        "rawatib.after.iqama": "%@ کی اقامت سے شروع ہونے والی فرض نماز کے بعد؛ یہ رہنما نشان ہے، مقررہ دورانیہ نہیں۔",
+        "rawatib.after.no_iqama": "اس فرض نماز کے بعد جس کا وقت %@ پر شروع ہوتا ہے؛ اقامت شائع نہیں۔",
+        "rawatib.how": "دو دو رکعت پڑھیں۔ فجر سے پہلے کی دو رکعتیں مختصر رکھیں۔",
+        "rawatib.why": "روزانہ بارہ رواتب کی پابندی جنت میں گھر کا سبب ہے۔",
+        "nawafil.rawatib.fajr.count": "۲ رکعت", "nawafil.rawatib.dhuhr.before.count": "۴ رکعت",
+        "nawafil.rawatib.after.count": "۲ رکعت",
+        "duha.when": "رہنمائی: طلوعِ آفتاب کے تقریباً بیس منٹ بعد (%@) سے ظہر سے پہلے (%@) تک؛ عین زوال سے بچیں۔",
+        "duha.how": "کم از کم دو رکعت، دو دو کر کے پڑھیں؛ آٹھ رکعت بھی صحیح روایت سے ثابت ہیں۔",
+        "duha.why": "ضحیٰ کی دو رکعتیں جسم کے جوڑوں کی صبح کی صدقہ ذمہ داری پوری کرتی ہیں۔",
+        "qiyam.when.no_iqama": "عشا کا وقت %@ پر شروع ہونے کے بعد سے فجر %@ تک؛ اقامت شائع نہیں۔",
+        "qiyam.when.iqama": "عشا کی جماعت (اقامت %@) کے بعد سے فجر %@ تک۔",
+        "qiyam.how": "دو دو رکعت پڑھیں؛ صبح قریب ہو تو ایک وتر سے ختم کریں۔",
+        "qiyam.why": "فرضوں کے بعد بہترین نفل نماز؛ رات کا آخری تہائی خاص فضیلت رکھتا ہے۔",
+        "witr.how": "طاق تعداد میں رکعتیں پڑھیں اور اسے رات کی آخری نماز بنائیں۔",
+        "witr.why": "وتر رات کی نماز کو طاق نماز پر مکمل کرتا ہے۔",
+        "visual.countdown.show": "ہر منظر میں اگلی نماز کی الٹی گنتی دکھائیں",
+        "visual.countdown.help": "عمومی منظر، فہرست، وقت کی لکیر اور گھڑی میں الٹی گنتی دکھاتا ہے۔",
+        "visual.countdown.accessibility": "اگلی نماز تک باقی وقت",
+    ],
+]
+
+func prayerInfoText(_ key: String) -> String {
+    let code = Localizer.shared.current.code
+    let value = prayerInfoTranslations[code]?[key]
+        ?? prayerInfoTranslations["en"]?[key]
+        ?? featureText(key)
     return applyingArabicDigitPreference(value, languageCode: code)
 }
 
@@ -5724,6 +6031,13 @@ final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         adhanVC?.tabDidActivate()
     }
 
+    /// Reuse the app's existing one-second heartbeat for the full dashboard.
+    /// This keeps Overview, List, Timeline, and Clock synchronized without
+    /// creating a timer per visualization.
+    func refreshPrayerLiveState(now: Date = Date()) {
+        adhanVC?.refreshLiveState(now: now)
+    }
+
     private func present(_ vc: MainTabContent) {
         contentContainer.subviews.forEach { $0.removeFromSuperview() }
         vc.view.translatesAutoresizingMaskIntoConstraints = false
@@ -5876,6 +6190,321 @@ final class MoroccanHeroView: NSView {
     }
 }
 
+enum PrayerScheduleKind: String {
+    case obligatory
+    case rawatib
+    case duha
+    case qiyam
+    case witr
+}
+
+enum PrayerSchedulePrecision {
+    /// Both edges come from published mosque or astronomical times.
+    case exactWindow
+    /// A real published time anchors the event, but completion depends on the
+    /// congregation or the worshipper. The UI must describe it as guidance.
+    case instructionalMarker
+}
+
+/// Offline, reviewable guidance shown from every prayer visualization. It is
+/// deliberately paraphrased rather than quoting scripture, and always keeps
+/// its source reference visible so the reader can distinguish evidence from
+/// schedule calculation.
+struct PrayerKnowledge {
+    let id: String
+    let title: String
+    let category: String
+    let rakahs: String
+    let whenText: String
+    let howText: String
+    let whyText: String
+    let citation: String
+}
+
+/// One item on the shared prayer-day schedule. Timeline and clock consume the
+/// same values as Overview and List, avoiding subtly different invented
+/// windows across views.
+struct PrayerScheduleEvent {
+    let id: String
+    let kind: PrayerScheduleKind
+    let prayerIndex: Int?
+    let startMinute: Int
+    let endMinute: Int?
+    let precision: PrayerSchedulePrecision
+    let knowledge: PrayerKnowledge
+}
+
+enum PrayerScheduleBuilder {
+    private static let obligatoryRakahs = [2, 4, 4, 3, 4]
+
+    private static func minute(_ value: String) -> Int? {
+        let parts = value.split(separator: ":")
+        guard parts.count == 2, let hour = Int(parts[0]),
+              let minute = Int(parts[1]), (0..<24).contains(hour),
+              (0..<60).contains(minute) else { return nil }
+        return hour * 60 + minute
+    }
+
+    private static func normalizedAfter(_ candidate: Int, start: Int) -> Int {
+        candidate < start ? candidate + 24 * 60 : candidate
+    }
+
+    private static func time(_ minute: Int) -> String {
+        let normalized = (minute % (24 * 60) + 24 * 60) % (24 * 60)
+        return displayTime(String(format: "%02d:%02d", normalized / 60,
+                                  normalized % 60))
+    }
+
+    private static func obligatoryKnowledge(index: Int, title: String,
+                                             entry: Int,
+                                             iqama: Int?) -> PrayerKnowledge {
+        let count = localizedInterfaceDigits(String(obligatoryRakahs[index]))
+        let iqamaText = iqama.map {
+            String(format: prayerInfoText("obligatory.when.iqama"), time(entry), time($0))
+        } ?? String(format: prayerInfoText("obligatory.when.no_iqama"), time(entry))
+        return PrayerKnowledge(
+            id: "fard.\(index)", title: title,
+            category: prayerInfoText("category.obligatory"), rakahs: count,
+            whenText: iqamaText,
+            howText: String(format: prayerInfoText("obligatory.how"), count),
+            whyText: prayerInfoText("obligatory.why"),
+            citation: "Qur’an 4:103 · Ṣaḥīḥ al-Bukhārī 527")
+    }
+
+    private static func nawafilKnowledge(id: String, titleKey: String,
+                                         rakahsKey: String, whenText: String,
+                                         howKey: String, whyKey: String,
+                                         citation: String) -> PrayerKnowledge {
+        PrayerKnowledge(
+            id: id, title: featureText(titleKey),
+            category: prayerInfoText("category.nawafil"),
+            rakahs: prayerInfoText(rakahsKey), whenText: whenText,
+            howText: prayerInfoText(howKey), whyText: prayerInfoText(whyKey),
+            citation: citation)
+    }
+
+    /// Builds all five obligatory prayers plus evidence-backed Rawatib, Duha,
+    /// Qiyam, and Witr guidance. A before-Fard Sunnah never begins before the
+    /// prayer's entry: when iqama is available that real interval is used;
+    /// otherwise the entry time becomes an instructional marker.
+    static func events(info: MosqueInfo, prayerNames: [String],
+                       iqamaTimeAt: (Int) -> String?) -> [PrayerScheduleEvent] {
+        var result: [PrayerScheduleEvent] = []
+        var entries: [Int?] = (0..<5).map {
+            info.times.indices.contains($0) ? minute(info.times[$0]) : nil
+        }
+        if entries.count < 5 { entries += Array(repeating: nil, count: 5 - entries.count) }
+        let iqamas: [Int?] = (0..<5).map { index in
+            guard let start = entries[index], let raw = iqamaTimeAt(index),
+                  let parsed = minute(raw) else { return nil }
+            let value = normalizedAfter(parsed, start: start)
+            // Reject malformed next-day values; normal mosque iqama intervals
+            // are short and should never span most of a day.
+            return value > start && value - start <= 180 ? value : nil
+        }
+
+        for index in 0..<min(5, prayerNames.count) {
+            guard let entry = entries[index] else { continue }
+            let knowledge = obligatoryKnowledge(index: index,
+                                                title: prayerNames[index],
+                                                entry: entry,
+                                                iqama: iqamas[index])
+            result.append(PrayerScheduleEvent(
+                id: knowledge.id, kind: .obligatory, prayerIndex: index,
+                startMinute: entry, endMinute: nil,
+                precision: .instructionalMarker,
+                knowledge: knowledge))
+        }
+
+        func beforeFard(id: String, prayerIndex: Int, rakahsKey: String,
+                        citation: String) {
+            guard let entry = entries[prayerIndex] else { return }
+            let whenText: String
+            let precision: PrayerSchedulePrecision
+            if let iqama = iqamas[prayerIndex] {
+                whenText = String(format: prayerInfoText("rawatib.before.window"),
+                                  time(entry), time(iqama))
+                precision = .exactWindow
+            } else {
+                whenText = String(format: prayerInfoText("rawatib.before.marker"),
+                                  time(entry))
+                precision = .instructionalMarker
+            }
+            let knowledge = nawafilKnowledge(
+                id: id, titleKey: "nawafil.rawatib", rakahsKey: rakahsKey,
+                whenText: whenText, howKey: "rawatib.how",
+                whyKey: "rawatib.why", citation: citation)
+            result.append(PrayerScheduleEvent(
+                id: id, kind: .rawatib, prayerIndex: prayerIndex,
+                startMinute: entry, endMinute: iqamas[prayerIndex],
+                precision: precision, knowledge: knowledge))
+        }
+
+        func afterFard(id: String, prayerIndex: Int, rakahsKey: String,
+                       citation: String) {
+            guard let entry = entries[prayerIndex] else { return }
+            let marker = iqamas[prayerIndex] ?? entry
+            let whenText = iqamas[prayerIndex].map {
+                String(format: prayerInfoText("rawatib.after.iqama"), time($0))
+            } ?? String(format: prayerInfoText("rawatib.after.no_iqama"), time(entry))
+            let knowledge = nawafilKnowledge(
+                id: id, titleKey: "nawafil.rawatib", rakahsKey: rakahsKey,
+                whenText: whenText, howKey: "rawatib.how",
+                whyKey: "rawatib.why", citation: citation)
+            result.append(PrayerScheduleEvent(
+                id: id, kind: .rawatib, prayerIndex: prayerIndex,
+                startMinute: marker, endMinute: nil,
+                precision: .instructionalMarker, knowledge: knowledge))
+        }
+
+        beforeFard(id: "rawatib.fajr.before", prayerIndex: 0,
+                    rakahsKey: "nawafil.rawatib.fajr.count",
+                    citation: "Ṣaḥīḥ Muslim 725a")
+        beforeFard(id: "rawatib.dhuhr.before", prayerIndex: 1,
+                    rakahsKey: "nawafil.rawatib.dhuhr.before.count",
+                    citation: "Jāmiʿ at-Tirmidhī 415")
+        afterFard(id: "rawatib.dhuhr.after", prayerIndex: 1,
+                   rakahsKey: "nawafil.rawatib.after.count",
+                   citation: "Jāmiʿ at-Tirmidhī 415")
+        afterFard(id: "rawatib.maghrib.after", prayerIndex: 3,
+                   rakahsKey: "nawafil.rawatib.after.count",
+                   citation: "Jāmiʿ at-Tirmidhī 415")
+        afterFard(id: "rawatib.isha.after", prayerIndex: 4,
+                   rakahsKey: "nawafil.rawatib.after.count",
+                   citation: "Jāmiʿ at-Tirmidhī 415")
+
+        if let sunrise = minute(info.shuruq), let dhuhr = entries[1] {
+            let start = sunrise + 20
+            if start < dhuhr {
+                let whenText = String(format: prayerInfoText("duha.when"),
+                                      time(start), time(dhuhr))
+                let knowledge = nawafilKnowledge(
+                    id: "duha", titleKey: "nawafil.duha",
+                    rakahsKey: "nawafil.duha.count", whenText: whenText,
+                    howKey: "duha.how", whyKey: "duha.why",
+                    citation: "Ṣaḥīḥ Muslim 720 · Ṣaḥīḥ al-Bukhārī 1176")
+                result.append(PrayerScheduleEvent(
+                    id: "duha", kind: .duha, prayerIndex: nil,
+                    startMinute: start, endMinute: dhuhr,
+                    precision: .instructionalMarker, knowledge: knowledge))
+            }
+        }
+
+        if let isha = entries[4], let fajrBase = entries[0] {
+            let start = iqamas[4] ?? isha
+            let fajr = normalizedAfter(fajrBase, start: start)
+            if start < fajr {
+                let qiyamWhen = String(format: prayerInfoText(
+                    iqamas[4] == nil ? "qiyam.when.no_iqama" : "qiyam.when.iqama"),
+                    time(start), time(fajr))
+                let qiyam = nawafilKnowledge(
+                    id: "qiyam", titleKey: "nawafil.qiyam",
+                    rakahsKey: "nawafil.qiyam.count", whenText: qiyamWhen,
+                    howKey: "qiyam.how", whyKey: "qiyam.why",
+                    citation: "Ṣaḥīḥ Muslim 1163a · Ṣaḥīḥ al-Bukhārī 1145")
+                result.append(PrayerScheduleEvent(
+                    id: "qiyam", kind: .qiyam, prayerIndex: nil,
+                    startMinute: start, endMinute: fajr,
+                    precision: .instructionalMarker,
+                    knowledge: qiyam))
+
+                let witr = nawafilKnowledge(
+                    id: "witr", titleKey: "nawafil.witr",
+                    rakahsKey: "nawafil.witr.count", whenText: qiyamWhen,
+                    howKey: "witr.how", whyKey: "witr.why",
+                    citation: "Ṣaḥīḥ Muslim 751b")
+                result.append(PrayerScheduleEvent(
+                    id: "witr", kind: .witr, prayerIndex: nil,
+                    startMinute: start, endMinute: fajr,
+                    precision: .instructionalMarker,
+                    knowledge: witr))
+            }
+        }
+        return result.sorted {
+            $0.startMinute == $1.startMinute ? $0.id < $1.id
+                                             : $0.startMinute < $1.startMinute
+        }
+    }
+}
+
+final class PrayerInfoViewController: NSViewController {
+    private let knowledge: PrayerKnowledge
+
+    init(knowledge: PrayerKnowledge) {
+        self.knowledge = knowledge
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func loadView() {
+        let width: CGFloat = 400
+        let viewportHeight: CGFloat = 390
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width,
+                                                 height: viewportHeight))
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+
+        let content = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 560))
+        scroll.documentView = content
+        let isRTL = Localizer.shared.isRTL
+        let alignment: NSTextAlignment = isRTL ? .right : .left
+        var y: CGFloat = 20
+
+        @discardableResult
+        func addLabel(_ text: String, size: CGFloat,
+                      weight: NSFont.Weight = .regular,
+                      color: NSColor = .labelColor,
+                      maximumLines: Int = 4,
+                      spacingAfter: CGFloat = 8) -> NSTextField {
+            let font = Localizer.shared.font(size: size, weight: weight)
+            let textWidth = width - 40
+            let height = localizedTextHeight(text, font: font, width: textWidth,
+                                             maximumLines: maximumLines)
+            let field = NSTextField(wrappingLabelWithString: text)
+            field.frame = NSRect(x: 20, y: y, width: textWidth, height: height)
+            field.font = font
+            field.textColor = color
+            field.alignment = alignment
+            field.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+            field.maximumNumberOfLines = maximumLines
+            field.lineBreakMode = .byWordWrapping
+            field.cell?.truncatesLastVisibleLine = false
+            content.addSubview(field)
+            y += height + spacingAfter
+            return field
+        }
+
+        addLabel(knowledge.category.uppercased(), size: 10.5, weight: .bold,
+                 color: .appGreenAccent, maximumLines: 1, spacingAfter: 3)
+        addLabel(knowledge.title, size: 24, weight: .bold,
+                 maximumLines: 2, spacingAfter: 4)
+        addLabel("\(featureText("full.rakahs")) · \(knowledge.rakahs)",
+                 size: 13, weight: .semibold, color: .secondaryLabelColor,
+                 maximumLines: 2, spacingAfter: 16)
+
+        func addSection(_ headingKey: String, _ body: String) {
+            addLabel(prayerInfoText(headingKey).uppercased(), size: 10.5,
+                     weight: .bold, color: .tertiaryLabelColor,
+                     maximumLines: 1, spacingAfter: 2)
+            addLabel(body, size: 13.5, maximumLines: 5, spacingAfter: 13)
+        }
+        addSection("info.when", knowledge.whenText)
+        addSection("info.how", knowledge.howText)
+        addSection("info.why", knowledge.whyText)
+        addSection("info.evidence", knowledge.citation)
+
+        content.frame.size.height = max(viewportHeight, y + 10)
+        content.setAccessibilityElement(true)
+        content.setAccessibilityRole(.group)
+        content.setAccessibilityLabel("\(knowledge.title). \(knowledge.category)")
+        scroll.setAccessibilityLabel(prayerInfoText("info.open"))
+        self.view = scroll
+        preferredContentSize = NSSize(width: width, height: viewportHeight)
+    }
+}
+
 /// A 24-hour visualization that makes the relationship between the obligatory
 /// prayers and the Nawafil windows visible at a glance. The overview remains
 /// available for users who prefer a conventional list.
@@ -5883,7 +6512,10 @@ final class PrayerDayTimelineView: NSControl {
     private let info: MosqueInfo
     private let prayerNames: [String]
     private let showsNawafil: Bool
-    private var markerPoints: [(point: NSPoint, name: String, raw: String)] = []
+    private let events: [PrayerScheduleEvent]
+    var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
+    private var markerPoints: [(point: NSPoint, name: String, raw: String,
+                                event: PrayerScheduleEvent?)] = []
     private var hoveredMarker: Int?
     private var selectedMarker: Int?
     private var trackingAreaRef: NSTrackingArea?
@@ -5893,10 +6525,13 @@ final class PrayerDayTimelineView: NSControl {
     override var acceptsFirstResponder: Bool { true }
 
     init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
-         showsNawafil: Bool) {
+         showsNawafil: Bool, events: [PrayerScheduleEvent] = [],
+         onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
         self.info = info
         self.prayerNames = prayerNames
         self.showsNawafil = showsNawafil
+        self.events = events
+        self.onSelectEvent = onSelectEvent
         super.init(frame: frame)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -5957,6 +6592,10 @@ final class PrayerDayTimelineView: NSControl {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         selectedMarker = nearestMarker(to: convert(event.locationInWindow, from: nil))
+        if let selectedMarker, markerPoints.indices.contains(selectedMarker),
+           let scheduleEvent = markerPoints[selectedMarker].event {
+            onSelectEvent?(scheduleEvent, self)
+        }
         needsDisplay = true
     }
 
@@ -5969,6 +6608,16 @@ final class PrayerDayTimelineView: NSControl {
         selectedMarker = ((selectedMarker ?? (delta > 0 ? -1 : 0)) + delta
                           + markerPoints.count) % markerPoints.count
         needsDisplay = true
+    }
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if (event.keyCode == 36 || event.characters == " "),
+           let selectedMarker, markerPoints.indices.contains(selectedMarker),
+           let scheduleEvent = markerPoints[selectedMarker].event {
+            onSelectEvent?(scheduleEvent, self)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 
     private func minute(_ hhmm: String) -> Int? {
@@ -6116,7 +6765,13 @@ final class PrayerDayTimelineView: NSControl {
                                                      width: 9, height: 9))
             (point.sunrise ? gold : NSColor.appAccent).setFill()
             marker.fill()
-            markerPoints.append((NSPoint(x: x, y: lineY), point.name, point.raw))
+            let scheduleEvent = events.first {
+                $0.kind == .obligatory && $0.prayerIndex.flatMap {
+                    prayerNames.indices.contains($0) ? prayerNames[$0] : nil
+                } == point.name
+            }
+            markerPoints.append((NSPoint(x: x, y: lineY), point.name,
+                                 point.raw, scheduleEvent))
             let labelX = max(8, min(bounds.width - 98, x - 45))
             let labelY: CGFloat = upper ? 112 : 220
             drawText("\(point.name)\n\(displayTime(point.raw))",
@@ -6193,18 +6848,24 @@ final class PrayerAnalogClockView: NSControl {
     private let info: MosqueInfo
     private let prayerNames: [String]
     private let showsNawafil: Bool
+    private let events: [PrayerScheduleEvent]
+    var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
     private var timer: Timer?
     private var trackingAreaRef: NSTrackingArea?
-    private var markerPoints: [(point: NSPoint, title: String, raw: String)] = []
+    private var markerPoints: [(point: NSPoint, title: String, raw: String,
+                                event: PrayerScheduleEvent?)] = []
     private var hoveredMarker: Int?
 
     override var isFlipped: Bool { true }
 
     init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
-         showsNawafil: Bool) {
+         showsNawafil: Bool, events: [PrayerScheduleEvent] = [],
+         onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
         self.info = info
         self.prayerNames = prayerNames
         self.showsNawafil = showsNawafil
+        self.events = events
+        self.onSelectEvent = onSelectEvent
         super.init(frame: frame)
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -6256,6 +6917,19 @@ final class PrayerAnalogClockView: NSControl {
     override func mouseExited(with event: NSEvent) {
         hoveredMarker = nil
         needsDisplay = true
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let index = markerPoints.enumerated().min(by: {
+            hypot($0.element.point.x - point.x, $0.element.point.y - point.y)
+              < hypot($1.element.point.x - point.x, $1.element.point.y - point.y)
+        }).flatMap({
+            hypot($0.element.point.x - point.x, $0.element.point.y - point.y) < 34
+                ? $0.offset : nil
+        }), markerPoints.indices.contains(index),
+              let scheduleEvent = markerPoints[index].event else { return }
+        onSelectEvent?(scheduleEvent, self)
     }
 
     private func minute(_ value: String) -> Int? {
@@ -6363,7 +7037,11 @@ final class PrayerAnalogClockView: NSControl {
             guard let value = minute(info.times[index]) else { continue }
             let radius = value < 720 ? outer : inner
             let marker = point(center: center, radius: radius, minute: value)
-            markerPoints.append((marker, prayerNames[index], info.times[index]))
+            markerPoints.append((marker, prayerNames[index], info.times[index],
+                                 events.first {
+                                     $0.kind == .obligatory
+                                         && $0.prayerIndex == index
+                                 }))
             NSColor.appAccent.setFill()
             NSBezierPath(ovalIn: NSRect(x: marker.x - 5, y: marker.y - 5,
                                         width: 10, height: 10)).fill()
@@ -6432,6 +7110,20 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private var modeControl: NSSegmentedControl!
     private var nawafilControl: NSSegmentedControl!
     private var mosqueSettingsButton: HoverIconButton!
+    private var countdownCard: AdaptiveCardView!
+    private var countdownTitleLabel: NSTextField!
+    private var countdownValueLabel: NSTextField!
+    private var countdownHeightConstraint: NSLayoutConstraint!
+    private var countdownWasVisible: Bool?
+    private var scheduleEvents: [PrayerScheduleEvent] = []
+    private var knowledgeByButtonTag: [Int: PrayerKnowledge] = [:]
+    private var nextKnowledgeButtonTag = 20_000
+    private let prayerInfoPopover: NSPopover = {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = true
+        return popover
+    }()
     private var displayMode = max(0, min(3,
         UserDefaults.standard.integer(forKey: kPrayerDashboardMode)))
     private var nawafilMode: Int = {
@@ -6441,8 +7133,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private var lastRenderedWidth: CGFloat = 0
     private var didSetInitialScrollPosition = false
 
-    private typealias NawafilData = (title: String, count: String, window: String,
-                                     best: String, source: String)
+    private struct NawafilData {
+        let title: String
+        let count: String
+        let window: String
+        let best: String
+        let source: String
+        let knowledge: PrayerKnowledge
+    }
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
@@ -6499,6 +7197,60 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         controlRail.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(controlRail)
 
+        countdownCard = AdaptiveCardView()
+        countdownCard.cornerRadius = 12
+        countdownCard.translatesAutoresizingMaskIntoConstraints = false
+        countdownCard.setAccessibilityElement(true)
+        countdownCard.setAccessibilityRole(.group)
+        countdownCard.setAccessibilityLabel(
+            prayerInfoText("visual.countdown.accessibility"))
+        root.addSubview(countdownCard)
+
+        let countdownIcon = NSImageView()
+        countdownIcon.image = templateSymbol("hourglass", pointSize: 14,
+                                               weight: .semibold)
+        countdownIcon.contentTintColor = .appGreenAccent
+        countdownIcon.translatesAutoresizingMaskIntoConstraints = false
+        countdownIcon.setAccessibilityElement(false)
+
+        countdownTitleLabel = NSTextField(labelWithString: "")
+        countdownTitleLabel.font = Localizer.shared.font(size: 13,
+                                                          weight: .semibold)
+        countdownTitleLabel.lineBreakMode = .byTruncatingTail
+        countdownTitleLabel.alignment = Localizer.shared.isRTL ? .right : .left
+        countdownTitleLabel.baseWritingDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        countdownTitleLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        countdownValueLabel = NSTextField(labelWithString: "--:--:--")
+        countdownValueLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 18,
+                                                                    weight: .semibold)
+        countdownValueLabel.textColor = .appGreenAccent
+        countdownValueLabel.alignment = .center
+        countdownValueLabel.translatesAutoresizingMaskIntoConstraints = false
+        countdownValueLabel.setAccessibilityLabel(
+            prayerInfoText("visual.countdown.accessibility"))
+
+        let countdownStack = NSStackView(views: [countdownIcon,
+                                                  countdownTitleLabel,
+                                                  countdownValueLabel])
+        countdownStack.orientation = .horizontal
+        countdownStack.alignment = .centerY
+        countdownStack.spacing = 10
+        countdownStack.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
+        countdownStack.translatesAutoresizingMaskIntoConstraints = false
+        countdownCard.addSubview(countdownStack)
+        NSLayoutConstraint.activate([
+            countdownStack.leadingAnchor.constraint(equalTo: countdownCard.leadingAnchor,
+                                                      constant: 14),
+            countdownStack.trailingAnchor.constraint(equalTo: countdownCard.trailingAnchor,
+                                                       constant: -14),
+            countdownStack.centerYAnchor.constraint(equalTo: countdownCard.centerYAnchor),
+            countdownIcon.widthAnchor.constraint(equalToConstant: 20),
+            countdownIcon.heightAnchor.constraint(equalToConstant: 20),
+            countdownValueLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 104),
+        ])
+
         scrollView = NSScrollView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -6506,6 +7258,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         if Localizer.shared.isRTL { scrollView.userInterfaceLayoutDirection = .rightToLeft }
         root.addSubview(scrollView)
+        countdownHeightConstraint = countdownCard.heightAnchor.constraint(equalToConstant: 46)
         NSLayoutConstraint.activate([
             controlRail.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
             controlRail.centerXAnchor.constraint(equalTo: root.centerXAnchor),
@@ -6520,13 +7273,20 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             mosqueSettingsButton.widthAnchor.constraint(equalToConstant: 44),
             mosqueSettingsButton.heightAnchor.constraint(equalToConstant: 44),
 
+            countdownCard.topAnchor.constraint(equalTo: controlRail.bottomAnchor,
+                                                constant: 6),
+            countdownCard.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            countdownCard.widthAnchor.constraint(equalToConstant: 540),
+            countdownHeightConstraint,
+
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: controlRail.bottomAnchor, constant: 8),
+            scrollView.topAnchor.constraint(equalTo: countdownCard.bottomAnchor, constant: 8),
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         self.view = root
         rebuild()
+        refreshLiveState()
     }
 
     override func viewDidLayout() {
@@ -6545,6 +7305,44 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         nawafilControl?.setLabel(featureText("full.nawafil.integrated"), forSegment: 1)
         nawafilControl?.setLabel(featureText("full.nawafil.separate"), forSegment: 2)
         rebuild()
+        refreshLiveState()
+    }
+
+    /// Updated by AppDelegate's existing one-second heartbeat. The countdown
+    /// lives above the document view, so it remains visible in every display
+    /// mode without rebuilding a timeline or clock once per second.
+    func refreshLiveState(now: Date = Date()) {
+        guard countdownCard != nil else { return }
+        let visible = UserDefaults.standard.object(forKey: kPrayerShowCountdown)
+            as? Bool ?? true
+        if countdownWasVisible != visible {
+            countdownWasVisible = visible
+            countdownCard.isHidden = !visible
+            countdownHeightConstraint.constant = visible ? 46 : 0
+        }
+        guard visible, let app = appDelegate, app.info.times.count >= 5 else { return }
+        let next = app.nextPrayer()
+        guard (0..<5).contains(next.index), let date = next.date,
+              app.info.times.indices.contains(next.index) else {
+            countdownTitleLabel.stringValue = featureText("full.next_prayer")
+            countdownValueLabel.stringValue = "--:--:--"
+            return
+        }
+        let seconds = max(0, Int(date.timeIntervalSince(now)))
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
+        let remainingSeconds = seconds % 60
+        let remaining = localizedInterfaceDigits(
+            String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds))
+        let prayer = app.localizedPrayerName(at: next.index)
+        let scheduled = displayTime(app.info.times[next.index])
+        countdownTitleLabel.stringValue =
+            "\(featureText("full.next_prayer")) · \(prayer) · \(scheduled)"
+        countdownValueLabel.stringValue = remaining
+        let spoken = "\(countdownTitleLabel.stringValue). "
+                   + "\(prayerInfoText("visual.countdown.accessibility")): \(remaining)"
+        countdownCard.setAccessibilityLabel(spoken)
+        countdownValueLabel.setAccessibilityValue(remaining)
     }
 
     @objc private func modeChanged(_ sender: NSSegmentedControl) {
@@ -6567,10 +7365,86 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         appDelegate?.openMosqueSettings()
     }
 
+    private func makeInfoButton(for knowledge: PrayerKnowledge,
+                                frame: NSRect) -> HoverIconButton {
+        let button = HoverIconButton(
+            symbol: "info.circle",
+            toolTip: prayerInfoText("info.open"),
+            target: self,
+            action: #selector(prayerInfoTapped(_:)),
+            pointSize: 14,
+            size: frame.size)
+        button.frame = frame
+        button.tag = nextKnowledgeButtonTag
+        knowledgeByButtonTag[nextKnowledgeButtonTag] = knowledge
+        nextKnowledgeButtonTag += 1
+        button.setAccessibilityLabel(
+            "\(prayerInfoText("info.open")): \(knowledge.title)")
+        button.setAccessibilityHelp(knowledge.category)
+        return button
+    }
+
+    @objc private func prayerInfoTapped(_ sender: NSButton) {
+        guard let knowledge = knowledgeByButtonTag[sender.tag] else { return }
+        showPrayerInfo(knowledge, from: sender)
+    }
+
+    private func showPrayerInfo(_ knowledge: PrayerKnowledge, from source: NSView) {
+        if prayerInfoPopover.isShown { prayerInfoPopover.performClose(nil) }
+        prayerInfoPopover.contentViewController = PrayerInfoViewController(
+            knowledge: knowledge)
+        let edge: NSRectEdge = Localizer.shared.isRTL ? .minX : .maxX
+        prayerInfoPopover.show(relativeTo: source.bounds, of: source,
+                               preferredEdge: edge)
+    }
+
+    private func knowledge(forPrayer index: Int) -> PrayerKnowledge? {
+        scheduleEvents.first { $0.kind == .obligatory && $0.prayerIndex == index }?.knowledge
+    }
+
+    private func knowledge(for kind: PrayerScheduleKind) -> PrayerKnowledge? {
+        let matching = scheduleEvents.filter { $0.kind == kind }
+        guard let first = matching.first else { return nil }
+        guard kind == .rawatib else { return first.knowledge }
+        let windows = matching.map(\.knowledge.whenText).reduce(into: [String]()) {
+            if !$0.contains($1) { $0.append($1) }
+        }.joined(separator: "\n")
+        return PrayerKnowledge(
+            id: "rawatib.all", title: featureText("nawafil.rawatib"),
+            category: prayerInfoText("category.nawafil"),
+            rakahs: featureText("nawafil.rawatib.count"),
+            whenText: windows,
+            howText: first.knowledge.howText,
+            whyText: first.knowledge.whyText,
+            citation: "Jāmiʿ at-Tirmidhī 415 · Ṣaḥīḥ Muslim 725a")
+    }
+
+    private func displayKnowledge(for kind: PrayerScheduleKind,
+                                  title: String, count: String,
+                                  window: String, citation: String) -> PrayerKnowledge {
+        if let scheduled = knowledge(for: kind) { return scheduled }
+        let keys: (how: String, why: String) = {
+            switch kind {
+            case .rawatib: return ("rawatib.how", "rawatib.why")
+            case .duha: return ("duha.how", "duha.why")
+            case .qiyam: return ("qiyam.how", "qiyam.why")
+            case .witr: return ("witr.how", "witr.why")
+            case .obligatory: return ("obligatory.how", "obligatory.why")
+            }
+        }()
+        return PrayerKnowledge(
+            id: kind.rawValue, title: title,
+            category: prayerInfoText("category.nawafil"), rakahs: count,
+            whenText: window, howText: prayerInfoText(keys.how),
+            whyText: prayerInfoText(keys.why), citation: citation)
+    }
+
     private func rebuild() {
         guard scrollView != nil else { return }
         let width = max(760, scrollView.contentSize.width)
         lastRenderedWidth = width
+        knowledgeByButtonTag.removeAll(keepingCapacity: true)
+        nextKnowledgeButtonTag = 20_000
         let separateExtra: CGFloat = nawafilMode == 2 ? 560 : 0
         let bodyHeight: CGFloat
         switch displayMode {
@@ -6583,6 +7457,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         body.autoresizingMask = [.width]
         scrollView.documentView = body
         guard let app = appDelegate else { return }
+        let names = (0..<5).map { app.localizedPrayerName(at: $0) }
+        scheduleEvents = PrayerScheduleBuilder.events(
+            info: app.info, prayerNames: names,
+            iqamaTimeAt: { app.iqamaTimeAt($0) })
         let contentWidth = min(856, max(680, width - 64))
         let contentX = (width - contentWidth) / 2
 
@@ -6705,8 +7583,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             content.autoresizingMask = [.width, .height]
             card.addSubview(content)
 
-            let mode = NSButton(frame: NSRect(x: isRTL ? 5 : tileWidth - 43,
-                                              y: 5, width: 38, height: 38))
+            let mode = NSButton(frame: NSRect(x: isRTL ? 2 : tileWidth - 46,
+                                              y: 2, width: 44, height: 44))
             mode.isBordered = false
             mode.title = ""
             mode.tag = index
@@ -6718,11 +7596,19 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(index))
             content.addSubview(mode)
 
-            let nameX: CGFloat = isRTL ? 42 : 12
+            if let knowledge = knowledge(forPrayer: index) {
+                content.addSubview(makeInfoButton(
+                    for: knowledge,
+                    frame: NSRect(x: isRTL ? tileWidth - 46 : 2,
+                                  y: 2, width: 44, height: 44)))
+            }
+
+            let nameX: CGFloat = 46
             content.addSubview(dashboardLabel(app.localizedPrayerName(at: index),
-                frame: NSRect(x: nameX, y: 14, width: tileWidth - 54, height: 24),
+                frame: NSRect(x: nameX, y: 14, width: tileWidth - 92, height: 24),
                 size: 15.5, weight: .semibold,
-                color: index == nextIndex ? .appGreenAccent : .labelColor))
+                color: index == nextIndex ? .appGreenAccent : .labelColor,
+                alignment: .center))
             let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
             let adhan = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
                 frame: NSRect(x: 10, y: 54, width: tileWidth - 20, height: 36),
@@ -6825,11 +7711,16 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                 separator.boxType = .separator
                 card.addSubview(separator)
             }
+            let infoX = isRTL ? x : x + columnWidth - 44
+            card.addSubview(makeInfoButton(
+                for: row.knowledge,
+                frame: NSRect(x: infoX, y: 2, width: 44, height: 44)))
+            let textX = isRTL ? x + 44 : x + 6
             card.addSubview(dashboardLabel(row.title,
-                frame: NSRect(x: x + 8, y: 13, width: columnWidth - 16, height: 22),
+                frame: NSRect(x: textX, y: 10, width: columnWidth - 50, height: 22),
                 size: 13, weight: .semibold, alignment: .center))
             card.addSubview(dashboardLabel(row.count,
-                frame: NSRect(x: x + 8, y: 40, width: columnWidth - 16, height: 18),
+                frame: NSRect(x: textX, y: 39, width: columnWidth - 50, height: 18),
                 size: 11, weight: .medium, color: .appGreenAccent, alignment: .center))
         }
         card.setAccessibilityLabel(featureText("full.nawafil.integrated"))
@@ -6845,9 +7736,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             frame: NSRect(x: x, y: 50, width: width, height: 18),
             size: 12, color: .secondaryLabelColor))
         let names = (0..<5).map { app.localizedPrayerName(at: $0) }
-        body.addSubview(PrayerDayTimelineView(
+        let timeline = PrayerDayTimelineView(
             frame: NSRect(x: x, y: 84, width: width, height: 360),
-            info: app.info, prayerNames: names, showsNawafil: nawafilMode == 1))
+            info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
+            events: scheduleEvents,
+            onSelectEvent: { [weak self] event, source in
+                self?.showPrayerInfo(event.knowledge, from: source)
+            })
+        body.addSubview(timeline)
 
         body.addSubview(dashboardLabel(featureText("full.landmarks"),
             frame: NSRect(x: x, y: 468, width: width, height: 30),
@@ -6886,8 +7782,12 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                 frame: NSRect(x: x, y: y, width: width, height: 72))
             y += 80
         }
-        func nafl(_ title: String, _ detail: String) {
+        func nafl(_ kind: PrayerScheduleKind, _ title: String, _ detail: String,
+                  _ citation: String) {
+            let item = displayKnowledge(for: kind, title: title, count: detail,
+                                        window: detail, citation: citation)
             addNawafilListRow(to: body, title: title, detail: detail,
+                knowledge: item,
                 frame: NSRect(x: x + 20, y: y, width: width - 40, height: 52))
             y += 60
         }
@@ -6898,25 +7798,33 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         }
 
         if nawafilMode == 1 {
-            nafl(featureText("nawafil.rawatib"), featureText("nawafil.rawatib.count"))
+            nafl(.rawatib, featureText("nawafil.rawatib"),
+                 featureText("nawafil.rawatib.count"),
+                 "Jāmiʿ at-Tirmidhī 415 · Ṣaḥīḥ Muslim 725a")
             prayer(0)
             landmark(t("prayer.shuruq"), app.info.shuruq, "sunrise.fill")
-            nafl(featureText("nawafil.duha"), featureText("nawafil.duha.count"))
+            nafl(.duha, featureText("nawafil.duha"),
+                 featureText("nawafil.duha.count"), "Ṣaḥīḥ Muslim 720")
             prayer(1)
             if !app.info.jumua.isEmpty {
                 landmark(t("label.jumua"), app.info.jumua, "person.2.fill")
             }
-            nafl(featureText("nawafil.rawatib"), featureText("nawafil.rawatib.best"))
+            nafl(.rawatib, featureText("nawafil.rawatib"),
+                 featureText("nawafil.rawatib.best"), "Jāmiʿ at-Tirmidhī 415")
             prayer(2)
             let sunset = (app.info.sunset ?? "").isEmpty
                 ? (app.info.times.indices.contains(3) ? app.info.times[3] : "")
                 : app.info.sunset!
             landmark(featureText("full.sunset"), sunset, "sunset.fill")
             prayer(3)
-            nafl(featureText("nawafil.rawatib"), featureText("nawafil.rawatib.best"))
+            nafl(.rawatib, featureText("nawafil.rawatib"),
+                 featureText("nawafil.rawatib.best"), "Jāmiʿ at-Tirmidhī 415")
             prayer(4)
-            nafl("\(featureText("nawafil.qiyam")) · \(featureText("nawafil.witr"))",
-                 featureText("nawafil.qiyam.best"))
+            nafl(.qiyam, featureText("nawafil.qiyam"),
+                 featureText("nawafil.qiyam.best"),
+                 "Ṣaḥīḥ Muslim 1163a · Ṣaḥīḥ al-Bukhārī 1145")
+            nafl(.witr, featureText("nawafil.witr"),
+                 featureText("nawafil.witr.best"), "Ṣaḥīḥ Muslim 751b")
         } else {
             for index in 0..<5 { prayer(index) }
             body.addSubview(dashboardLabel(featureText("full.landmarks"),
@@ -6951,8 +7859,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let card = AdaptiveCardView(frame: frame)
         card.cornerRadius = 12
         parent.addSubview(card)
-        let mode = NSButton(frame: NSRect(x: isRTL ? 12 : frame.width - 52,
-                                          y: 16, width: 40, height: 40))
+        let mode = NSButton(frame: NSRect(x: isRTL ? 8 : frame.width - 52,
+                                          y: 14, width: 44, height: 44))
         mode.isBordered = false
         mode.title = ""
         mode.tag = index
@@ -6964,8 +7872,15 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(index))
         card.addSubview(mode)
 
-        let titleX: CGFloat = isRTL ? 64 : 18
-        let titleWidth = frame.width * 0.36
+        if let knowledge = knowledge(forPrayer: index) {
+            card.addSubview(makeInfoButton(
+                for: knowledge,
+                frame: NSRect(x: isRTL ? frame.width - 52 : 8,
+                              y: 14, width: 44, height: 44)))
+        }
+
+        let titleX: CGFloat = 64
+        let titleWidth = frame.width * 0.31
         card.addSubview(dashboardLabel(app.localizedPrayerName(at: index),
             frame: NSRect(x: titleX, y: 15, width: titleWidth, height: 25),
             size: 17, weight: .semibold))
@@ -6986,6 +7901,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     }
 
     private func addNawafilListRow(to parent: NSView, title: String, detail: String,
+                                   knowledge: PrayerKnowledge,
                                    frame: NSRect) {
         let card = AdaptiveCardView(frame: frame)
         card.cornerRadius = 10
@@ -6996,12 +7912,18 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         icon.image = templateSymbol("sparkles", pointSize: 13, weight: .semibold)
         icon.contentTintColor = .appGreenAccent
         card.addSubview(icon)
-        let textX: CGFloat = Localizer.shared.isRTL ? 14 : 44
+        let isRTL = Localizer.shared.isRTL
+        card.addSubview(makeInfoButton(
+            for: knowledge,
+            frame: NSRect(x: isRTL ? 0 : frame.width - 44,
+                          y: 4, width: 44, height: 44)))
+        let textX: CGFloat = isRTL ? 44 : 44
+        let textWidth = frame.width - 88
         card.addSubview(dashboardLabel(title,
-            frame: NSRect(x: textX, y: 7, width: frame.width - 58, height: 21),
+            frame: NSRect(x: textX, y: 7, width: textWidth, height: 21),
             size: 14, weight: .semibold, color: .appGreenAccent))
         card.addSubview(dashboardLabel(detail,
-            frame: NSRect(x: textX, y: 29, width: frame.width - 58, height: 17),
+            frame: NSRect(x: textX, y: 29, width: textWidth, height: 17),
             size: 11.5, color: .secondaryLabelColor))
     }
 
@@ -7039,9 +7961,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             frame: NSRect(x: x, y: 52, width: width, height: 21),
             size: 12, color: .secondaryLabelColor))
         let names = (0..<5).map { app.localizedPrayerName(at: $0) }
-        body.addSubview(PrayerAnalogClockView(
+        let clock = PrayerAnalogClockView(
             frame: NSRect(x: x, y: 84, width: width, height: 500),
-            info: app.info, prayerNames: names, showsNawafil: nawafilMode == 1))
+            info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
+            events: scheduleEvents,
+            onSelectEvent: { [weak self] event, source in
+                self?.showPrayerInfo(event.knowledge, from: source)
+            })
+        body.addSubview(clock)
         body.addSubview(dashboardLabel(featureText("full.landmarks"),
             frame: NSRect(x: x, y: 610, width: width, height: 30),
             size: 22, weight: .bold))
@@ -7067,25 +7994,49 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let duhaWindow: String = {
             guard !app.info.shuruq.isEmpty, app.info.times.indices.contains(1) else { return "—" }
             return "\(displayTime(app.addMinutes(to: app.info.shuruq, minutes: 20))) – "
-                 + "\(displayTime(app.addMinutes(to: app.info.times[1], minutes: -10)))"
+                 + "\(displayTime(app.info.times[1]))"
         }()
         let nightWindow: String = {
             guard app.info.times.indices.contains(4), app.info.times.indices.contains(0) else { return "—" }
-            return "\(displayTime(app.info.times[4])) – \(displayTime(app.info.times[0]))"
+            let start = app.iqamaTimeAt(4) ?? app.info.times[4]
+            return "\(displayTime(start)) – \(displayTime(app.info.times[0]))"
         }()
         let finalThirdBest = lastThirdStart(using: app.info).map {
             "\(featureText("nawafil.qiyam.best")) · \(displayTime($0)) – \(displayTime(app.info.times[0]))"
         } ?? featureText("nawafil.qiyam.best")
+        let rawatib = displayKnowledge(
+            for: .rawatib, title: featureText("nawafil.rawatib"),
+            count: featureText("nawafil.rawatib.count"),
+            window: featureText("nawafil.rawatib.window"),
+            citation: "Jāmiʿ at-Tirmidhī 415 · Ṣaḥīḥ Muslim 725a")
+        let duha = displayKnowledge(
+            for: .duha, title: featureText("nawafil.duha"),
+            count: featureText("nawafil.duha.count"), window: duhaWindow,
+            citation: "Ṣaḥīḥ Muslim 720")
+        let qiyam = displayKnowledge(
+            for: .qiyam, title: featureText("nawafil.qiyam"),
+            count: featureText("nawafil.qiyam.count"), window: nightWindow,
+            citation: "Ṣaḥīḥ Muslim 1163a · Ṣaḥīḥ al-Bukhārī 1145")
+        let witr = displayKnowledge(
+            for: .witr, title: featureText("nawafil.witr"),
+            count: featureText("nawafil.witr.count"), window: nightWindow,
+            citation: "Ṣaḥīḥ Muslim 751b")
         return [
-            (featureText("nawafil.rawatib"), featureText("nawafil.rawatib.count"),
-             featureText("nawafil.rawatib.window"), featureText("nawafil.rawatib.best"),
-             "Jāmiʿ at-Tirmidhī 415"),
-            (featureText("nawafil.duha"), featureText("nawafil.duha.count"),
-             duhaWindow, featureText("nawafil.duha.best"), "Ṣaḥīḥ Muslim 720, 748b"),
-            (featureText("nawafil.qiyam"), featureText("nawafil.qiyam.count"),
-             nightWindow, finalThirdBest, "Ṣaḥīḥ al-Bukhārī 1145"),
-            (featureText("nawafil.witr"), featureText("nawafil.witr.count"),
-             nightWindow, featureText("nawafil.witr.best"), "Ṣaḥīḥ Muslim 752a"),
+            NawafilData(title: rawatib.title, count: rawatib.rakahs,
+                         window: featureText("nawafil.rawatib.window"),
+                         best: featureText("nawafil.rawatib.best"),
+                         source: rawatib.citation, knowledge: rawatib),
+            NawafilData(title: duha.title, count: duha.rakahs, window: duhaWindow,
+                         best: featureText("nawafil.duha.best"),
+                         source: duha.citation, knowledge: duha),
+            NawafilData(title: qiyam.title, count: qiyam.rakahs,
+                         window: qiyam.whenText,
+                         best: finalThirdBest, source: qiyam.citation,
+                         knowledge: qiyam),
+            NawafilData(title: witr.title, count: witr.rakahs,
+                         window: witr.whenText,
+                         best: featureText("nawafil.witr.best"),
+                         source: witr.citation, knowledge: witr),
         ]
     }
 
@@ -7099,11 +8050,15 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         card.addSubview(content)
 
         let countWidth: CGFloat = 160
-        let titleX: CGFloat = isRTL ? countWidth + 18 : 18
+        let titleX: CGFloat = isRTL ? countWidth + 18 : 52
         let countX: CGFloat = isRTL ? 18 : frame.width - countWidth - 18
+        content.addSubview(makeInfoButton(
+            for: data.knowledge,
+            frame: NSRect(x: isRTL ? frame.width - 48 : 4,
+                          y: 2, width: 44, height: 44)))
         content.addSubview(dashboardLabel(data.title,
             frame: NSRect(x: titleX, y: 12,
-                          width: frame.width - countWidth - 54, height: 23),
+                          width: frame.width - countWidth - 100, height: 23),
             size: 17, weight: .semibold))
         content.addSubview(dashboardLabel(data.count,
             frame: NSRect(x: countX, y: 14, width: countWidth, height: 19),
@@ -7811,6 +8766,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     private var materialSeg: NSSegmentedControl!
     private var timeFormatSeg: NSSegmentedControl!
     private var numeralStyleSeg: NSSegmentedControl!
+    private var dashboardCountdownCheck: NSButton!
     private var openAtLoginCheck: NSButton!
     private var accentSwatches: [AccentSwatchButton] = []
 
@@ -8028,7 +8984,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             // everywhere.
             sectionHeader(t("settings.tab.appearance"),
                           subtitle: t("adhkar.editor.title") + " · Salat Time")
-            let generalRows = 6 + (Localizer.shared.isArabic ? 1 : 0)
+            let generalRows = 7 + (Localizer.shared.isArabic ? 1 : 0)
             let (generalCard, generalH) = beginCard(rows: generalRows)
 
         languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -8103,6 +9059,15 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         timeFormatSeg.target = self
         timeFormatSeg.action = #selector(timeFormatChanged(_:))
         addRow(generalCard, label: t("settings.section.time_format"), control: timeFormatSeg)
+
+        dashboardCountdownCheck = NSButton(
+            checkboxWithTitle: prayerInfoText("visual.countdown.show"),
+            target: self,
+            action: #selector(dashboardCountdownChanged(_:)))
+        dashboardCountdownCheck.state = (UserDefaults.standard.object(
+            forKey: kPrayerShowCountdown) as? Bool ?? true) ? .on : .off
+        dashboardCountdownCheck.setAccessibilityHelp(prayerInfoText("visual.countdown.help"))
+        addRow(generalCard, label: "", control: dashboardCountdownCheck)
 
         openAtLoginCheck = NSButton(checkboxWithTitle: t("settings.startup.open_at_login"),
                                     target: self, action: #selector(openAtLoginChanged(_:)))
@@ -8355,6 +9320,10 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                                   forKey: kTimeFormat)
         appDelegate?.updateUI()
         appDelegate?.rebuildStatusItem()
+    }
+    @objc private func dashboardCountdownChanged(_ sender: NSButton) {
+        UserDefaults.standard.set(sender.state == .on, forKey: kPrayerShowCountdown)
+        appDelegate?.mainWindow?.reloadPrayerDashboard()
     }
     @objc private func numeralStyleChanged(_ sender: NSSegmentedControl) {
         let style: ArabicDigitStyle = sender.selectedSegment == 1 ? .arabicIndic : .western
@@ -10410,6 +11379,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         if UserDefaults.standard.object(forKey: kTimeFormat) == nil {
             UserDefaults.standard.set("24h", forKey: kTimeFormat)
         }
+        if UserDefaults.standard.object(forKey: kPrayerShowCountdown) == nil {
+            UserDefaults.standard.set(true, forKey: kPrayerShowCountdown)
+        }
         if UserDefaults.standard.object(forKey: kArabicDigitStyle) == nil {
             UserDefaults.standard.set(ArabicDigitStyle.western.rawValue,
                                       forKey: kArabicDigitStyle)
@@ -11822,6 +12794,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     // ---------------------------------------------------- tick loop
     func tick() {
+        defer { mainWindow?.refreshPrayerLiveState(now: Date()) }
         // Three independent menu-bar settings:
         //   • showTime       — scheduled prayer time, e.g. "Dhuhr 13:45"
         //   • showCountdown  — live ticking countdown to the next prayer
