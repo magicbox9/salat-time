@@ -116,7 +116,7 @@ let kQuranTranslationKey         = "quranTranslationKey"
 let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 
-let kAppVersion          = "3.21.0"
+let kAppVersion          = "3.22.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -150,6 +150,25 @@ func currentAccentKey() -> String {
 /// Return the (light, dark) pair for the currently-selected accent.
 func currentAccentPair() -> (light: NSColor, dark: NSColor) {
     return kAccentPalette[currentAccentKey()] ?? kAccentPalette["green"]!
+}
+
+/// Mirror the in-app accent onto AppKit's per-app accent override so every
+/// native control — checkboxes, segmented controls, switches, sliders,
+/// popups, selection highlights — follows the color chosen in Settings
+/// instead of the system-wide accent. Uses the supported per-app
+/// `AppleAccentColor` defaults key; the distributed notification makes
+/// already-running windows repaint without a relaunch.
+func syncSystemControlAccent() {
+    let appleAccent: [String: Int] = ["red": 0, "orange": 1, "green": 3,
+                                      "blue": 4, "purple": 5, "teal": 4]
+    if let value = appleAccent[currentAccentKey()] {
+        UserDefaults.standard.set(value, forKey: "AppleAccentColor")
+    } else {
+        UserDefaults.standard.removeObject(forKey: "AppleAccentColor")
+    }
+    DistributedNotificationCenter.default().postNotificationName(
+        NSNotification.Name("AppleColorPreferencesChangedNotification"),
+        object: nil, userInfo: nil, deliverImmediately: true)
 }
 
 /// Return true when the user asked for the translucent "Liquid Glass"
@@ -10424,6 +10443,9 @@ private struct OfflineQuranVerse: Decodable {
     let ayahNumber: Int
     let uthmanicText: String
     let searchableText: String
+    /// Printed Mushaf line numbers (1–15) from the KFGQPC page metadata.
+    let lineStart: Int
+    let lineEnd: Int
 
     var pageLabel: String {
         pageStart == pageEnd ? "\(pageStart)" : "\(pageStart)–\(pageEnd)"
@@ -10439,6 +10461,8 @@ private struct OfflineQuranVerse: Decodable {
         case ayahNumber = "aya_no"
         case uthmanicText = "aya_text"
         case searchableText = "aya_text_emlaey"
+        case lineStart = "line_start"
+        case lineEnd = "line_end"
     }
 
     init(from decoder: Decoder) throws {
@@ -10453,6 +10477,8 @@ private struct OfflineQuranVerse: Decodable {
         uthmanicText = try values.decode(String.self, forKey: .uthmanicText)
         searchableText = (try? values.decode(String.self, forKey: .searchableText))
             ?? uthmanicText
+        lineStart = (try? values.decode(Int.self, forKey: .lineStart)) ?? 0
+        lineEnd = (try? values.decode(Int.self, forKey: .lineEnd)) ?? 0
 
         if let number = try? values.decode(Int.self, forKey: .page) {
             pageStart = number
@@ -12705,6 +12731,7 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var mushafText: QuranMushafTextView!
     private var mushafHeaderLabel: NSTextField!
     private var mushafPageLabel: NSTextField!
+    private var mushafWidthConstraint: NSLayoutConstraint!
 
     private var settingsPopover: NSPopover?
     private weak var editionSegment: NSSegmentedControl?
@@ -12953,8 +12980,9 @@ final class QuranViewController: NSViewController, MainTabContent,
         mushafScroll.translatesAutoresizingMaskIntoConstraints = false
         mushafCard.addSubview(mushafScroll)
 
-        let mushafWidth = mushafCard.widthAnchor.constraint(equalToConstant: 680)
-        mushafWidth.priority = .defaultHigh
+        mushafWidthConstraint = mushafCard.widthAnchor.constraint(equalToConstant: 680)
+        mushafWidthConstraint.priority = .defaultHigh
+        let mushafWidth = mushafWidthConstraint!
         NSLayoutConstraint.activate([
             mushafCard.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
             mushafCard.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 14),
@@ -13473,77 +13501,306 @@ final class QuranViewController: NSViewController, MainTabContent,
         syncSidebarSelection()
     }
 
-    private func mushafBodyFont() -> NSFont {
-        verifiedQuranFont(edition: edition, size: 25 * textScale)
-            ?? NSFont(name: "Geeza Pro", size: 25 * textScale)
-            ?? Localizer.shared.font(size: 25 * textScale)
+    private struct MushafSegment {
+        let text: String
+        let verse: OfflineQuranVerse?
     }
 
-    private func arabicIndicDigits(_ value: Int) -> String {
-        let map: [Character: Character] = ["0": "٠", "1": "١", "2": "٢", "3": "٣",
-                                           "4": "٤", "5": "٥", "6": "٦", "7": "٧",
-                                           "8": "٨", "9": "٩"]
-        return String(String(value).map { map[$0] ?? $0 })
+    /// The full page text for one ayah: exact publisher text, plus an ornate
+    /// inline number (in the user's numeral style) when the official page
+    /// font is not present to draw the marker itself.
+    private func mushafBody(for verse: OfflineQuranVerse, official: Bool) -> String {
+        let body = official ? verse.uthmanicText : strippedAyahMarkers(verse.uthmanicText)
+        let marker = official ? ""
+            : " ﴿\(localizedInterfaceDigits(String(verse.ayahNumber)))﴾"
+        return body + marker
     }
 
-    /// Rebuild the attributed page: the exact verse sequence of the printed
-    /// page for the loaded riwayah, with surah banners and the bismillah
-    /// where they occur in print, and an ornate inline number closing every
-    /// ayah. Ranges are kept so taps resolve back to verses.
+    /// Rebuild the page as a line-for-line replica of the printed Mushaf.
+    ///
+    /// Structure is exact: every ayah begins and ends on its printed line
+    /// (line_start / line_end from the KFGQPC metadata), surah banners and
+    /// the bismillah occupy the same lines as in print, blank print lines
+    /// are preserved, and every line is justified to the full measure.
+    /// Within a multi-line ayah the aya-level data does not record which
+    /// word sits on which printed line, so word placement is solved by a
+    /// least-squares fit that mimics the print's uniform justified measure.
+    /// The page is sized so scale 1.0 shows the whole page; the text-size
+    /// control zooms the entire page uniformly.
     private func renderMushafPage() {
         guard mushafText != nil, !verses.isEmpty else { return }
         let pageVerses = verses.filter { $0.pageStart == currentPage }
             .sorted { $0.id < $1.id }
         visibleVerses = pageVerses
         let palette = self.palette
+        guard !pageVerses.isEmpty else {
+            mushafText.string = ""
+            mushafRanges = []
+            return
+        }
         let hasOfficial = officialFont() != nil
-        let bodyFont = mushafBodyFont()
-        let bannerFont = Localizer.shared.font(size: 19 * textScale, weight: .bold)
-        let bismillahFont = currentBismillahFont()
+        let referenceSize: CGFloat = 24
+        let referenceFont = verifiedQuranFont(edition: edition, size: referenceSize)
+            ?? NSFont(name: "Geeza Pro", size: referenceSize)
+            ?? Localizer.shared.font(size: referenceSize)
+        func naturalWidth(_ text: String) -> CGFloat {
+            (text as NSString).size(withAttributes: [.font: referenceFont]).width
+        }
+        // The KFGQPC computer-naskh sets words much farther apart than the
+        // fallback font's natural space; widening the modelled space keeps
+        // the estimated words-per-line close to the printed column.
+        let spaceWidth = naturalWidth(" ") * 1.7
+
+        // -- structural pass: word tokens carrying their printed line window
+        struct Token {
+            let text: String
+            let verse: OfflineQuranVerse
+            let lo: Int
+            let hi: Int
+            let width: CGFloat
+        }
+        var tokens: [Token] = []
+        var bannerLines: [Int: String] = [:]
+        var bismillahLines: Set<Int> = []
+        var bodyLineIndices: Set<Int> = []
+        var previousEnd = 0
+        var maxLine = 0
+        for verse in pageVerses {
+            let start = max(1, verse.lineStart)
+            let end = verse.lineEnd >= start ? verse.lineEnd : 15
+            for line in start...end { bodyLineIndices.insert(line) }
+            if verse.ayahNumber == 1 {
+                // The print metadata leaves exactly the banner (and, where
+                // present, bismillah) lines empty above a surah opening.
+                let gap = start - previousEnd - 1
+                if gap >= 1 { bannerLines[start - gap] = verse.suraNameArabic }
+                if gap >= 2 { bismillahLines.insert(start - 1) }
+            }
+            let full = mushafBody(for: verse, official: hasOfficial)
+            var words = full.split(separator: " ").map(String.init)
+            if !hasOfficial, words.count >= 2, words.last?.hasPrefix("﴿") == true {
+                // Keep the ayah medallion glued to the final word so it can
+                // never be orphaned on its own line.
+                let marker = words.removeLast()
+                words[words.count - 1] += " " + marker
+            }
+            if end == start || words.count == 1 {
+                tokens.append(Token(text: words.joined(separator: " "), verse: verse,
+                                    lo: start, hi: start,
+                                    width: naturalWidth(full) + spaceWidth))
+            } else {
+                for (index, word) in words.enumerated() {
+                    let lo: Int
+                    let hi: Int
+                    if index == 0 { lo = start; hi = start }
+                    else if index == words.count - 1 { lo = end; hi = end }
+                    else { lo = start; hi = end }
+                    tokens.append(Token(text: word, verse: verse, lo: lo, hi: hi,
+                                        width: naturalWidth(word) + spaceWidth))
+                }
+            }
+            previousEnd = max(previousEnd, end)
+            maxLine = max(maxLine, end)
+        }
+        maxLine = max(maxLine, bannerLines.keys.max() ?? 0)
+        let bodyLineList = bodyLineIndices.sorted()
+        let lineCount = bodyLineList.count
+        let tokenCount = tokens.count
+
+        var prefixWidth: [CGFloat] = [0]
+        prefixWidth.reserveCapacity(tokenCount + 1)
+        for token in tokens { prefixWidth.append(prefixWidth[prefixWidth.count - 1] + token.width) }
+        let measure = prefixWidth[tokenCount] / CGFloat(max(1, lineCount))
+
+        // -- least-squares cut placement: cuts[p] = last token on line p.
+        // Anchors from the print (an ayah's first word on line_start, its
+        // last word on line_end) bound each cut; between anchors the cut
+        // minimizing squared deviation from the uniform measure is chosen.
+        var minCut = [Int](repeating: -1, count: lineCount)
+        var maxCut = [Int](repeating: tokenCount - 1, count: lineCount)
+        for (p, line) in bodyLineList.enumerated() {
+            var mustInclude = -1
+            for (i, token) in tokens.enumerated() where token.hi <= line {
+                mustInclude = max(mustInclude, i)
+            }
+            minCut[p] = mustInclude
+            if let firstBeyond = tokens.firstIndex(where: { $0.lo > line }) {
+                maxCut[p] = firstBeyond - 1
+            }
+        }
+        let infinity = CGFloat.greatestFiniteMagnitude
+        var cost = [[CGFloat]](repeating: [CGFloat](repeating: infinity, count: tokenCount),
+                               count: lineCount)
+        var parent = [[Int]](repeating: [Int](repeating: -1, count: tokenCount),
+                             count: lineCount)
+        for p in 0..<lineCount {
+            let isLast = p == lineCount - 1
+            let lowest = max(minCut[p], p)
+            let highest = isLast ? tokenCount - 1 : maxCut[p]
+            guard lowest <= highest else { continue }
+            for c in lowest...highest {
+                if isLast && c != tokenCount - 1 { continue }
+                if p == 0 {
+                    let width = prefixWidth[c + 1] - spaceWidth
+                    cost[0][c] = (width - measure) * (width - measure)
+                    continue
+                }
+                var best = infinity
+                var bestPrev = -1
+                let prevLow = max(0, max(minCut[p - 1], p - 1))
+                if prevLow <= c - 1 {
+                    for cPrev in prevLow...(c - 1) where cost[p - 1][cPrev] < infinity {
+                        let width = prefixWidth[c + 1] - prefixWidth[cPrev + 1] - spaceWidth
+                        let value = cost[p - 1][cPrev] + (width - measure) * (width - measure)
+                        if value < best { best = value; bestPrev = cPrev }
+                    }
+                }
+                cost[p][c] = best
+                parent[p][c] = bestPrev
+            }
+        }
+        var cuts = [Int](repeating: -1, count: lineCount)
+        if lineCount > 0, cost[lineCount - 1][tokenCount - 1] < infinity {
+            var c = tokenCount - 1
+            for p in stride(from: lineCount - 1, through: 0, by: -1) {
+                cuts[p] = c
+                c = parent[p][c]
+            }
+        } else {
+            // Fallback (metadata inconsistency): distribute tokens evenly.
+            for p in 0..<lineCount {
+                cuts[p] = min(tokenCount - 1,
+                              ((p + 1) * tokenCount / max(1, lineCount)) - 1)
+            }
+            cuts[lineCount - 1] = tokenCount - 1
+        }
+
+        var bodyLines: [Int: [MushafSegment]] = [:]
+        var tokenIndex = 0
+        for (p, line) in bodyLineList.enumerated() {
+            let cut = max(cuts[p], tokenIndex - 1)
+            guard tokenIndex <= cut else { continue }
+            var segments: [MushafSegment] = []
+            var buffer: [String] = []
+            var verseId = tokens[tokenIndex].verse.id
+            var verse = tokens[tokenIndex].verse
+            for i in tokenIndex...cut {
+                if tokens[i].verse.id != verseId {
+                    segments.append(MushafSegment(text: buffer.joined(separator: " "),
+                                                  verse: verse))
+                    buffer = []
+                    verseId = tokens[i].verse.id
+                    verse = tokens[i].verse
+                }
+                buffer.append(tokens[i].text)
+            }
+            if !buffer.isEmpty {
+                segments.append(MushafSegment(text: buffer.joined(separator: " "),
+                                              verse: verse))
+            }
+            bodyLines[line] = segments
+            tokenIndex = cut + 1
+        }
+
+        // -- size the page: scale 1.0 fits the whole page in the window;
+        // the text-size control then zooms the page as a unit.
+        var widestLine: CGFloat = 1
+        for line in 1...maxLine {
+            guard let segments = bodyLines[line] else { continue }
+            widestLine = max(widestLine,
+                             naturalWidth(segments.map(\.text).joined(separator: " ")))
+        }
+        let refLineHeight = referenceFont.ascender - referenceFont.descender
+            + referenceFont.leading
+        let rowFactor = (refLineHeight + referenceSize * 0.52) / referenceSize
+        let rows = CGFloat(maxLine) + CGFloat(bannerLines.count) * 0.7 + 1.4
+        let scrollHeight = max(220, backdrop.bounds.height - 106)
+        let sizePerWidthPoint = referenceSize * 0.985 / widestLine
+        let fitWidth = scrollHeight / (rows * rowFactor * sizePerWidthPoint) + 54
+        let baseWidth = max(340, min(720, fitWidth))
+        mushafWidthConstraint?.constant = baseWidth * textScale
+        view.layoutSubtreeIfNeeded()
+
+        let viewWidth = mushafText.bounds.width > 60
+            ? mushafText.bounds.width : baseWidth * textScale - 32
+        let available = max(160, viewWidth - mushafText.textContainerInset.width * 2 - 14)
+        let bodySize = max(10, referenceSize * available / widestLine * 0.985)
+
+        let bodyFont = verifiedQuranFont(edition: edition, size: bodySize)
+            ?? NSFont(name: "Geeza Pro", size: bodySize)
+            ?? Localizer.shared.font(size: bodySize)
+        let bannerFont = Localizer.shared.font(size: bodySize * 0.7, weight: .bold)
+        let bismillahFont = verifiedQuranFont(edition: edition, size: bodySize * 0.82)
+            ?? NSFont(name: "Geeza Pro", size: bodySize * 0.82)
+            ?? Localizer.shared.font(size: bodySize * 0.82)
 
         let bodyParagraph = NSMutableParagraphStyle()
         bodyParagraph.alignment = .justified
         bodyParagraph.baseWritingDirection = .rightToLeft
         bodyParagraph.lineBreakMode = .byWordWrapping
-        bodyParagraph.lineSpacing = 14 * textScale
-        bodyParagraph.paragraphSpacing = 8
+        bodyParagraph.lineSpacing = bodySize * 0.52
         let centered = NSMutableParagraphStyle()
         centered.alignment = .center
         centered.baseWritingDirection = .rightToLeft
-        centered.paragraphSpacingBefore = 10
-        centered.paragraphSpacing = 8
+        centered.paragraphSpacingBefore = bodySize * 0.28
+        centered.paragraphSpacing = bodySize * 0.28
 
+        // -- compose. Body lines are joined with U+2028 so every line except
+        // a block's last is stretched by justification, exactly like the
+        // fully-justified printed column.
         let result = NSMutableAttributedString()
         var ranges: [(range: NSRange, verse: OfflineQuranVerse)] = []
-        for verse in pageVerses {
-            if verse.ayahNumber == 1 {
-                if result.length > 0 { result.append(NSAttributedString(string: "\n")) }
+        var inBodyBlock = false
+        func endBodyBlock() {
+            guard inBodyBlock else { return }
+            result.append(NSAttributedString(string: "\n", attributes:
+                [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+            inBodyBlock = false
+        }
+        for line in 1...maxLine {
+            if let banner = bannerLines[line] {
+                endBodyBlock()
                 result.append(NSAttributedString(
-                    string: "۞ سُورَةُ \(verse.suraNameArabic) ۞\n",
+                    string: "۞ سُورَةُ \(banner) ۞\n",
                     attributes: [.font: bannerFont,
                                  .foregroundColor: NSColor.appGreenAccent,
                                  .paragraphStyle: centered]))
-                if verse.suraNumber != 1, verse.suraNumber != 9, !bismillahText.isEmpty {
-                    result.append(NSAttributedString(
-                        string: bismillahText + "\n",
-                        attributes: [.font: bismillahFont,
-                                     .foregroundColor: palette.primary.withAlphaComponent(0.92),
-                                     .paragraphStyle: centered]))
+                continue
+            }
+            if bismillahLines.contains(line) {
+                result.append(NSAttributedString(
+                    string: bismillahText + "\n",
+                    attributes: [.font: bismillahFont,
+                                 .foregroundColor: palette.primary.withAlphaComponent(0.92),
+                                 .paragraphStyle: centered]))
+                continue
+            }
+            guard let segments = bodyLines[line], !segments.isEmpty else {
+                endBodyBlock()
+                result.append(NSAttributedString(string: "\n", attributes:
+                    [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+                continue
+            }
+            if inBodyBlock {
+                result.append(NSAttributedString(string: "\u{2028}", attributes:
+                    [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+            }
+            for (index, segment) in segments.enumerated() {
+                if index > 0 {
+                    result.append(NSAttributedString(string: " ", attributes:
+                        [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+                }
+                let location = result.length
+                result.append(NSAttributedString(
+                    string: segment.text,
+                    attributes: [.font: bodyFont, .foregroundColor: palette.primary,
+                                 .paragraphStyle: bodyParagraph]))
+                if let verse = segment.verse {
+                    ranges.append((NSRange(location: location,
+                                           length: segment.text.utf16.count), verse))
                 }
             }
-            let body = hasOfficial ? verse.uthmanicText
-                                   : strippedAyahMarkers(verse.uthmanicText)
-            let marker = hasOfficial ? "" : " ﴿\(arabicIndicDigits(verse.ayahNumber))﴾"
-            let start = result.length
-            result.append(NSAttributedString(
-                string: body + marker,
-                attributes: [.font: bodyFont, .foregroundColor: palette.primary,
-                             .paragraphStyle: bodyParagraph]))
-            ranges.append((NSRange(location: start, length: (body + marker).utf16.count),
-                           verse))
-            result.append(NSAttributedString(
-                string: " ",
-                attributes: [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+            inBodyBlock = true
         }
         mushafText.textStorage?.setAttributedString(result)
         mushafRanges = ranges
@@ -13569,12 +13826,13 @@ final class QuranViewController: NSViewController, MainTabContent,
         guard let storage = mushafText?.textStorage else { return }
         storage.removeAttribute(.backgroundColor,
                                 range: NSRange(location: 0, length: storage.length))
-        guard let hit = mushafRanges.first(where: {
-            $0.verse.suraNumber == selectedSurah && $0.verse.ayahNumber == selectedAyah
-        }) else { return }
-        storage.addAttribute(.backgroundColor,
-                             value: NSColor.appGreenAccent.withAlphaComponent(0.16),
-                             range: hit.range)
+        // A verse can occupy several printed lines, i.e. several ranges.
+        for hit in mushafRanges where hit.verse.suraNumber == selectedSurah
+            && hit.verse.ayahNumber == selectedAyah {
+            storage.addAttribute(.backgroundColor,
+                                 value: NSColor.appGreenAccent.withAlphaComponent(0.16),
+                                 range: hit.range)
+        }
     }
 
     fileprivate func handleMushafKey(_ event: NSEvent) -> Bool {
@@ -16893,6 +17151,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     // ----------------------------------------------------------- setup
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Native controls must wear the chosen accent from the very first
+        // window, so bridge it before any UI is built.
+        syncSystemControlAccent()
         // Defaults
         if UserDefaults.standard.object(forKey: kAdhanEnabled) == nil {
             UserDefaults.standard.set(true, forKey: kAdhanEnabled)
@@ -17339,6 +17600,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// the same problem for localised strings. RootPanelView.init calls
     /// applyMaterial() itself so we don't need to nudge it again here.
     func applyThemeChange() {
+        syncSystemControlAccent()
         let wasShown = popover?.isShown ?? false
         pickerView = nil
         settingsView = nil
