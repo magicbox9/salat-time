@@ -24,6 +24,10 @@ let kNotificationsKey    = "notificationsEnabled"
 let kLanguageKey         = "appLanguage"
 let kPerPrayerAdhanMode  = "perPrayerAdhanMode"   // [String: Int] keyed "0".."4"
 let kTimeFormat          = "timeFormat"           // "12h" or "24h"
+/// Numerals used while the Arabic interface is active. Western/Latin digits
+/// are the default, matching the rest of the app; users can opt into the
+/// Arabic-Indic forms traditionally called "Indian numerals" in Arabic UI.
+let kArabicDigitStyle    = "arabicDigitStyle"     // "western" | "arabicIndic"
 let kBarShowIcon         = "barShowIcon"          // Bool
 let kBarShowTime         = "barShowTime"          // Bool — show scheduled "Dhuhr 13:45"
 let kBarShowCountdown    = "barShowCountdown"     // Bool — show live countdown "00:42:15"
@@ -76,6 +80,16 @@ let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 let kPrayerDashboardMode   = "prayerDashboardMode"      // 0...3
 let kPrayerNawafilMode     = "prayerNawafilMode"        // 0 hide, 1 integrated, 2 separate
 
+/// Stable Settings destinations. Using a type instead of integer literals
+/// keeps popup and dashboard shortcuts correct as new sections are added.
+enum SettingsSection: Int, CaseIterable {
+    case general = 0
+    case mosque
+    case menuBar
+    case adhan
+    case adhkar
+}
+
 // --- Qur'an reader ----------------------------------------------------------
 // Canonical reading surfaces are the King Fahd Complex's explicitly
 // embeddable publications. No Qur'an text is generated, OCR'd, transformed,
@@ -89,7 +103,7 @@ let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbo
 let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
 let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
 
-let kAppVersion          = "3.13.4"
+let kAppVersion          = "3.14.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -211,6 +225,43 @@ func is12HourFormat() -> Bool {
     (UserDefaults.standard.string(forKey: kTimeFormat) ?? "24h") == "12h"
 }
 
+enum ArabicDigitStyle: String {
+    case western
+    case arabicIndic
+}
+
+func currentArabicDigitStyle() -> ArabicDigitStyle {
+    ArabicDigitStyle(rawValue: UserDefaults.standard.string(forKey: kArabicDigitStyle)
+                     ?? ArabicDigitStyle.western.rawValue) ?? .western
+}
+
+/// Apply the Arabic-interface numeral preference to both generated numbers
+/// and translated copy. Existing Arabic translations contain a mixture of
+/// 0-9 and ٠-٩, so normalizing in both directions is intentional.
+func applyingArabicDigitPreference(_ text: String, languageCode: String) -> String {
+    guard languageCode == "ar" else { return text }
+    let western = Array("0123456789")
+    let indic = Array("٠١٢٣٤٥٦٧٨٩")
+    let source = currentArabicDigitStyle() == .arabicIndic ? western : indic
+    let target = currentArabicDigitStyle() == .arabicIndic ? indic : western
+    let mapping = Dictionary(uniqueKeysWithValues: zip(source, target))
+    return String(text.map { mapping[$0] ?? $0 })
+}
+
+func localizedInterfaceDigits(_ text: String) -> String {
+    let code = UserDefaults.standard.string(forKey: kLanguageKey) ?? "en"
+    return applyingArabicDigitPreference(text, languageCode: code)
+}
+
+/// DateFormatter needs an explicit ICU numbering-system override; plain
+/// Arabic locales may inherit a different digit style from macOS Region.
+func preferredInterfaceLocale() -> Locale {
+    let code = UserDefaults.standard.string(forKey: kLanguageKey) ?? "en"
+    guard code == "ar" else { return Locale(identifier: code) }
+    let system = currentArabicDigitStyle() == .arabicIndic ? "arab" : "latn"
+    return Locale(identifier: "ar@numbers=\(system)")
+}
+
 /// Convert a raw "HH:MM" string (always 24h from mawaqit) into the display
 /// format the user chose in Settings. Returns the input unchanged when the
 /// string doesn't parse — no silent loss of data for edge cases like "—".
@@ -220,11 +271,13 @@ func displayTime(_ hhmm: String) -> String {
     guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else {
         return hhmm
     }
-    if !is12HourFormat() { return String(format: "%02d:%02d", h, m) }
+    if !is12HourFormat() {
+        return localizedInterfaceDigits(String(format: "%02d:%02d", h, m))
+    }
     let period = h >= 12 ? "PM" : "AM"
     var h12 = h % 12
     if h12 == 0 { h12 = 12 }
-    return String(format: "%d:%02d %@", h12, m, period)
+    return localizedInterfaceDigits(String(format: "%d:%02d %@", h12, m, period))
 }
 
 /// Hijri format keys recognised in the menu-bar settings. "off" suppresses
@@ -271,10 +324,10 @@ func hijriString(for date: Date = Date(),
                  format: HijriFormat = .full) -> String {
     if format == .off { return "" }
     var cal = Calendar(identifier: .islamicUmmAlQura)
-    cal.locale = Locale(identifier: Localizer.shared.current.code)
+    cal.locale = preferredInterfaceLocale()
     let fmt = DateFormatter()
     fmt.calendar = cal
-    fmt.locale = cal.locale
+    fmt.locale = preferredInterfaceLocale()
     switch format {
     case .full:     fmt.dateFormat = "d MMMM yyyy"
     case .dayMonth: fmt.dateFormat = "d MMMM"
@@ -1741,7 +1794,8 @@ final class AdhkarPanel: NSPanel {
         // Show the repeat count as a localized "N times" string when > 1.
         let countText: String
         if item.count > 1 {
-            countText = String(format: t("adhkar.editor.count_times"), item.count)
+            countText = localizedInterfaceDigits(
+                String(format: t("adhkar.editor.count_times"), item.count))
         } else {
             countText = ""
         }
@@ -2098,9 +2152,15 @@ final class Localizer {
 
     /// Translate a key using the current language; falls back to English, then to the key.
     func t(_ key: String) -> String {
-        if let s = dicts[current.code]?[key], !s.isEmpty { return s }
-        if let s = dicts["en"]?[key], !s.isEmpty { return s }
-        return key
+        let value: String
+        if let s = dicts[current.code]?[key], !s.isEmpty {
+            value = s
+        } else if let s = dicts["en"]?[key], !s.isEmpty {
+            value = s
+        } else {
+            value = key
+        }
+        return applyingArabicDigitPreference(value, languageCode: current.code)
     }
 
     var isRTL: Bool    { current.isRTL }
@@ -2145,6 +2205,45 @@ final class Localizer {
     var trailingAlignment: NSTextAlignment { isRTL ? .left  : .right }
 }
 
+/// Cairo's typographic line box is substantially taller than San Francisco's
+/// at the same point size. Frame-based AppKit labels must honor the real font
+/// metrics or Arabic ascenders/descenders are visibly sliced off.
+func localizedTextHeight(_ text: String, font: NSFont, width: CGFloat,
+                         maximumLines: Int = 1) -> CGFloat {
+    let lineHeight = ceil(font.ascender - font.descender + font.leading)
+    guard Localizer.shared.isArabic else { return lineHeight }
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineBreakMode = maximumLines > 1 ? .byWordWrapping : .byTruncatingTail
+    paragraph.baseWritingDirection = .rightToLeft
+    let measured = (text as NSString).boundingRect(
+        with: NSSize(width: max(1, width), height: .greatestFiniteMagnitude),
+        options: [.usesLineFragmentOrigin, .usesFontLeading],
+        attributes: [.font: font, .paragraphStyle: paragraph])
+    let maximumHeight = lineHeight * CGFloat(max(1, maximumLines))
+    return min(maximumHeight, max(lineHeight, ceil(measured.height))) + 3
+}
+
+func localizedTextFrame(_ frame: NSRect, text: String, font: NSFont,
+                        maximumLines: Int = 1) -> NSRect {
+    guard Localizer.shared.isArabic else { return frame }
+    let required = localizedTextHeight(text, font: font, width: frame.width,
+                                       maximumLines: maximumLines)
+    guard required > frame.height else { return frame }
+    return NSRect(x: frame.minX, y: frame.midY - required / 2,
+                  width: frame.width, height: required)
+}
+
+func fitLocalizedLabel(_ label: NSTextField, maximumLines: Int = 1) {
+    guard let font = label.font else { return }
+    label.frame = localizedTextFrame(label.frame, text: label.stringValue,
+                                     font: font, maximumLines: maximumLines)
+    label.cell?.truncatesLastVisibleLine = false
+    if maximumLines > 1 {
+        label.cell?.wraps = true
+        label.maximumNumberOfLines = maximumLines
+    }
+}
+
 /// Convenience global: `t("col.prayer")`.
 func t(_ key: String) -> String { Localizer.shared.t(key) }
 
@@ -2187,7 +2286,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "Friday prayers", "full.sunset": "Sunset",
         "full.sunset.maghrib_fallback": "Maghrib fallback when no separate time is published",
         "full.clock.accessibility": "Live prayer clock",
-        "full.clock.am_outer": "AM · outer ring    PM · inner ring"
+        "full.clock.am_outer": "AM · outer ring    PM · inner ring",
+        "settings.numerals": "Arabic-interface numerals",
+        "settings.numerals.western": "Arabic numerals",
+        "settings.numerals.indic": "Arabic-Indic numerals"
     ],
     "fr": [
         "full.open_more": "Plus de contrôles…", "full.nawafil": "Prières surérogatoires",
@@ -2223,7 +2325,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "Prières du vendredi", "full.sunset": "Coucher du soleil",
         "full.sunset.maghrib_fallback": "Repli sur Maghrib sans horaire distinct",
         "full.clock.accessibility": "Horloge des prières en direct",
-        "full.clock.am_outer": "Matin · anneau extérieur    Après-midi/soir · anneau intérieur"
+        "full.clock.am_outer": "Matin · anneau extérieur    Après-midi/soir · anneau intérieur",
+        "settings.numerals": "Chiffres de l’interface arabe",
+        "settings.numerals.western": "Chiffres arabes",
+        "settings.numerals.indic": "Chiffres arabo-indiens"
     ],
     "es": [
         "full.open_more": "Más controles…", "full.nawafil": "Oraciones voluntarias",
@@ -2259,7 +2364,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "Oraciones del viernes", "full.sunset": "Puesta de sol",
         "full.sunset.maghrib_fallback": "Usa Maghrib si no hay hora propia",
         "full.clock.accessibility": "Reloj de oración en directo",
-        "full.clock.am_outer": "AM · anillo exterior    PM · anillo interior"
+        "full.clock.am_outer": "AM · anillo exterior    PM · anillo interior",
+        "settings.numerals": "Números de la interfaz árabe",
+        "settings.numerals.western": "Números arábigos",
+        "settings.numerals.indic": "Números arábigo-índicos"
     ],
     "ar": [
         "full.open_more": "مزيد من التحكم…", "full.nawafil": "صلوات النوافل",
@@ -2295,7 +2403,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "صلوات الجمعة", "full.sunset": "الغروب",
         "full.sunset.maghrib_fallback": "وقت المغرب عند غياب وقت مستقل",
         "full.clock.accessibility": "ساعة مواقيت الصلاة الحية",
-        "full.clock.am_outer": "صباحًا · الحلقة الخارجية    مساءً · الحلقة الداخلية"
+        "full.clock.am_outer": "صباحًا · الحلقة الخارجية    مساءً · الحلقة الداخلية",
+        "settings.numerals": "أرقام الواجهة العربية",
+        "settings.numerals.western": "الأرقام العربية",
+        "settings.numerals.indic": "الأرقام الهندية"
     ],
     "zh": [
         "full.open_more": "更多控制…", "full.nawafil": "副功拜",
@@ -2331,7 +2442,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "主麻拜", "full.sunset": "日落",
         "full.sunset.maghrib_fallback": "无独立时间时使用昏礼时间",
         "full.clock.accessibility": "实时礼拜时钟",
-        "full.clock.am_outer": "上午 · 外圈    下午及夜间 · 内圈"
+        "full.clock.am_outer": "上午 · 外圈    下午及夜间 · 内圈",
+        "settings.numerals": "阿拉伯语界面数字",
+        "settings.numerals.western": "阿拉伯数字",
+        "settings.numerals.indic": "阿拉伯-印度数字"
     ],
     "hi": [
         "full.open_more": "और नियंत्रण…", "full.nawafil": "नफ़्ल नमाज़ें",
@@ -2367,7 +2481,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "जुमे की नमाज़", "full.sunset": "सूर्यास्त",
         "full.sunset.maghrib_fallback": "अलग समय न हो तो मग़रिब का समय",
         "full.clock.accessibility": "सीधी नमाज़ घड़ी",
-        "full.clock.am_outer": "सुबह · बाहरी घेरा    दोपहर/रात · भीतरी घेरा"
+        "full.clock.am_outer": "सुबह · बाहरी घेरा    दोपहर/रात · भीतरी घेरा",
+        "settings.numerals": "अरबी इंटरफ़ेस के अंक",
+        "settings.numerals.western": "अरबी अंक",
+        "settings.numerals.indic": "अरबी-इंडिक अंक"
     ],
     "bn": [
         "full.open_more": "আরও নিয়ন্ত্রণ…", "full.nawafil": "নফল নামাজ",
@@ -2403,7 +2520,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "জুমার নামাজ", "full.sunset": "সূর্যাস্ত",
         "full.sunset.maghrib_fallback": "আলাদা সময় না থাকলে মাগরিবের সময়",
         "full.clock.accessibility": "সরাসরি নামাজের ঘড়ি",
-        "full.clock.am_outer": "সকাল · বাইরের বলয়    বিকেল/রাত · ভেতরের বলয়"
+        "full.clock.am_outer": "সকাল · বাইরের বলয়    বিকেল/রাত · ভেতরের বলয়",
+        "settings.numerals": "আরবি ইন্টারফেসের সংখ্যা",
+        "settings.numerals.western": "আরবি সংখ্যা",
+        "settings.numerals.indic": "আরবি-ইন্ডিক সংখ্যা"
     ],
     "ru": [
         "full.open_more": "Больше настроек…", "full.nawafil": "Дополнительные молитвы",
@@ -2439,7 +2559,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "Пятничные молитвы", "full.sunset": "Закат",
         "full.sunset.maghrib_fallback": "Магриб, если нет отдельного времени",
         "full.clock.accessibility": "Живые часы молитв",
-        "full.clock.am_outer": "До полудня · внешнее кольцо    После полудня · внутреннее"
+        "full.clock.am_outer": "До полудня · внешнее кольцо    После полудня · внутреннее",
+        "settings.numerals": "Цифры арабского интерфейса",
+        "settings.numerals.western": "Арабские цифры",
+        "settings.numerals.indic": "Арабо-индийские цифры"
     ],
     "pt": [
         "full.open_more": "Mais controlos…", "full.nawafil": "Orações voluntárias",
@@ -2475,7 +2598,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "Orações de sexta-feira", "full.sunset": "Pôr do sol",
         "full.sunset.maghrib_fallback": "Usa o Maghrib sem horário próprio",
         "full.clock.accessibility": "Relógio de oração em direto",
-        "full.clock.am_outer": "Manhã · anel exterior    Tarde/noite · anel interior"
+        "full.clock.am_outer": "Manhã · anel exterior    Tarde/noite · anel interior",
+        "settings.numerals": "Algarismos da interface árabe",
+        "settings.numerals.western": "Algarismos árabes",
+        "settings.numerals.indic": "Algarismos árabe-índicos"
     ],
     "ur": [
         "full.open_more": "مزید کنٹرول…", "full.nawafil": "نفل نمازیں",
@@ -2511,7 +2637,10 @@ private let featureTranslations: [String: [String: String]] = [
         "full.landmark.friday": "جمعہ کی نمازیں", "full.sunset": "غروبِ آفتاب",
         "full.sunset.maghrib_fallback": "الگ وقت نہ ہو تو مغرب کا وقت",
         "full.clock.accessibility": "براہِ راست نماز گھڑی",
-        "full.clock.am_outer": "صبح · بیرونی حلقہ    دوپہر/رات · اندرونی حلقہ"
+        "full.clock.am_outer": "صبح · بیرونی حلقہ    دوپہر/رات · اندرونی حلقہ",
+        "settings.numerals": "عربی انٹرفیس کے ہندسے",
+        "settings.numerals.western": "عربی ہندسے",
+        "settings.numerals.indic": "عربی-ہندی ہندسے"
     ]
 ]
 
@@ -2675,17 +2804,19 @@ private let quranTranslationRows: [String: [String]] = [
 
 func featureText(_ key: String) -> String {
     let code = Localizer.shared.current.code
+    let value: String
     if let index = quranTranslationKeys.firstIndex(of: key),
        let row = quranTranslationRows[code], row.indices.contains(index) {
-        return row[index]
+        value = row[index]
+    } else if let index = quranTranslationKeys.firstIndex(of: key),
+              let row = quranTranslationRows["en"], row.indices.contains(index) {
+        value = row[index]
+    } else {
+        value = featureTranslations[code]?[key]
+            ?? featureTranslations["en"]?[key]
+            ?? key
     }
-    if let index = quranTranslationKeys.firstIndex(of: key),
-       let row = quranTranslationRows["en"], row.indices.contains(index) {
-        return row[index]
-    }
-    return featureTranslations[code]?[key]
-        ?? featureTranslations["en"]?[key]
-        ?? key
+    return applyingArabicDigitPreference(value, languageCode: code)
 }
 
 /// Register the bundled Cairo font so NSFont(name:…) / NSFontManager can find
@@ -3345,6 +3476,7 @@ final class HoverablePickerRow: FlippedView {
 final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManagerDelegate {
     weak var appDelegate: AppDelegate?
     var onDone: (() -> Void)?
+    private let showsNavigationHeader: Bool
 
     private let segmented = NSSegmentedControl()
     private let titleLbl  = NSTextField(labelWithString: t("picker.title"))
@@ -3448,7 +3580,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     /// to reset vs. reuse it across back/forward navigation.
     private var searchCountryCode: String? = nil
 
-    init(width: CGFloat, height: CGFloat) {
+    init(width: CGFloat, height: CGFloat, showsNavigationHeader: Bool = true) {
+        self.showsNavigationHeader = showsNavigationHeader
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         build()
         refreshCurrentMode()
@@ -3459,27 +3592,30 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         let W = bounds.width, H = bounds.height
 
         // -------------------- Header: back + title -------------------------
-        backBtn = HoverIconButton(
-            symbol: backChevronSymbol,
-            toolTip: t("tooltip.back"),
-            target: self,
-            action: #selector(backTapped),
-            pointSize: 14,
-            size: NSSize(width: 36, height: 28))
-        backBtn.setFrameOrigin(NSPoint(x: 10, y: 10))
-        addSubview(backBtn)
+        if showsNavigationHeader {
+            backBtn = HoverIconButton(
+                symbol: backChevronSymbol,
+                toolTip: t("tooltip.back"),
+                target: self,
+                action: #selector(backTapped),
+                pointSize: 14,
+                size: NSSize(width: 44, height: 44))
+            backBtn.setFrameOrigin(NSPoint(x: 6, y: 2))
+            addSubview(backBtn)
 
-        titleLbl.frame = NSRect(x: 60, y: 14, width: W - 120, height: 20)
-        titleLbl.font = Localizer.shared.font(size: 13, weight: .semibold)
-        titleLbl.alignment = .center
-        titleLbl.textColor = .labelColor
-        titleLbl.drawsBackground = false
-        addSubview(titleLbl)
+            titleLbl.frame = NSRect(x: 60, y: 14, width: W - 120, height: 20)
+            titleLbl.font = Localizer.shared.font(size: 13, weight: .semibold)
+            titleLbl.alignment = .center
+            titleLbl.textColor = .labelColor
+            titleLbl.drawsBackground = false
+            fitLocalizedLabel(titleLbl)
+            addSubview(titleLbl)
 
-        // Hairline under the title bar for visual separation.
-        let hdrSep = NSBox(frame: NSRect(x: 12, y: 42, width: W - 24, height: 1))
-        hdrSep.boxType = .separator
-        addSubview(hdrSep)
+            // Hairline under the title bar for visual separation.
+            let hdrSep = NSBox(frame: NSRect(x: 12, y: 42, width: W - 24, height: 1))
+            hdrSep.boxType = .separator
+            addSubview(hdrSep)
+        }
 
         // -------------------- Segmented tab bar ---------------------------
         // 4 segments across W-24 with monotone SF-Symbol glyphs only (no
@@ -3508,12 +3644,15 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         segmented.selectedSegment = 0
         segmented.target = self
         segmented.action = #selector(segmentChanged)
-        segmented.frame = NSRect(x: 12, y: 50, width: segTotal, height: 26)
+        segmented.frame = NSRect(x: 12, y: showsNavigationHeader ? 50 : 10,
+                                 width: segTotal, height: 30)
+        segmented.setAccessibilityLabel(t("settings.section.mosque"))
         addSubview(segmented)
 
         // Status / help line. Dynamically shows the active tab's hint text,
         // the search-in-progress message, or a result count.
-        statusLabel.frame = NSRect(x: 12, y: 80, width: W - 24, height: 14)
+        statusLabel.frame = NSRect(x: 12, y: showsNavigationHeader ? 80 : 46,
+                                   width: W - 24, height: 18)
         statusLabel.font = Localizer.shared.font(size: 10)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.drawsBackground = false
@@ -3523,7 +3662,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         addSubview(statusLabel)
 
         // -------------------- Input area ----------------------------------
-        inputContainer.frame = NSRect(x: 12, y: 100, width: W - 24, height: 30)
+        inputContainer.frame = NSRect(x: 12, y: showsNavigationHeader ? 100 : 68,
+                                      width: W - 24, height: 44)
         inputContainer.autoresizingMask = [.width]
         addSubview(inputContainer)
 
@@ -3532,9 +3672,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // Compact Go / Add icon buttons (arrow.right in a 30×26 pill) leave
         // the textfield with most of the row. All-icon to honour the
         // monotone-icon rule.
-        let btnW: CGFloat = 30
+        let btnW: CGFloat = 44
 
-        searchField.frame = NSRect(x: 0, y: 2, width: iw - btnW - 4, height: 24)
+        searchField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 4, height: 28)
         searchField.placeholderString = t("picker.placeholder.search")
         searchField.font = Localizer.shared.font(size: 12)
         searchField.delegate = self
@@ -3546,7 +3686,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // belt-and-suspenders switch for older AppKit paths.
         searchField.isContinuous = true
 
-        goSearchBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 28)
+        goSearchBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 44)
         goSearchBtn.bezelStyle = .rounded
         goSearchBtn.title = ""
         goSearchBtn.target = self
@@ -3554,19 +3694,20 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         goSearchBtn.keyEquivalent = "\r"
         goSearchBtn.autoresizingMask = [.minXMargin]
         goSearchBtn.toolTip = t("picker.btn.search")
+        goSearchBtn.setAccessibilityLabel(t("picker.btn.search"))
         if let img = templateSymbol("magnifyingglass", pointSize: 12, weight: .semibold) {
             goSearchBtn.image = img
             goSearchBtn.imagePosition = .imageOnly
         }
 
-        urlField.frame = NSRect(x: 0, y: 2, width: iw - btnW - 4, height: 24)
+        urlField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 4, height: 28)
         urlField.placeholderString = "mawaqit.net/fr/m/…"
         urlField.font = Localizer.shared.font(size: 12)
         urlField.target = self
         urlField.action = #selector(runAddURL)
         urlField.autoresizingMask = [.width]
 
-        addUrlBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 28)
+        addUrlBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 44)
         addUrlBtn.bezelStyle = .rounded
         addUrlBtn.title = ""
         addUrlBtn.target = self
@@ -3574,6 +3715,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         addUrlBtn.keyEquivalent = "\r"
         addUrlBtn.autoresizingMask = [.minXMargin]
         addUrlBtn.toolTip = t("picker.btn.add")
+        addUrlBtn.setAccessibilityLabel(t("picker.btn.add"))
         if let img = templateSymbol("plus", pointSize: 12, weight: .semibold) {
             addUrlBtn.image = img
             addUrlBtn.imagePosition = .imageOnly
@@ -3584,7 +3726,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // a city name and runs the same search the text field does — so the
         // UX stays uniform regardless of whether the city is typed or
         // detected automatically.
-        cityField.frame = NSRect(x: 0, y: 2, width: iw - btnW - 4, height: 24)
+        cityField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 4, height: 28)
         cityField.placeholderString = t("picker.placeholder.city")
         cityField.font = Localizer.shared.font(size: 12)
         cityField.delegate = self
@@ -3593,7 +3735,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         cityField.autoresizingMask = [.width]
         cityField.stringValue = userCity()
 
-        nearMeBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 28)
+        nearMeBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 44)
         nearMeBtn.bezelStyle = .rounded
         nearMeBtn.title = ""
         nearMeBtn.target = self
@@ -3601,13 +3743,16 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         nearMeBtn.keyEquivalent = ""
         nearMeBtn.autoresizingMask = [.minXMargin]
         nearMeBtn.toolTip = t("picker.btn.near")
+        nearMeBtn.setAccessibilityLabel(t("picker.btn.near"))
         if let img = templateSymbol("location.fill", pointSize: 12, weight: .semibold) {
             nearMeBtn.image = img
             nearMeBtn.imagePosition = .imageOnly
         }
 
         // -------------------- Results scroll view -------------------------
-        scrollView.frame = NSRect(x: 12, y: 138, width: W - 24, height: H - 150)
+        let resultsY: CGFloat = showsNavigationHeader ? 152 : 120
+        scrollView.frame = NSRect(x: 12, y: resultsY, width: W - 24,
+                                  height: H - resultsY - 12)
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -4004,7 +4149,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         m.stopUpdatingLocation()
         let lat = loc.coordinate.latitude, lon = loc.coordinate.longitude
         nearbyCoord = (lat, lon)
-        statusLabel.stringValue = String(format: "Identifying your city (%.3f, %.3f)…", lat, lon)
+        statusLabel.stringValue = localizedInterfaceDigits(
+            String(format: "Identifying your city (%.3f, %.3f)…", lat, lon))
 
         // Reverse-geocode with Apple's geocoder — CLPlacemark gives us a
         // proper locality/subLocality string that Mawaqit's name search can
@@ -4225,7 +4371,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private func makeCityRowForSearch(city: String, count: Int,
                                       country: PickerCountry) -> NSView {
         let rowW = scrollWidth - 4
-        let rowH: CGFloat = 44
+        let rowH: CGFloat = Localizer.shared.isArabic ? 64 : 44
         let row = CityRowView(frame: NSRect(x: 0, y: 0, width: rowW, height: rowH))
         row.cityName = city
         row.onTap = { [weak self] in
@@ -4262,14 +4408,19 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         let textX: CGFloat = 10 + iconSize + 10
         let textW = rowW - textX - 10 - 14 - 8
         let nameLbl = NSTextField(labelWithString: city)
-        nameLbl.frame = NSRect(x: textX, y: 5, width: textW, height: 18)
+        nameLbl.frame = NSRect(x: textX, y: Localizer.shared.isArabic ? 4 : 5,
+                               width: textW,
+                               height: Localizer.shared.isArabic ? 30 : 18)
         nameLbl.font = Localizer.shared.font(size: 13, weight: .semibold)
         nameLbl.textColor = .labelColor
         nameLbl.drawsBackground = false
         nameLbl.lineBreakMode = .byTruncatingTail
         row.addSubview(nameLbl)
-        let sub = NSTextField(labelWithString: "\(count) \(count == 1 ? "mosque" : "mosques")")
-        sub.frame = NSRect(x: textX, y: 23, width: textW, height: 14)
+        let countText = localizedInterfaceDigits(String(count))
+        let sub = NSTextField(labelWithString: "\(countText) \(count == 1 ? "mosque" : "mosques")")
+        sub.frame = NSRect(x: textX, y: Localizer.shared.isArabic ? 34 : 23,
+                           width: textW,
+                           height: Localizer.shared.isArabic ? 24 : 14)
         sub.font = Localizer.shared.font(size: 10)
         sub.textColor = .secondaryLabelColor
         sub.drawsBackground = false
@@ -4293,7 +4444,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private func showResults(_ refs: [MosqueRef], emptyMsg: String) {
         clearResults()
         if refs.isEmpty { statusLabel.stringValue = emptyMsg; return }
-        statusLabel.stringValue = "\(refs.count) result\(refs.count == 1 ? "" : "s")"
+        statusLabel.stringValue = "\(localizedInterfaceDigits(String(refs.count))) result\(refs.count == 1 ? "" : "s")"
         for r in refs {
             resultsStack.addArrangedSubview(makeRow(for: r, fromFavorites: false))
         }
@@ -4314,12 +4465,19 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         let padTop:    CGFloat = 10
         let padBot:    CGFloat = 10
         let lineGap:   CGFloat = 2
-        let nameH:     CGFloat = 18
-        let subH:      CGFloat = 14
+        let nameFont = Localizer.shared.font(size: 13, weight: .semibold)
+        let cityFont = Localizer.shared.font(size: 11, weight: .medium)
+        let addressFont = Localizer.shared.font(size: 10)
+        let nameH = max(18, localizedTextHeight(m.name, font: nameFont,
+                                               width: max(120, rowW * 0.55)))
+        let cityH = max(14, localizedTextHeight(m.city, font: cityFont,
+                                               width: max(120, rowW * 0.55)))
+        let addressH = max(14, localizedTextHeight(addr, font: addressFont,
+                                                  width: max(120, rowW * 0.55)))
         let extraLines = (hasCity ? 1 : 0) + (hasAddress ? 1 : 0)
         let rowH: CGFloat = padTop + nameH +
                             (extraLines > 0 ? lineGap : 0) +
-                            CGFloat(extraLines) * subH +
+                            (hasCity ? cityH : 0) + (hasAddress ? addressH : 0) +
                             (extraLines > 1 ? lineGap : 0) +
                             padBot
         // Use a hoverable row so that hovering over the card pops up a
@@ -4432,7 +4590,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
 
         let name = NSTextField(labelWithString: m.name)
         name.frame = NSRect(x: leftPad, y: y, width: textW, height: nameH)
-        name.font = Localizer.shared.font(size: 13, weight: .semibold)
+        name.font = nameFont
         name.textColor = isCurrent ? .appGreenAccent : .labelColor
         name.drawsBackground = false
         name.lineBreakMode = .byTruncatingTail
@@ -4443,21 +4601,21 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         if hasCity {
             y += lineGap
             let city = NSTextField(labelWithString: m.city)
-            city.frame = NSRect(x: leftPad, y: y, width: textW, height: subH)
-            city.font = Localizer.shared.font(size: 11, weight: .medium)
+            city.frame = NSRect(x: leftPad, y: y, width: textW, height: cityH)
+            city.font = cityFont
             city.textColor = .secondaryLabelColor
             city.drawsBackground = false
             city.lineBreakMode = .byTruncatingTail
             city.toolTip = m.city
             row.addSubview(city)
-            y += subH
+            y += cityH
         }
 
         if hasAddress {
             y += lineGap
             let addrLbl = NSTextField(labelWithString: addr)
-            addrLbl.frame = NSRect(x: leftPad, y: y, width: textW, height: subH)
-            addrLbl.font = Localizer.shared.font(size: 10)
+            addrLbl.frame = NSRect(x: leftPad, y: y, width: textW, height: addressH)
+            addrLbl.font = addressFont
             addrLbl.textColor = .tertiaryLabelColor
             addrLbl.drawsBackground = false
             addrLbl.lineBreakMode = .byTruncatingTail
@@ -5177,7 +5335,8 @@ final class SettingsView: FlippedView {
                 preAdhanPopup.addItem(withTitle: t("settings.notif.headsup.off"))
             } else {
                 let fmt = t("settings.notif.headsup.minutes")
-                preAdhanPopup.addItem(withTitle: String(format: fmt, minutes))
+                preAdhanPopup.addItem(withTitle:
+                    localizedInterfaceDigits(String(format: fmt, minutes)))
             }
         }
         preAdhanPopup.target = self
@@ -5354,41 +5513,6 @@ protocol MainTabContent: NSViewController {
     func tabDidActivate()
 }
 
-/// Full-window host for mosque discovery. The picker used to push the user
-/// back into the tiny menu-bar popover, which made Settings feel split across
-/// two unrelated apps. It now behaves as a Settings sub-page and returns to
-/// the same full-window surface.
-final class MainMosquePickerViewController: NSViewController, MainTabContent {
-    private weak var appDelegate: AppDelegate?
-    var onDone: (() -> Void)?
-    private var picker: MosquePickerView!
-
-    init(appDelegate: AppDelegate) {
-        self.appDelegate = appDelegate
-        super.init(nibName: nil, bundle: nil)
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func loadView() {
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 960, height: 554))
-        root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        picker = MosquePickerView(width: 960, height: 554)
-        picker.translatesAutoresizingMaskIntoConstraints = false
-        picker.appDelegate = appDelegate
-        picker.onDone = { [weak self] in self?.onDone?() }
-        root.addSubview(picker)
-        NSLayoutConstraint.activate([
-            picker.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            picker.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            picker.topAnchor.constraint(equalTo: root.topAnchor),
-            picker.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-        ])
-        view = root
-    }
-
-    func tabDidActivate() { picker?.refreshCurrentMode() }
-}
-
 final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
 
     private static let destinationsItemID = NSToolbarItem.Identifier("salattime.destinations")
@@ -5400,7 +5524,6 @@ final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     private var editorVC: AdhkarEditorViewController?
     private var quranVC: QuranViewController?
     private var settingsVC: AdhkarSettingsViewController?
-    private var mosquePickerVC: MainMosquePickerViewController?
     private var viewSwitcher: NSSegmentedControl!
     private var settingsButton: HoverIconButton!
     private var isShowingSettings = false
@@ -5528,7 +5651,6 @@ final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         editorVC = nil
         quranVC = nil
         settingsVC = nil
-        mosquePickerVC = nil
         contentView = nil
         buildShell()
         if let appDelegate = appDelegate {
@@ -5580,9 +5702,9 @@ final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         }
     }
 
-    private func showSettings(section: Int?) {
+    private func showSettings(section: SettingsSection?) {
         if settingsVC == nil {
-            settingsVC = AdhkarSettingsViewController(initialSection: section ?? 0)
+            settingsVC = AdhkarSettingsViewController(initialSection: section ?? .general)
         } else if let section {
             settingsVC?.selectSection(section)
         }
@@ -5593,20 +5715,9 @@ final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
     /// Public entry point used by the popup gear. Settings remain a single
     /// full-window surface; the compact popup only chooses which section is
     /// most relevant to open.
-    func showSettingsWindow(section: Int) {
+    func showSettingsWindow(section: SettingsSection) {
         isShowingSettings = true
         showSettings(section: section)
-    }
-
-    func showMosquePickerFromSettings() {
-        guard let appDelegate else { return }
-        isShowingSettings = true
-        if mosquePickerVC == nil {
-            let controller = MainMosquePickerViewController(appDelegate: appDelegate)
-            controller.onDone = { [weak self] in self?.showSettings(section: 0) }
-            mosquePickerVC = controller
-        }
-        if let mosquePickerVC { present(mosquePickerVC) }
     }
 
     func reloadPrayerDashboard() {
@@ -5876,11 +5987,16 @@ final class PrayerDayTimelineView: NSControl {
         paragraph.alignment = alignment
         paragraph.lineBreakMode = lineBreak
         paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        let font = Localizer.shared.font(size: size, weight: weight)
+        let lines = value.contains("\n") ? 2 : 1
+        let drawingRect = localizedTextFrame(rect, text: value, font: font,
+                                             maximumLines: lines)
         NSAttributedString(string: value, attributes: [
-            .font: Localizer.shared.font(size: size, weight: weight),
+            .font: font,
             .foregroundColor: color,
             .paragraphStyle: paragraph,
-        ]).draw(in: rect)
+        ]).draw(with: drawingRect,
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -6048,7 +6164,7 @@ final class PrayerDayTimelineView: NSControl {
             tick.lineWidth = 0.7
             tick.stroke()
             let labelX = max(5, min(bounds.width - 39, x - 18))
-            drawText(String(format: "%02d:00", hour % 24),
+            drawText(localizedInterfaceDigits(String(format: "%02d:00", hour % 24)),
                      in: NSRect(x: labelX, y: 272, width: 36, height: 14),
                      size: 9.5, color: .tertiaryLabelColor, alignment: .center)
         }
@@ -6164,11 +6280,14 @@ final class PrayerAnalogClockView: NSControl {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = alignment
         paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        let font = Localizer.shared.font(size: size, weight: weight)
+        let drawingRect = localizedTextFrame(rect, text: string, font: font)
         NSAttributedString(string: string, attributes: [
-            .font: Localizer.shared.font(size: size, weight: weight),
+            .font: font,
             .foregroundColor: color,
             .paragraphStyle: paragraph,
-        ]).draw(in: rect)
+        ]).draw(with: drawingRect,
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -6210,7 +6329,8 @@ final class PrayerAnalogClockView: NSControl {
             tick.lineWidth = hour.isMultiple(of: 3) ? 1.8 : 0.8
             tick.stroke()
             let numeral = point(center: center, radius: outer - 20, minute: minute)
-            drawText("\(hour)", rect: NSRect(x: numeral.x - 12, y: numeral.y - 9,
+            drawText(localizedInterfaceDigits(String(hour)),
+                     rect: NSRect(x: numeral.x - 12, y: numeral.y - 9,
                                                width: 24, height: 18),
                      size: 10, color: .secondaryLabelColor)
         }
@@ -6284,8 +6404,11 @@ final class PrayerAnalogClockView: NSControl {
         NSBezierPath(ovalIn: NSRect(x: center.x - 5, y: center.y - 5,
                                     width: 10, height: 10)).fill()
 
-        let nowString = DateFormatter.localizedString(from: now, dateStyle: .none,
-                                                       timeStyle: .medium)
+        let liveFormatter = DateFormatter()
+        liveFormatter.locale = preferredInterfaceLocale()
+        liveFormatter.dateStyle = .none
+        liveFormatter.timeStyle = .medium
+        let nowString = liveFormatter.string(from: now)
         drawText(nowString, rect: NSRect(x: center.x - 80, y: center.y + 38,
                                          width: 160, height: 24),
                  size: 16, weight: .semibold)
@@ -6308,6 +6431,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private var scrollView: NSScrollView!
     private var modeControl: NSSegmentedControl!
     private var nawafilControl: NSSegmentedControl!
+    private var mosqueSettingsButton: HoverIconButton!
     private var displayMode = max(0, min(3,
         UserDefaults.standard.integer(forKey: kPrayerDashboardMode)))
     private var nawafilMode: Int = {
@@ -6355,7 +6479,19 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         nawafilControl.translatesAutoresizingMaskIntoConstraints = false
         nawafilControl.setAccessibilityLabel(featureText("full.nawafil"))
 
-        let controlRail = NSStackView(views: [modeControl, nawafilControl])
+        mosqueSettingsButton = HoverIconButton(
+            symbol: "mappin.and.ellipse",
+            toolTip: t("menu.choose"),
+            target: self,
+            action: #selector(openMosqueSettings(_:)),
+            pointSize: 15,
+            size: NSSize(width: 44, height: 44))
+        mosqueSettingsButton.setAccessibilityLabel(t("menu.choose"))
+        mosqueSettingsButton.setAccessibilityHelp(t("settings.mosque.change"))
+        mosqueSettingsButton.translatesAutoresizingMaskIntoConstraints = false
+
+        let controlRail = NSStackView(views: [modeControl, nawafilControl,
+                                              mosqueSettingsButton])
         controlRail.orientation = .horizontal
         controlRail.alignment = .centerY
         controlRail.spacing = 12
@@ -6381,6 +6517,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             modeControl.heightAnchor.constraint(equalToConstant: 30),
             nawafilControl.widthAnchor.constraint(equalToConstant: 280),
             nawafilControl.heightAnchor.constraint(equalToConstant: 30),
+            mosqueSettingsButton.widthAnchor.constraint(equalToConstant: 44),
+            mosqueSettingsButton.heightAnchor.constraint(equalToConstant: 44),
 
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -6423,6 +6561,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         rebuild()
         scrollView.contentView.scroll(to: .zero)
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    @objc private func openMosqueSettings(_ sender: Any?) {
+        appDelegate?.openMosqueSettings()
     }
 
     private func rebuild() {
@@ -6476,8 +6618,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let isRTL = Localizer.shared.isRTL
         let field = wrapping ? NSTextField(wrappingLabelWithString: text)
                              : NSTextField(labelWithString: text)
-        field.frame = frame
-        field.font = Localizer.shared.font(size: size, weight: weight)
+        let font = Localizer.shared.font(size: size, weight: weight)
+        field.font = font
+        field.frame = localizedTextFrame(frame, text: text, font: font,
+                                         maximumLines: wrapping ? 2 : 1)
         field.textColor = color
         field.alignment = alignment ?? (isRTL ? .right : .left)
         field.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
@@ -6488,7 +6632,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func localizedLongDate() -> String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: Localizer.shared.current.code)
+        formatter.locale = preferredInterfaceLocale()
         formatter.dateStyle = .full
         formatter.timeStyle = .none
         return formatter.string(from: Date())
@@ -6625,9 +6769,9 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let jumuaValues = (app.info.jumuaTimes?.isEmpty == false
             ? app.info.jumuaTimes! : (app.info.jumua.isEmpty ? [] : [app.info.jumua]))
         let items: [(title: String, value: String, note: String, symbol: String)] = [
-            (t("prayer.shuruq"), app.info.shuruq,
+            (t("prayer.shuruq"), displayTime(app.info.shuruq),
              featureText("full.landmark.sunrise"), "sunrise.fill"),
-            (featureText("full.sunset"), sunsetRaw,
+            (featureText("full.sunset"), displayTime(sunsetRaw),
              (app.info.sunset ?? "").isEmpty
                 ? featureText("full.sunset.maghrib_fallback") : featureText("full.landmark.sunset"),
              "sunset.fill"),
@@ -7659,12 +7803,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     private var sectionControl: NSSegmentedControl!
     private var settingsScrollView: NSScrollView!
-    private var selectedSection = 0
+    private var selectedSection: SettingsSection = .general
+    private var embeddedMosquePicker: MosquePickerView?
 
     private var languagePopup: NSPopUpButton!
     private var appearanceSeg: NSSegmentedControl!
     private var materialSeg: NSSegmentedControl!
     private var timeFormatSeg: NSSegmentedControl!
+    private var numeralStyleSeg: NSSegmentedControl!
     private var openAtLoginCheck: NSButton!
     private var accentSwatches: [AccentSwatchButton] = []
 
@@ -7692,16 +7838,16 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
 
-    init(initialSection: Int = 0) {
-        selectedSection = max(0, min(3, initialSection))
+    init(initialSection: SettingsSection = .general) {
+        selectedSection = initialSection
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    func selectSection(_ section: Int) {
-        selectedSection = max(0, min(3, section))
+    func selectSection(_ section: SettingsSection) {
+        selectedSection = section
         guard isViewLoaded else { return }
-        sectionControl.selectedSegment = selectedSection
+        sectionControl.selectedSegment = selectedSection.rawValue
         rebuildSelectedSection()
         tabDidActivate()
     }
@@ -7710,14 +7856,20 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let root = NSView()
         root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         sectionControl = NSSegmentedControl()
-        sectionControl.segmentCount = 4
-        sectionControl.setLabel(featureText("settings.general"), forSegment: 0)
-        sectionControl.setLabel(t("settings.section.menu_bar"), forSegment: 1)
-        sectionControl.setLabel(t("settings.section.adhan"), forSegment: 2)
-        sectionControl.setLabel(t("settings.section.adhkar"), forSegment: 3)
+        sectionControl.segmentCount = SettingsSection.allCases.count
+        sectionControl.setLabel(featureText("settings.general"),
+                                forSegment: SettingsSection.general.rawValue)
+        sectionControl.setLabel(t("settings.section.mosque"),
+                                forSegment: SettingsSection.mosque.rawValue)
+        sectionControl.setLabel(t("settings.section.menu_bar"),
+                                forSegment: SettingsSection.menuBar.rawValue)
+        sectionControl.setLabel(t("settings.section.adhan"),
+                                forSegment: SettingsSection.adhan.rawValue)
+        sectionControl.setLabel(t("settings.section.adhkar"),
+                                forSegment: SettingsSection.adhkar.rawValue)
         sectionControl.segmentStyle = .texturedRounded
         sectionControl.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        sectionControl.selectedSegment = selectedSection
+        sectionControl.selectedSegment = selectedSection.rawValue
         sectionControl.target = self
         sectionControl.action = #selector(settingsSectionChanged(_:))
         sectionControl.translatesAutoresizingMaskIntoConstraints = false
@@ -7749,8 +7901,31 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         rebuildSelectedSection()
     }
 
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        guard let picker = embeddedMosquePicker else { return }
+        let size = settingsScrollView.contentSize
+        picker.frame = NSRect(x: 0, y: 0, width: max(780, size.width),
+                              height: max(470, size.height))
+    }
+
     private func rebuildSelectedSection() {
         accentSwatches.removeAll()
+        embeddedMosquePicker = nil
+        if selectedSection == .mosque {
+            settingsScrollView.hasVerticalScroller = false
+            let size = settingsScrollView.contentSize
+            let picker = MosquePickerView(width: max(780, size.width),
+                                          height: max(470, size.height),
+                                          showsNavigationHeader: false)
+            picker.appDelegate = appDelegate
+            picker.autoresizingMask = [.width, .height]
+            picker.setAccessibilityLabel(t("settings.section.mosque"))
+            settingsScrollView.documentView = picker
+            embeddedMosquePicker = picker
+            return
+        }
+        settingsScrollView.hasVerticalScroller = true
         let body = FlippedView(frame: NSRect(x: 0, y: 0, width: 960, height: 620))
         settingsScrollView.documentView = body
         buildContent(into: body)
@@ -7758,7 +7933,10 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     }
 
     @objc private func settingsSectionChanged(_ sender: NSSegmentedControl) {
-        selectedSection = max(0, sender.selectedSegment)
+        guard let section = SettingsSection(rawValue: max(0, sender.selectedSegment)) else {
+            return
+        }
+        selectedSection = section
         rebuildSelectedSection()
         tabDidActivate()
     }
@@ -7779,18 +7957,26 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             label.textColor = .labelColor
             label.alignment = isRTL ? .right : .left
             label.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
-            label.frame = NSRect(x: cardX + 4, y: y, width: cardW - 8, height: 24)
+            let titleHeight = max(24, localizedTextHeight(title, font: label.font!,
+                                                         width: cardW - 8))
+            label.frame = NSRect(x: cardX + 4, y: y,
+                                 width: cardW - 8, height: titleHeight)
             body.addSubview(label)
-            y += 26
+            y += titleHeight + 2
             if let subtitle = subtitle {
                 let detail = NSTextField(wrappingLabelWithString: subtitle)
                 detail.font = Localizer.shared.font(size: 11)
                 detail.textColor = .secondaryLabelColor
                 detail.alignment = isRTL ? .right : .left
                 detail.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
-                detail.frame = NSRect(x: cardX + 4, y: y, width: cardW - 8, height: 30)
+                let detailHeight = max(30, localizedTextHeight(subtitle, font: detail.font!,
+                                                              width: cardW - 8,
+                                                              maximumLines: 2))
+                detail.frame = NSRect(x: cardX + 4, y: y,
+                                      width: cardW - 8, height: detailHeight)
+                detail.maximumNumberOfLines = 2
                 body.addSubview(detail)
-                y += 34
+                y += detailHeight + 4
             }
         }
 
@@ -7820,8 +8006,11 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                 label.textColor = .labelColor
                 label.alignment = isRTL ? .right : .left
                 label.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
-                label.frame = NSRect(x: labelX, y: rowY + 12,
-                                     width: labelW, height: 20)
+                let labelHeight = max(20, localizedTextHeight(text, font: label.font!,
+                                                             width: labelW))
+                label.frame = NSRect(x: labelX,
+                                     y: rowY + (rowH - labelHeight) / 2,
+                                     width: labelW, height: labelHeight)
                 card.addSubview(label)
             }
             let x = text.isEmpty ? 14 : controlX
@@ -7833,13 +8022,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
         func endCard(_ height: CGFloat) { y += height + 30 }
 
-        if selectedSection == 0 {
+        if selectedSection == .general {
             // General settings are deliberately shared by prayer times,
             // Adhan, and Adhkar. There is one language and one visual system
             // everywhere.
             sectionHeader(t("settings.tab.appearance"),
                           subtitle: t("adhkar.editor.title") + " · Salat Time")
-            let (generalCard, generalH) = beginCard(rows: 7)
+            let generalRows = 6 + (Localizer.shared.isArabic ? 1 : 0)
+            let (generalCard, generalH) = beginCard(rows: generalRows)
 
         languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
         kSupportedLanguages.forEach { languagePopup.addItem(withTitle: $0.nativeName) }
@@ -7849,6 +8039,24 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         languagePopup.target = self
         languagePopup.action = #selector(languageChanged(_:))
         addRow(generalCard, label: t("settings.section.language"), control: languagePopup)
+
+        if Localizer.shared.isArabic {
+            numeralStyleSeg = NSSegmentedControl()
+            numeralStyleSeg.segmentCount = 2
+            // Keep the samples literal so each option remains recognizable
+            // regardless of the currently-selected numeral preference.
+            numeralStyleSeg.setLabel("\(featureText("settings.numerals.western"))  0 1 2 3",
+                                     forSegment: 0)
+            numeralStyleSeg.setLabel("\(featureText("settings.numerals.indic"))  ٠ ١ ٢ ٣",
+                                     forSegment: 1)
+            numeralStyleSeg.segmentStyle = .texturedRounded
+            numeralStyleSeg.selectedSegment = currentArabicDigitStyle() == .arabicIndic ? 1 : 0
+            numeralStyleSeg.target = self
+            numeralStyleSeg.action = #selector(numeralStyleChanged(_:))
+            numeralStyleSeg.setAccessibilityLabel(featureText("settings.numerals"))
+            addRow(generalCard, label: featureText("settings.numerals"),
+                   control: numeralStyleSeg)
+        }
 
         appearanceSeg = NSSegmentedControl()
         appearanceSeg.segmentCount = 3
@@ -7901,14 +8109,10 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         openAtLoginCheck.state = isOpenAtLoginEnabled() ? .on : .off
         addRow(generalCard, label: t("settings.section.startup"), control: openAtLoginCheck)
 
-        let mosqueButton = NSButton(title: t("settings.mosque.change"), target: self,
-                                    action: #selector(changeMosque(_:)))
-        mosqueButton.bezelStyle = .rounded
-        addRow(generalCard, label: t("settings.section.mosque"), control: mosqueButton)
             endCard(generalH)
         }
 
-        if selectedSection == 1 {
+        if selectedSection == .menuBar {
             sectionHeader(t("settings.section.menu_bar"),
                           subtitle: featureText("settings.menu_bar.help"))
             let (menuCard, menuH) = beginCard(rows: 4)
@@ -7947,7 +8151,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             endCard(menuH)
         }
 
-        if selectedSection == 2 {
+        if selectedSection == .adhan {
             // Complete Adhan controls live here as well as in the compact popup.
             sectionHeader(t("settings.section.adhan"))
             let (adhanCard, adhanH) = beginCard(rows: 6)
@@ -7985,7 +8189,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         for minutes in kPreAdhanOptions {
             preAdhanPopup.addItem(withTitle: minutes == 0
                 ? t("settings.notif.headsup.off")
-                : String(format: t("settings.notif.headsup.minutes"), minutes))
+                : localizedInterfaceDigits(String(format: t("settings.notif.headsup.minutes"), minutes)))
         }
         let currentLead = UserDefaults.standard.integer(forKey: kPreAdhanLeadMinutes)
         preAdhanPopup.selectItem(at: kPreAdhanOptions.firstIndex(of: currentLead) ?? 0)
@@ -8017,7 +8221,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             endCard(modesH)
         }
 
-        if selectedSection == 3 {
+        if selectedSection == .adhkar {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
             sectionHeader(t("settings.section.adhkar"))
@@ -8072,7 +8276,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         for minutes in kAdhkarAfterAdhanOptions {
             let title = minutes == 0
                 ? featureText("adhkar.after_adhan.immediate")
-                : String(format: featureText("adhkar.after_adhan.minutes"), minutes)
+                : localizedInterfaceDigits(String(format: featureText("adhkar.after_adhan.minutes"), minutes))
             afterAdhanDelayPopup.addItem(withTitle: title)
         }
         let savedDelay = UserDefaults.standard.integer(forKey: kAdhkarAfterAdhanDelay)
@@ -8090,6 +8294,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         footer.textColor = .tertiaryLabelColor
         footer.alignment = .center
         footer.frame = NSRect(x: cardX, y: y, width: cardW, height: 18)
+        fitLocalizedLabel(footer)
         body.addSubview(footer)
         y += 38
         body.frame = NSRect(x: 0, y: 0, width: width, height: y)
@@ -8120,6 +8325,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     }
 
     func tabDidActivate() {
+        embeddedMosquePicker?.refreshCurrentMode()
         populateAdhanDevices()
         populateAdhkarDevices()
     }
@@ -8150,13 +8356,18 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         appDelegate?.updateUI()
         appDelegate?.rebuildStatusItem()
     }
+    @objc private func numeralStyleChanged(_ sender: NSSegmentedControl) {
+        let style: ArabicDigitStyle = sender.selectedSegment == 1 ? .arabicIndic : .western
+        UserDefaults.standard.set(style.rawValue, forKey: kArabicDigitStyle)
+        // Dates, translated copy, countdowns, and custom-drawn views all read
+        // this preference at construction time, so rebuild the localization
+        // surfaces through the same proven path used by a language change.
+        appDelegate?.applyLanguageChange()
+    }
     @objc private func openAtLoginChanged(_ sender: NSButton) {
         if !setOpenAtLogin(sender.state == .on) {
             sender.state = isOpenAtLoginEnabled() ? .on : .off
         }
-    }
-    @objc private func changeMosque(_ sender: NSButton) {
-        (view.window as? MainWindow)?.showMosquePickerFromSettings()
     }
     @objc private func menuBarToggleChanged(_ sender: NSButton) {
         UserDefaults.standard.set(barIconCheck.state == .on, forKey: kBarShowIcon)
@@ -9553,8 +9764,8 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
         countStepper.action = #selector(stepperChanged)
         countStepper.translatesAutoresizingMaskIntoConstraints = false
         c.addSubview(countStepper)
-        countField = NSTextField(labelWithString: String(format: t("adhkar.editor.count_times"),
-                                                          countStepper.integerValue))
+        countField = NSTextField(labelWithString: localizedInterfaceDigits(
+            String(format: t("adhkar.editor.count_times"), countStepper.integerValue)))
         countField.font = Localizer.shared.font(size: 12)
         countField.alignment = Localizer.shared.isRTL ? .right : .left
         countField.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
@@ -9644,8 +9855,8 @@ final class AdhkarItemEditSheet: NSWindowController, NSWindowDelegate,
     }
 
     @objc private func stepperChanged() {
-        countField.stringValue = String(format: t("adhkar.editor.count_times"),
-                                         countStepper.integerValue)
+        countField.stringValue = localizedInterfaceDigits(
+            String(format: t("adhkar.editor.count_times"), countStepper.integerValue))
     }
     @objc private func saveTapped() {
         isOK = true
@@ -10169,8 +10380,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// "[icon] Shuruq · HH:MM" — matches the monotone SF Symbol look used
     /// across the popover.
     var shuruqIcon:    NSImageView!
-    /// "Open mosque page" link button in the header — one tap jumps to the
-    /// desktop mawaqit.net page for the currently-selected mosque.
+    /// Mosque-finder shortcut in the header. It opens the shared Mosque
+    /// Settings section instead of leaving the app for a website.
     var headerLinkBtn: NSButton!
 
     var secondTimer:  Timer?
@@ -10198,6 +10409,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         if UserDefaults.standard.object(forKey: kTimeFormat) == nil {
             UserDefaults.standard.set("24h", forKey: kTimeFormat)
+        }
+        if UserDefaults.standard.object(forKey: kArabicDigitStyle) == nil {
+            UserDefaults.standard.set(ArabicDigitStyle.western.rawValue,
+                                      forKey: kArabicDigitStyle)
         }
         if UserDefaults.standard.object(forKey: kBarShowIcon) == nil {
             UserDefaults.standard.set(true, forKey: kBarShowIcon)
@@ -10429,7 +10644,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     @objc func menuRefresh() { fetchData() }
     @objc func menuChoose() { openMosqueSettings() }
     @objc func menuSettings() {
-        openSettingsWindow(section: 0)
+        openSettingsWindow(section: .general)
     }
     /// Open the full prayer + adhkar management window. Destination 0 is
     /// Adhan/prayer times and 1 is Adhkar.
@@ -10447,7 +10662,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         mainWindow?.showMainWindow(selecting: destination)
     }
 
-    func openSettingsWindow(section: Int) {
+    func openSettingsWindow(section: SettingsSection) {
         popover?.performClose(nil)
         if mainWindow == nil {
             let w = MainWindow(appDelegate: self)
@@ -10460,16 +10675,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         mainWindow?.showMainWindow()
     }
     func openMosqueSettings() {
-        popover?.performClose(nil)
-        if mainWindow == nil {
-            let window = MainWindow(appDelegate: self)
-            window.setAdhan(PrayerDashboardViewController(appDelegate: self))
-            window.setEditor(AdhkarEditorViewController(appDelegate: self))
-            window.setQuran(QuranViewController())
-            mainWindow = window
-        }
-        mainWindow?.showMainWindow()
-        mainWindow?.showMosquePickerFromSettings()
+        openSettingsWindow(section: .mosque)
     }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
@@ -10706,10 +10912,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         nameLabel.drawsBackground = false
         nameLabel.lineBreakMode = .byTruncatingTail
         nameLabel.alignment = .left
+        fitLocalizedLabel(nameLabel)
         headerBG.addSubview(nameLabel)
 
         // Address (up to 2 lines).
-        addressLabel = NSTextField(labelWithString: "")
+        addressLabel = NSTextField(wrappingLabelWithString: "")
         addressLabel.frame = NSRect(x: 68, y: 34, width: W - 124, height: 26)
         addressLabel.font = Localizer.shared.font(size: 10)
         addressLabel.textColor = NSColor(white: 1.0, alpha: 0.85)
@@ -10717,28 +10924,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         addressLabel.maximumNumberOfLines = 2
         addressLabel.lineBreakMode = .byTruncatingTail
         addressLabel.alignment = .left
+        fitLocalizedLabel(addressLabel, maximumLines: 2)
         headerBG.addSubview(addressLabel)
 
-        // Mosque-page link button — top-right of the header, white tinted
-        // so it reads against the accent strip. Opens the *desktop* mawaqit
-        // URL for the currently-selected mosque in the user's default
-        // browser. Sized and positioned to align visually with the icon.
-        headerLinkBtn = NSButton(frame: NSRect(x: W - 44, y: 20, width: 32, height: 32))
-        headerLinkBtn.bezelStyle = .regularSquare
-        headerLinkBtn.isBordered = false
-        headerLinkBtn.title = ""
-        headerLinkBtn.imagePosition = .imageOnly
-        headerLinkBtn.imageScaling = .scaleProportionallyDown
-        headerLinkBtn.focusRingType = .none
-        headerLinkBtn.setButtonType(.momentaryChange)
-        if let sym = templateSymbol("arrow.up.right.square.fill",
-                                    pointSize: 20, weight: .semibold) {
-            headerLinkBtn.image = sym
-        }
-        headerLinkBtn.contentTintColor = NSColor(white: 1.0, alpha: 0.95)
-        headerLinkBtn.toolTip = t("header.openMosque")
-        headerLinkBtn.target = self
-        headerLinkBtn.action = #selector(openCurrentMosquePageTapped)
+        // Mosque-finder shortcut — 44pt target, localized accessibility name,
+        // and an in-app destination shared with the dashboard/context menu.
+        let mosqueShortcut = HoverIconButton(
+            symbol: "mappin.and.ellipse",
+            toolTip: t("menu.choose"),
+            target: self,
+            action: #selector(changeMosqueTapped),
+            pointSize: 18,
+            size: NSSize(width: 44, height: 44))
+        mosqueShortcut.setFrameOrigin(NSPoint(x: W - 56, y: 14))
+        mosqueShortcut.idleTint = NSColor(white: 1.0, alpha: 0.95)
+        mosqueShortcut.hoverTint = .white
+        mosqueShortcut.contentTintColor = mosqueShortcut.idleTint
+        mosqueShortcut.setAccessibilityLabel(t("menu.choose"))
+        mosqueShortcut.setAccessibilityHelp(t("settings.mosque.change"))
+        headerLinkBtn = mosqueShortcut
         headerLinkBtn.autoresizingMask = [.minXMargin]
         headerBG.addSubview(headerLinkBtn)
 
@@ -10755,6 +10959,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         nextPrayerLbl.textColor = .secondaryLabelColor
         nextPrayerLbl.drawsBackground = false
         nextPrayerLbl.alignment = .center
+        fitLocalizedLabel(nextPrayerLbl)
         content.addSubview(nextPrayerLbl)
 
         // Countdown
@@ -10794,6 +10999,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             // applyRTL mirrors to right-aligned for Arabic/Urdu so the
             // column header sits directly above its values.
             v.alignment = .left
+            fitLocalizedLabel(v)
             content.addSubview(v)
         }
 
@@ -10834,6 +11040,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             // Arabic/Urdu labels hug the right wall of their column instead
             // of floating mid-cell where they collide with the times column.
             name.alignment = .left
+            fitLocalizedLabel(name)
             content.addSubview(name)
 
             // Adhan — primary, larger. Monospaced digits keep the width stable.
@@ -10933,6 +11140,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         jumuaLbl.textColor = .appGreenAccent
         jumuaLbl.drawsBackground = false
         jumuaLbl.alignment = .left
+        fitLocalizedLabel(jumuaLbl)
         content.addSubview(jumuaLbl)
 
         // Hijri — top-right. Right-aligned so it hugs the right wall of the strip.
@@ -10942,6 +11150,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         hijriLbl.textColor = .labelColor
         hijriLbl.drawsBackground = false
         hijriLbl.alignment = .right
+        fitLocalizedLabel(hijriLbl)
         content.addSubview(hijriLbl)
 
         // Shuruq (sunrise) — bottom-left, preceded by a small sunrise glyph
@@ -10960,6 +11169,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         shuruqLbl.textColor = .secondaryLabelColor
         shuruqLbl.drawsBackground = false
         shuruqLbl.alignment = .left
+        fitLocalizedLabel(shuruqLbl)
         content.addSubview(shuruqLbl)
 
         // Gregorian date — bottom-right, under the Hijri date. Uses the
@@ -10971,6 +11181,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         gregorianLbl.textColor = .secondaryLabelColor
         gregorianLbl.drawsBackground = false
         gregorianLbl.alignment = .right
+        fitLocalizedLabel(gregorianLbl)
         content.addSubview(gregorianLbl)
 
         compactPrayerViews = Array(content.subviews.dropFirst(prayerBodySubviewStart))
@@ -11059,7 +11270,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
     @objc func settingsTapped() {
         // Prayer popup → Adhan settings; compact Adhkar → Adhkar settings.
-        openSettingsWindow(section: isCompactAdhkarMode ? 3 : 2)
+        openSettingsWindow(section: isCompactAdhkarMode ? .adhkar : .adhan)
     }
 
     @objc func toggleCompactAdhkar() {
@@ -11085,19 +11296,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         compactAdhkarView?.present(collection: collection, autoPlay: autoPlay)
         guard !popover.isShown, let button = statusItem.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-    }
-
-    /// Open the currently-selected mosque's page on mawaqit.net in the
-    /// user's default browser. Uses `desktopMawaqitURL` to strip the `/m/`
-    /// mobile prefix so the user lands on the full-site page with
-    /// navigation, donation, and mosque-info sections.
-    @objc func openCurrentMosquePageTapped() {
-        let raw = currentMosqueURL().trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !raw.isEmpty else { return }
-        let desktop = desktopMawaqitURL(raw)
-        if let url = URL(string: desktop) {
-            NSWorkspace.shared.open(url)
-        }
     }
 
     func showPicker() {
@@ -11405,24 +11603,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let newWidth = mainContent.bounds.width - (isCompactAdhkarMode ? 92 : 124)
             nameLabel.frame = NSRect(x: nf.origin.x, y: newY,
                                      width: newWidth, height: nf.size.height)
+            fitLocalizedLabel(nameLabel)
             addressLabel.isHidden = addr.isEmpty
+            if !addr.isEmpty { fitLocalizedLabel(addressLabel, maximumLines: 2) }
         }
 
-        // Header link button — only enabled when we actually have a mosque
-        // URL to open. Keeps the icon visible but dimmed otherwise so the
-        // user doesn't wonder why their click does nothing.
+        // The mosque-finder remains available even before a mosque is chosen;
+        // that empty state is precisely when the shortcut is most useful.
         if headerLinkBtn != nil {
-            let hasURL = !currentMosqueURL().trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             headerLinkBtn.isHidden = isCompactAdhkarMode
-            headerLinkBtn.isEnabled = hasURL
-            headerLinkBtn.alphaValue = hasURL ? 1.0 : 0.4
+            headerLinkBtn.isEnabled = true
+            headerLinkBtn.alphaValue = 1.0
         }
 
         // Gregorian date in the current UI language. Format mirrors the
         // Hijri "d MMMM yyyy" layout so the two dates read as a pair.
         if gregorianLbl != nil {
             let fmt = DateFormatter()
-            fmt.locale = Locale(identifier: Localizer.shared.current.code)
+            fmt.locale = preferredInterfaceLocale()
             fmt.dateFormat = "EEE d MMM yyyy"
             gregorianLbl.stringValue = fmt.string(from: Date())
         }
@@ -11611,6 +11809,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 iqama.font     = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
                 iqama.textColor = .tertiaryLabelColor
             }
+            fitLocalizedLabel(name)
         }
     }
 
@@ -11661,7 +11860,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let diff = max(0, Int(iqamaDate.timeIntervalSince(Date())))
             let mm   = diff / 60
             let ss   = diff % 60
-            let redCountdown = String(format: "%02d:%02d", mm, ss)
+            let redCountdown = localizedInterfaceDigits(
+                String(format: "%02d:%02d", mm, ss))
             let curName      = localizedPrayerName(at: curIdx)
             let curScheduled = displayTime(info.times[curIdx])
 
@@ -11703,7 +11903,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 let hh = d / 3600
                 let m  = (d % 3600) / 60
                 let s  = d % 60
-                countdownLbl.stringValue = String(format: "%02d:%02d:%02d", hh, m, s)
+                countdownLbl.stringValue = localizedInterfaceDigits(
+                    String(format: "%02d:%02d:%02d", hh, m, s))
                 nextPrayerLbl.stringValue = t("label.next_prayer")
                 nextAtLbl.stringValue = "\(localizedPrayerName(at: nextIdx))  ·  \(displayTime(info.times[nextIdx]))"
             }
@@ -11723,9 +11924,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             let scheduled = displayTime(info.times[nextIdx])
             // Live countdown: HH:MM:SS when ≥1 h away, MM:SS inside the
             // final hour so the seconds are visible.
-            let countdown: String = (diff >= 3600)
+            let countdown: String = localizedInterfaceDigits((diff >= 3600)
                 ? String(format: "%d:%02d:%02d", h, m, s)
-                : String(format: "%02d:%02d", m, s)
+                : String(format: "%02d:%02d", m, s))
 
             // Assemble the prayer segment from the two independent toggles.
             // Order: [name] [scheduled] [countdown]. LTR reads naturally,
@@ -11747,7 +11948,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             setStatusTitle(joined.isEmpty ? "" : " \(joined) ")
 
             if countdownLbl != nil {
-                countdownLbl.stringValue = String(format: "%02d:%02d:%02d", h, m, s)
+                countdownLbl.stringValue = localizedInterfaceDigits(
+                    String(format: "%02d:%02d:%02d", h, m, s))
                 nextPrayerLbl.stringValue = t("label.next_prayer")
                 // baseWritingDirection on nextAtLbl (set by applyRTL) handles
                 // the visual order, so the logical string stays identical.
@@ -11965,12 +12167,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let content = UNMutableNotificationContent()
         let titleFmt = t("settings.notif.headsup.title")
         // Swift's String(format:) drops %@ unless the arg is NSString.
-        content.title = String(format: titleFmt,
-                               prayer as NSString,
-                               minutes)
+        content.title = localizedInterfaceDigits(
+            String(format: titleFmt, prayer as NSString, minutes))
         content.body = info.name.isEmpty
-            ? "\(prayer) · \(time)"
-            : "\(info.name) · \(time)"
+            ? "\(prayer) · \(displayTime(time))"
+            : "\(info.name) · \(displayTime(time))"
         content.sound = nil   // heads-up should not play audio; the adhan will
         let req = UNNotificationRequest(
             identifier: "prayer.preadhan.\(todayString()).\(prayer)",
