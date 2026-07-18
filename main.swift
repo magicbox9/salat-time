@@ -71,7 +71,7 @@ let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
 let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 
-let kAppVersion          = "3.10.1"
+let kAppVersion          = "3.11.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2141,7 +2141,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "Immediately after Adhan",
         "adhkar.after_adhan.minutes": "%d min after Adhan",
         "full.view.overview": "Overview", "full.view.timeline": "Day timeline",
-        "full.next_prayer": "Next prayer", "full.timeline.title": "Prayer rhythm today"
+        "full.next_prayer": "Next prayer", "full.timeline.title": "Prayer rhythm today",
+        "settings.general": "General",
+        "settings.menu_bar.help": "Choose what appears beside the Salat Time icon in the menu bar.",
+        "settings.prayer_modes": "Each prayer",
+        "settings.prayer_modes.help": "Choose whether each prayer plays the Adhan, shows only a notification, or stays quiet.",
+        "adhan.mode.off": "Off", "adhan.mode.notify": "Notification only",
+        "adhan.mode.play": "Play Adhan"
     ],
     "fr": [
         "full.open_more": "Plus de contrôles…", "full.nawafil": "Prières surérogatoires",
@@ -2163,7 +2169,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "Juste après l’Adhan",
         "adhkar.after_adhan.minutes": "%d min après l’Adhan",
         "full.view.overview": "Vue d’ensemble", "full.view.timeline": "Chronologie du jour",
-        "full.next_prayer": "Prochaine prière", "full.timeline.title": "Rythme des prières aujourd’hui"
+        "full.next_prayer": "Prochaine prière", "full.timeline.title": "Rythme des prières aujourd’hui",
+        "settings.general": "Général",
+        "settings.menu_bar.help": "Choisissez ce qui apparaît à côté de l’icône Salat Time dans la barre des menus.",
+        "settings.prayer_modes": "Pour chaque prière",
+        "settings.prayer_modes.help": "Choisissez si chaque prière diffuse l’Adhan, affiche seulement une notification ou reste silencieuse.",
+        "adhan.mode.off": "Désactivé", "adhan.mode.notify": "Notification seule",
+        "adhan.mode.play": "Lire l’Adhan"
     ],
     "es": [
         "full.open_more": "Más controles…", "full.nawafil": "Oraciones voluntarias",
@@ -2185,7 +2197,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "Inmediatamente después del Adhan",
         "adhkar.after_adhan.minutes": "%d min después del Adhan",
         "full.view.overview": "Resumen", "full.view.timeline": "Cronología del día",
-        "full.next_prayer": "Próxima oración", "full.timeline.title": "Ritmo de oración de hoy"
+        "full.next_prayer": "Próxima oración", "full.timeline.title": "Ritmo de oración de hoy",
+        "settings.general": "General",
+        "settings.menu_bar.help": "Elige qué aparece junto al icono de Salat Time en la barra de menús.",
+        "settings.prayer_modes": "Cada oración",
+        "settings.prayer_modes.help": "Elige si cada oración reproduce el Adhan, muestra solo una notificación o permanece en silencio.",
+        "adhan.mode.off": "Desactivado", "adhan.mode.notify": "Solo notificación",
+        "adhan.mode.play": "Reproducir Adhan"
     ],
     "ar": [
         "full.open_more": "مزيد من التحكم…", "full.nawafil": "صلوات النوافل",
@@ -2207,7 +2225,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "مباشرة بعد الأذان",
         "adhkar.after_adhan.minutes": "بعد الأذان بـ %d دقائق",
         "full.view.overview": "نظرة عامة", "full.view.timeline": "الخط الزمني لليوم",
-        "full.next_prayer": "الصلاة القادمة", "full.timeline.title": "نسق الصلوات اليوم"
+        "full.next_prayer": "الصلاة القادمة", "full.timeline.title": "نسق الصلوات اليوم",
+        "settings.general": "عام",
+        "settings.menu_bar.help": "اختر ما يظهر بجانب أيقونة Salat Time في شريط القائمة.",
+        "settings.prayer_modes": "إعداد كل صلاة",
+        "settings.prayer_modes.help": "اختر لكل صلاة تشغيل الأذان أو عرض إشعار فقط أو البقاء صامتة.",
+        "adhan.mode.off": "إيقاف", "adhan.mode.notify": "إشعار فقط",
+        "adhan.mode.play": "تشغيل الأذان"
     ],
     "zh": [
         "full.open_more": "更多控制…", "full.nawafil": "副功拜",
@@ -2229,7 +2253,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "宣礼结束后立即开始",
         "adhkar.after_adhan.minutes": "宣礼后 %d 分钟",
         "full.view.overview": "概览", "full.view.timeline": "全天时间线",
-        "full.next_prayer": "下一次礼拜", "full.timeline.title": "今日礼拜节奏"
+        "full.next_prayer": "下一次礼拜", "full.timeline.title": "今日礼拜节奏",
+        "settings.general": "常规",
+        "settings.menu_bar.help": "选择菜单栏中 Salat Time 图标旁显示的内容。",
+        "settings.prayer_modes": "各礼拜设置",
+        "settings.prayer_modes.help": "选择每次礼拜播放宣礼、仅显示通知或保持静音。",
+        "adhan.mode.off": "关闭", "adhan.mode.notify": "仅通知",
+        "adhan.mode.play": "播放宣礼"
     ],
     "hi": [
         "full.open_more": "और नियंत्रण…", "full.nawafil": "नफ़्ल नमाज़ें",
@@ -2251,7 +2281,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "अज़ान के तुरंत बाद",
         "adhkar.after_adhan.minutes": "अज़ान के %d मिनट बाद",
         "full.view.overview": "अवलोकन", "full.view.timeline": "दिन की समयरेखा",
-        "full.next_prayer": "अगली नमाज़", "full.timeline.title": "आज की नमाज़ का क्रम"
+        "full.next_prayer": "अगली नमाज़", "full.timeline.title": "आज की नमाज़ का क्रम",
+        "settings.general": "सामान्य",
+        "settings.menu_bar.help": "मेनू बार में Salat Time आइकन के पास क्या दिखे, चुनें।",
+        "settings.prayer_modes": "हर नमाज़",
+        "settings.prayer_modes.help": "हर नमाज़ के लिए अज़ान, केवल सूचना या मौन चुनें।",
+        "adhan.mode.off": "बंद", "adhan.mode.notify": "केवल सूचना",
+        "adhan.mode.play": "अज़ान चलाएँ"
     ],
     "bn": [
         "full.open_more": "আরও নিয়ন্ত্রণ…", "full.nawafil": "নফল নামাজ",
@@ -2273,7 +2309,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "আজানের পরপরই",
         "adhkar.after_adhan.minutes": "আজানের %d মিনিট পরে",
         "full.view.overview": "সারসংক্ষেপ", "full.view.timeline": "দিনের সময়রেখা",
-        "full.next_prayer": "পরবর্তী নামাজ", "full.timeline.title": "আজকের নামাজের ছন্দ"
+        "full.next_prayer": "পরবর্তী নামাজ", "full.timeline.title": "আজকের নামাজের ছন্দ",
+        "settings.general": "সাধারণ",
+        "settings.menu_bar.help": "মেনু বারে Salat Time আইকনের পাশে কী দেখাবে তা বেছে নিন।",
+        "settings.prayer_modes": "প্রতি নামাজ",
+        "settings.prayer_modes.help": "প্রতি নামাজে আজান, শুধু বিজ্ঞপ্তি অথবা নীরবতা বেছে নিন।",
+        "adhan.mode.off": "বন্ধ", "adhan.mode.notify": "শুধু বিজ্ঞপ্তি",
+        "adhan.mode.play": "আজান চালান"
     ],
     "ru": [
         "full.open_more": "Больше настроек…", "full.nawafil": "Дополнительные молитвы",
@@ -2295,7 +2337,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "Сразу после азана",
         "adhkar.after_adhan.minutes": "Через %d мин после азана",
         "full.view.overview": "Обзор", "full.view.timeline": "Распорядок дня",
-        "full.next_prayer": "Следующая молитва", "full.timeline.title": "Ритм молитв сегодня"
+        "full.next_prayer": "Следующая молитва", "full.timeline.title": "Ритм молитв сегодня",
+        "settings.general": "Основные",
+        "settings.menu_bar.help": "Выберите, что показывать рядом со значком Salat Time в строке меню.",
+        "settings.prayer_modes": "Для каждой молитвы",
+        "settings.prayer_modes.help": "Для каждой молитвы выберите азан, только уведомление или тишину.",
+        "adhan.mode.off": "Выкл.", "adhan.mode.notify": "Только уведомление",
+        "adhan.mode.play": "Воспроизводить азан"
     ],
     "pt": [
         "full.open_more": "Mais controlos…", "full.nawafil": "Orações voluntárias",
@@ -2317,7 +2365,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "Imediatamente após o Adhan",
         "adhkar.after_adhan.minutes": "%d min após o Adhan",
         "full.view.overview": "Visão geral", "full.view.timeline": "Cronologia do dia",
-        "full.next_prayer": "Próxima oração", "full.timeline.title": "Ritmo das orações de hoje"
+        "full.next_prayer": "Próxima oração", "full.timeline.title": "Ritmo das orações de hoje",
+        "settings.general": "Geral",
+        "settings.menu_bar.help": "Escolha o que aparece junto ao ícone Salat Time na barra de menus.",
+        "settings.prayer_modes": "Cada oração",
+        "settings.prayer_modes.help": "Escolha se cada oração reproduz o Adhan, mostra só uma notificação ou fica em silêncio.",
+        "adhan.mode.off": "Desativado", "adhan.mode.notify": "Só notificação",
+        "adhan.mode.play": "Reproduzir Adhan"
     ],
     "ur": [
         "full.open_more": "مزید کنٹرول…", "full.nawafil": "نفل نمازیں",
@@ -2339,7 +2393,13 @@ private let featureTranslations: [String: [String: String]] = [
         "adhkar.after_adhan.immediate": "اذان کے فوراً بعد",
         "adhkar.after_adhan.minutes": "اذان کے %d منٹ بعد",
         "full.view.overview": "جائزہ", "full.view.timeline": "دن کی وقت بندی",
-        "full.next_prayer": "اگلی نماز", "full.timeline.title": "آج کی نمازوں کی ترتیب"
+        "full.next_prayer": "اگلی نماز", "full.timeline.title": "آج کی نمازوں کی ترتیب",
+        "settings.general": "عمومی",
+        "settings.menu_bar.help": "مینو بار میں Salat Time آئیکن کے ساتھ کیا دکھائی دے، منتخب کریں۔",
+        "settings.prayer_modes": "ہر نماز",
+        "settings.prayer_modes.help": "ہر نماز کے لیے اذان، صرف اطلاع یا خاموشی منتخب کریں۔",
+        "adhan.mode.off": "بند", "adhan.mode.notify": "صرف اطلاع",
+        "adhan.mode.play": "اذان چلائیں"
     ]
 ]
 
@@ -5016,6 +5076,41 @@ protocol MainTabContent: NSViewController {
     func tabDidActivate()
 }
 
+/// Full-window host for mosque discovery. The picker used to push the user
+/// back into the tiny menu-bar popover, which made Settings feel split across
+/// two unrelated apps. It now behaves as a Settings sub-page and returns to
+/// the same full-window surface.
+final class MainMosquePickerViewController: NSViewController, MainTabContent {
+    private weak var appDelegate: AppDelegate?
+    var onDone: (() -> Void)?
+    private var picker: MosquePickerView!
+
+    init(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func loadView() {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 960, height: 554))
+        root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        picker = MosquePickerView(width: 960, height: 554)
+        picker.translatesAutoresizingMaskIntoConstraints = false
+        picker.appDelegate = appDelegate
+        picker.onDone = { [weak self] in self?.onDone?() }
+        root.addSubview(picker)
+        NSLayoutConstraint.activate([
+            picker.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            picker.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            picker.topAnchor.constraint(equalTo: root.topAnchor),
+            picker.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+        ])
+        view = root
+    }
+
+    func tabDidActivate() { picker?.refreshCurrentMode() }
+}
+
 final class MainWindow: NSWindow, NSWindowDelegate {
 
     private weak var appDelegate: AppDelegate?
@@ -5023,6 +5118,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     private var adhanVC: PrayerDashboardViewController?
     private var editorVC: AdhkarEditorViewController?
     private var settingsVC: AdhkarSettingsViewController?
+    private var mosquePickerVC: MainMosquePickerViewController?
     private var viewSwitcher: NSSegmentedControl!
     private var settingsButton: HoverIconButton!
     private var isShowingSettings = false
@@ -5172,6 +5268,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         adhanVC = nil
         editorVC = nil
         settingsVC = nil
+        mosquePickerVC = nil
         contentView = nil
         buildShell()
         if let appDelegate = appDelegate {
@@ -5231,6 +5328,21 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     func showSettingsWindow(section: Int) {
         isShowingSettings = true
         showSettings(section: section)
+    }
+
+    func showMosquePickerFromSettings() {
+        guard let appDelegate else { return }
+        isShowingSettings = true
+        if mosquePickerVC == nil {
+            let controller = MainMosquePickerViewController(appDelegate: appDelegate)
+            controller.onDone = { [weak self] in self?.showSettings(section: 0) }
+            mosquePickerVC = controller
+        }
+        if let mosquePickerVC { present(mosquePickerVC) }
+    }
+
+    func reloadPrayerDashboard() {
+        adhanVC?.tabDidActivate()
     }
 
     private func present(_ vc: MainTabContent) {
@@ -5942,12 +6054,18 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     private var openAtLoginCheck: NSButton!
     private var accentSwatches: [AccentSwatchButton] = []
 
+    private var barIconCheck: NSButton!
+    private var barTimeCheck: NSButton!
+    private var barCountdownCheck: NSButton!
+    private var barHijriPopup: NSPopUpButton!
+
     private var adhanCheck: NSButton!
     private var adhanSoundPopup: NSPopUpButton!
     private var adhanOutputPopup: NSPopUpButton!
     private var adhanOutputDevices: [AudioOutputDevice] = []
     private var notificationCheck: NSButton!
     private var preAdhanPopup: NSPopUpButton!
+    private var perPrayerModePopups: [NSPopUpButton] = []
 
     private var adhkarVolumeSlider: NSSlider!
     private var adhkarOutputPopup: NSPopUpButton!
@@ -5961,13 +6079,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
 
     init(initialSection: Int = 0) {
-        selectedSection = max(0, min(2, initialSection))
+        selectedSection = max(0, min(3, initialSection))
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
 
     func selectSection(_ section: Int) {
-        selectedSection = max(0, min(2, section))
+        selectedSection = max(0, min(3, section))
         guard isViewLoaded else { return }
         sectionControl.selectedSegment = selectedSection
         rebuildSelectedSection()
@@ -5976,12 +6094,15 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     override func loadView() {
         let root = NSView()
+        root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         sectionControl = NSSegmentedControl()
-        sectionControl.segmentCount = 3
-        sectionControl.setLabel(t("settings.tab.appearance"), forSegment: 0)
-        sectionControl.setLabel(t("settings.section.adhan"), forSegment: 1)
-        sectionControl.setLabel(t("settings.section.adhkar"), forSegment: 2)
+        sectionControl.segmentCount = 4
+        sectionControl.setLabel(featureText("settings.general"), forSegment: 0)
+        sectionControl.setLabel(t("settings.section.menu_bar"), forSegment: 1)
+        sectionControl.setLabel(t("settings.section.adhan"), forSegment: 2)
+        sectionControl.setLabel(t("settings.section.adhkar"), forSegment: 3)
         sectionControl.segmentStyle = .texturedRounded
+        sectionControl.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
         sectionControl.selectedSegment = selectedSection
         sectionControl.target = self
         sectionControl.action = #selector(settingsSectionChanged(_:))
@@ -6001,7 +6122,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         NSLayoutConstraint.activate([
             sectionControl.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
             sectionControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            sectionControl.widthAnchor.constraint(equalToConstant: 420),
+            sectionControl.widthAnchor.constraint(equalToConstant: 600),
             sectionControl.heightAnchor.constraint(equalToConstant: 30),
 
             settingsScrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
@@ -6174,6 +6295,45 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         }
 
         if selectedSection == 1 {
+            sectionHeader(t("settings.section.menu_bar"),
+                          subtitle: featureText("settings.menu_bar.help"))
+            let (menuCard, menuH) = beginCard(rows: 4)
+
+            barIconCheck = NSButton(checkboxWithTitle: t("settings.bar.icon"),
+                                    target: self,
+                                    action: #selector(menuBarToggleChanged(_:)))
+            barIconCheck.state = (UserDefaults.standard.object(forKey: kBarShowIcon)
+                                  as? Bool ?? true) ? .on : .off
+            addRow(menuCard, label: "", control: barIconCheck)
+
+            barTimeCheck = NSButton(checkboxWithTitle: t("settings.bar.time"),
+                                    target: self,
+                                    action: #selector(menuBarToggleChanged(_:)))
+            barTimeCheck.state = (UserDefaults.standard.object(forKey: kBarShowTime)
+                                  as? Bool ?? true) ? .on : .off
+            addRow(menuCard, label: "", control: barTimeCheck)
+
+            barCountdownCheck = NSButton(checkboxWithTitle: t("settings.bar.countdown"),
+                                         target: self,
+                                         action: #selector(menuBarToggleChanged(_:)))
+            barCountdownCheck.state = (UserDefaults.standard.object(forKey: kBarShowCountdown)
+                                       as? Bool ?? true) ? .on : .off
+            addRow(menuCard, label: "", control: barCountdownCheck)
+
+            barHijriPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+            for format in kHijriFormatOrder {
+                barHijriPopup.addItem(withTitle:
+                    t("settings.bar.hijri.format.\(format.rawValue)"))
+            }
+            barHijriPopup.selectItem(at:
+                kHijriFormatOrder.firstIndex(of: currentHijriFormat()) ?? 0)
+            barHijriPopup.target = self
+            barHijriPopup.action = #selector(barHijriFormatChanged(_:))
+            addRow(menuCard, label: t("settings.bar.hijri"), control: barHijriPopup)
+            endCard(menuH)
+        }
+
+        if selectedSection == 2 {
             // Complete Adhan controls live here as well as in the compact popup.
             sectionHeader(t("settings.section.adhan"))
             let (adhanCard, adhanH) = beginCard(rows: 6)
@@ -6219,9 +6379,31 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         preAdhanPopup.action = #selector(preAdhanChanged(_:))
         addRow(adhanCard, label: t("settings.notif.headsup"), control: preAdhanPopup)
             endCard(adhanH)
+
+            sectionHeader(featureText("settings.prayer_modes"),
+                          subtitle: featureText("settings.prayer_modes.help"))
+            let (modesCard, modesH) = beginCard(rows: prayerLabels.count)
+            perPrayerModePopups.removeAll()
+            let prayerKeys = ["prayer.fajr", "prayer.dhuhr", "prayer.asr",
+                              "prayer.maghrib", "prayer.isha"]
+            for index in prayerLabels.indices {
+                let popup = NSPopUpButton(frame: .zero, pullsDown: false)
+                popup.addItems(withTitles: [featureText("adhan.mode.off"),
+                                             featureText("adhan.mode.notify"),
+                                             featureText("adhan.mode.play")])
+                popup.selectItem(at: adhanModeForPrayer(index).rawValue)
+                popup.tag = index
+                popup.target = self
+                popup.action = #selector(perPrayerModeChanged(_:))
+                popup.setAccessibilityLabel(t(prayerKeys[index]))
+                popup.setAccessibilityValue(popup.titleOfSelectedItem)
+                perPrayerModePopups.append(popup)
+                addRow(modesCard, label: t(prayerKeys[index]), control: popup)
+            }
+            endCard(modesH)
         }
 
-        if selectedSection == 2 {
+        if selectedSection == 3 {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
             sectionHeader(t("settings.section.adhkar"))
@@ -6352,7 +6534,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         UserDefaults.standard.set(sender.selectedSegment == 1 ? "12h" : "24h",
                                   forKey: kTimeFormat)
         appDelegate?.updateUI()
-        appDelegate?.tick()
+        appDelegate?.rebuildStatusItem()
     }
     @objc private func openAtLoginChanged(_ sender: NSButton) {
         if !setOpenAtLogin(sender.state == .on) {
@@ -6360,9 +6542,21 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         }
     }
     @objc private func changeMosque(_ sender: NSButton) {
-        guard let app = appDelegate else { return }
-        if !app.popover.isShown { app.togglePopover() }
-        app.showPicker()
+        (view.window as? MainWindow)?.showMosquePickerFromSettings()
+    }
+    @objc private func menuBarToggleChanged(_ sender: NSButton) {
+        UserDefaults.standard.set(barIconCheck.state == .on, forKey: kBarShowIcon)
+        UserDefaults.standard.set(barTimeCheck.state == .on, forKey: kBarShowTime)
+        UserDefaults.standard.set(barCountdownCheck.state == .on,
+                                  forKey: kBarShowCountdown)
+        appDelegate?.rebuildStatusItem()
+    }
+    @objc private func barHijriFormatChanged(_ sender: NSPopUpButton) {
+        guard kHijriFormatOrder.indices.contains(sender.indexOfSelectedItem) else { return }
+        let format = kHijriFormatOrder[sender.indexOfSelectedItem]
+        UserDefaults.standard.set(format.rawValue, forKey: kBarHijriFormat)
+        UserDefaults.standard.set(format != .off, forKey: kBarShowHijri)
+        appDelegate?.rebuildStatusItem()
     }
     @objc private func adhanEnabledChanged(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: kAdhanEnabled)
@@ -6390,6 +6584,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let minutes = kPreAdhanOptions[sender.indexOfSelectedItem]
         UserDefaults.standard.set(minutes, forKey: kPreAdhanLeadMinutes)
         if minutes > 0 { appDelegate?.requestNotificationAuthorization() }
+    }
+    @objc private func perPrayerModeChanged(_ sender: NSPopUpButton) {
+        guard prayerLabels.indices.contains(sender.tag),
+              let mode = AdhanMode(rawValue: sender.indexOfSelectedItem) else { return }
+        setAdhanMode(mode, forPrayer: sender.tag)
+        sender.setAccessibilityValue(sender.titleOfSelectedItem)
+        appDelegate?.updateUI()
+        appDelegate?.mainWindow?.reloadPrayerDashboard()
     }
     @objc private func adhkarAutoPlayChanged(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: kAdhkarEnabled)
@@ -8601,10 +8803,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     @objc func menuOpen()    { togglePopover() }
     @objc func menuRefresh() { fetchData() }
-    @objc func menuChoose() {
-        if !popover.isShown { togglePopover() }
-        showPicker()
-    }
+    @objc func menuChoose() { openMosqueSettings() }
     @objc func menuSettings() {
         openSettingsWindow(section: 0)
     }
@@ -8633,6 +8832,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         mainWindow?.showSettingsWindow(section: section)
         mainWindow?.showMainWindow()
+    }
+    func openMosqueSettings() {
+        popover?.performClose(nil)
+        if mainWindow == nil {
+            let window = MainWindow(appDelegate: self)
+            window.setAdhan(PrayerDashboardViewController(appDelegate: self))
+            window.setEditor(AdhkarEditorViewController(appDelegate: self))
+            mainWindow = window
+        }
+        mainWindow?.showMainWindow()
+        mainWindow?.showMosquePickerFromSettings()
     }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
@@ -9219,10 +9429,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     // -------------------------------------------------------- mode swap
-    @objc func changeMosqueTapped() { showPicker() }
+    @objc func changeMosqueTapped() { openMosqueSettings() }
     @objc func settingsTapped() {
         // Prayer popup → Adhan settings; compact Adhkar → Adhkar settings.
-        openSettingsWindow(section: isCompactAdhkarMode ? 2 : 1)
+        openSettingsWindow(section: isCompactAdhkarMode ? 3 : 2)
     }
 
     @objc func toggleCompactAdhkar() {
