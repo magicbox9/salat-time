@@ -67,7 +67,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.8.2"
+let kAppVersion          = "3.8.3"
 
 // ============================================================================
 // MARK: Theme palette
@@ -5106,7 +5106,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         viewSwitcher.selectedSegment = selectedTab
         if wasShowingSettings {
             isShowingSettings = true
-            showSettings()
+            showSettings(section: nil)
         } else {
             showSelectedDestination()
         }
@@ -5123,7 +5123,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
             showSelectedDestination()
         } else {
             isShowingSettings = true
-            showSettings()
+            showSettings(section: nil)
         }
     }
 
@@ -5140,10 +5140,22 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         }
     }
 
-    private func showSettings() {
-        if settingsVC == nil { settingsVC = AdhkarSettingsViewController() }
+    private func showSettings(section: Int?) {
+        if settingsVC == nil {
+            settingsVC = AdhkarSettingsViewController(initialSection: section ?? 0)
+        } else if let section {
+            settingsVC?.selectSection(section)
+        }
         guard let settingsVC else { return }
         present(settingsVC)
+    }
+
+    /// Public entry point used by the popup gear. Settings remain a single
+    /// full-window surface; the compact popup only chooses which section is
+    /// most relevant to open.
+    func showSettingsWindow(section: Int) {
+        isShowingSettings = true
+        showSettings(section: section)
     }
 
     private func present(_ vc: MainTabContent) {
@@ -5455,8 +5467,19 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     private var appDelegate: AppDelegate? { NSApp.delegate as? AppDelegate }
 
-    init() { super.init(nibName: nil, bundle: nil) }
+    init(initialSection: Int = 0) {
+        selectedSection = max(0, min(2, initialSection))
+        super.init(nibName: nil, bundle: nil)
+    }
     required init?(coder: NSCoder) { fatalError() }
+
+    func selectSection(_ section: Int) {
+        selectedSection = max(0, min(2, section))
+        guard isViewLoaded else { return }
+        sectionControl.selectedSegment = selectedSection
+        rebuildSelectedSection()
+        tabDidActivate()
+    }
 
     override func loadView() {
         let root = NSView()
@@ -6101,8 +6124,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         collectionList = NSStackView()
         collectionList.orientation = .vertical
         collectionList.alignment = isRTL ? .trailing : .leading
+        collectionList.distribution = .fill
         collectionList.spacing = 4
-        collectionList.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 4, right: 0)
+        collectionList.edgeInsets = NSEdgeInsets(top: 2, left: 0, bottom: 8, right: 0)
         collectionList.translatesAutoresizingMaskIntoConstraints = false
 
         collectionView = NSScrollView()
@@ -6274,16 +6298,16 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             leftWrap.widthAnchor.constraint(equalToConstant: 220),
 
             collectionsTitle.topAnchor.constraint(equalTo: leftWrap.topAnchor),
-            collectionsTitle.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
-            collectionsTitle.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
+            collectionsTitle.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 10),
+            collectionsTitle.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: -10),
 
             newBtn.topAnchor.constraint(equalTo: collectionsTitle.bottomAnchor, constant: 8),
-            newBtn.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
-            newBtn.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
+            newBtn.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 8),
+            newBtn.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: -8),
 
             collectionView.topAnchor.constraint(equalTo: newBtn.bottomAnchor, constant: 10),
-            collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
-            collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
+            collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 6),
+            collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: -4),
             collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor),
         ])
 
@@ -6455,7 +6479,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
                                        target: self,
                                        action: #selector(playCollection(_:)),
                                        pointSize: 13,
-                                       size: NSSize(width: 32, height: 28))
+                                       size: NSSize(width: 40, height: 40))
         playBtn.translatesAutoresizingMaskIntoConstraints = false
         playBtn.identifier = NSUserInterfaceItemIdentifier(c.id.uuidString)
         row.addSubview(playBtn)
@@ -6527,7 +6551,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         let isRTL = Localizer.shared.isRTL
         NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
+            // An exact source-list row height prevents NSStackView from
+            // stretching the first row to absorb spare viewport height.
+            row.heightAnchor.constraint(equalToConstant: 52),
 
             // Name: for RTL, anchor to the TRAILING (right) edge with the play
             // button to its LEFT. For LTR, name on leading (left), play on right.
@@ -6535,8 +6561,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
             badge.topAnchor.constraint(equalTo: nameLbl.bottomAnchor, constant: 2),
             playBtn.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-            playBtn.widthAnchor.constraint(equalToConstant: 28),
-            playBtn.heightAnchor.constraint(equalToConstant: 24),
+            playBtn.widthAnchor.constraint(equalToConstant: 40),
+            playBtn.heightAnchor.constraint(equalToConstant: 40),
         ])
 
         if isRTL {
@@ -7908,8 +7934,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         showPicker()
     }
     @objc func menuSettings() {
-        if !popover.isShown { togglePopover() }
-        showSettings()
+        openSettingsWindow(section: 0)
     }
     /// Open the full prayer + adhkar management window. Destination 0 is
     /// Adhan/prayer times and 1 is Adhkar.
@@ -7924,6 +7949,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             mainWindow = w
         }
         mainWindow?.showMainWindow(selecting: destination)
+    }
+
+    func openSettingsWindow(section: Int) {
+        popover?.performClose(nil)
+        if mainWindow == nil {
+            let w = MainWindow(appDelegate: self)
+            w.setAdhan(PrayerDashboardViewController(appDelegate: self))
+            w.setEditor(AdhkarEditorViewController(appDelegate: self))
+            mainWindow = w
+        }
+        mainWindow?.showSettingsWindow(section: section)
+        mainWindow?.showMainWindow()
     }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
@@ -8508,7 +8545,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
     // -------------------------------------------------------- mode swap
     @objc func changeMosqueTapped() { showPicker() }
-    @objc func settingsTapped() { showSettings() }
+    @objc func settingsTapped() {
+        // Prayer popup → Adhan settings; compact Adhkar → Adhkar settings.
+        openSettingsWindow(section: isCompactAdhkarMode ? 2 : 1)
+    }
 
     @objc func toggleCompactAdhkar() {
         isCompactAdhkarMode.toggle()
