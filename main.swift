@@ -57,13 +57,17 @@ let kLastAdhkarEvening   = "lastAdhkarEvening"
 let kAdhkarLibraryKey    = "adhkarLibraryJSON_v1"
 /// One-time v2→v3 migration marker so we seed default collections only once.
 let kAdhkarMigrated      = "adhkarLibraryMigrated"
+/// One-time v3.7 migration that gives bundled collections a stable category
+/// identity. Display names can then follow the app language without relying
+/// on the mutable, previously Arabic-only `name` field.
+let kAdhkarIdentityMigrated = "adhkarCollectionIdentity_v37"
 /// Adhkar playback volume (0.0–1.0). Default 1.0.
 let kAdhkarVolume        = "adhkarVolume"
 /// CoreAudio device UID for adhkar audio output ("" = system default).
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.6.0"
+let kAppVersion          = "3.6.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -666,6 +670,30 @@ enum AdhkarSet: String, CaseIterable {
         case .forgiveness:    return "أذكار الاستغفار والتوبة"
         }
     }
+
+    /// Display name in the same language as the rest of the application.
+    /// Morning/evening already have full translations; the remaining names
+    /// use a compact in-code table so older translation bundles still render
+    /// correctly during an in-place update.
+    var localizedName: String {
+        if self == .morning { return t("adhkar.morning_title") }
+        if self == .evening { return t("adhkar.evening_title") }
+        let names: [String: [AdhkarSet: String]] = [
+            "en": [.postPrayer: "After Prayer", .sleep: "Before Sleep", .waking: "Upon Waking", .afterAblution: "After Ablution", .enteringMosque: "Entering the Mosque", .leavingMosque: "Leaving the Mosque", .beforeEating: "Before Eating", .afterEating: "After Eating", .enteringHome: "Entering Home", .leavingHome: "Leaving Home", .distress: "Distress and Worry", .forgiveness: "Forgiveness and Repentance"],
+            "fr": [.postPrayer: "Après la prière", .sleep: "Avant de dormir", .waking: "Au réveil", .afterAblution: "Après les ablutions", .enteringMosque: "Entrée à la mosquée", .leavingMosque: "Sortie de la mosquée", .beforeEating: "Avant de manger", .afterEating: "Après avoir mangé", .enteringHome: "Entrée à la maison", .leavingHome: "Sortie de la maison", .distress: "Détresse et souci", .forgiveness: "Pardon et repentir"],
+            "es": [.postPrayer: "Después de la oración", .sleep: "Antes de dormir", .waking: "Al despertar", .afterAblution: "Después de la ablución", .enteringMosque: "Al entrar en la mezquita", .leavingMosque: "Al salir de la mezquita", .beforeEating: "Antes de comer", .afterEating: "Después de comer", .enteringHome: "Al entrar en casa", .leavingHome: "Al salir de casa", .distress: "Angustia y preocupación", .forgiveness: "Perdón y arrepentimiento"],
+            "ar": [.postPrayer: "أذكار بعد الصلاة", .sleep: "أذكار النوم", .waking: "أذكار الاستيقاظ", .afterAblution: "أذكار بعد الوضوء", .enteringMosque: "أذكار دخول المسجد", .leavingMosque: "أذكار الخروج من المسجد", .beforeEating: "أذكار قبل الطعام", .afterEating: "أذكار بعد الطعام", .enteringHome: "أذكار دخول المنزل", .leavingHome: "أذكار الخروج من المنزل", .distress: "أذكار الكرب والهم", .forgiveness: "أذكار الاستغفار والتوبة"],
+            "zh": [.postPrayer: "礼拜后", .sleep: "睡前", .waking: "醒来时", .afterAblution: "小净后", .enteringMosque: "进入清真寺", .leavingMosque: "离开清真寺", .beforeEating: "用餐前", .afterEating: "用餐后", .enteringHome: "进入家中", .leavingHome: "离开家中", .distress: "忧虑与困苦", .forgiveness: "求饶与悔过"],
+            "hi": [.postPrayer: "नमाज़ के बाद", .sleep: "सोने से पहले", .waking: "जागने पर", .afterAblution: "वुज़ू के बाद", .enteringMosque: "मस्जिद में प्रवेश", .leavingMosque: "मस्जिद से निकलना", .beforeEating: "खाने से पहले", .afterEating: "खाने के बाद", .enteringHome: "घर में प्रवेश", .leavingHome: "घर से निकलना", .distress: "चिंता और परेशानी", .forgiveness: "माफ़ी और तौबा"],
+            "bn": [.postPrayer: "নামাজের পরে", .sleep: "ঘুমের আগে", .waking: "ঘুম থেকে জাগলে", .afterAblution: "ওযুর পরে", .enteringMosque: "মসজিদে প্রবেশ", .leavingMosque: "মসজিদ থেকে বের হওয়া", .beforeEating: "খাওয়ার আগে", .afterEating: "খাওয়ার পরে", .enteringHome: "ঘরে প্রবেশ", .leavingHome: "ঘর থেকে বের হওয়া", .distress: "দুশ্চিন্তা ও কষ্ট", .forgiveness: "ক্ষমা ও তওবা"],
+            "ru": [.postPrayer: "После молитвы", .sleep: "Перед сном", .waking: "После пробуждения", .afterAblution: "После омовения", .enteringMosque: "Вход в мечеть", .leavingMosque: "Выход из мечети", .beforeEating: "Перед едой", .afterEating: "После еды", .enteringHome: "Вход в дом", .leavingHome: "Выход из дома", .distress: "Тревога и печаль", .forgiveness: "Прощение и покаяние"],
+            "pt": [.postPrayer: "Depois da oração", .sleep: "Antes de dormir", .waking: "Ao acordar", .afterAblution: "Depois da ablução", .enteringMosque: "Ao entrar na mesquita", .leavingMosque: "Ao sair da mesquita", .beforeEating: "Antes de comer", .afterEating: "Depois de comer", .enteringHome: "Ao entrar em casa", .leavingHome: "Ao sair de casa", .distress: "Angústia e preocupação", .forgiveness: "Perdão e arrependimento"],
+            "ur": [.postPrayer: "نماز کے بعد", .sleep: "سونے سے پہلے", .waking: "جاگنے پر", .afterAblution: "وضو کے بعد", .enteringMosque: "مسجد میں داخلہ", .leavingMosque: "مسجد سے نکلنا", .beforeEating: "کھانے سے پہلے", .afterEating: "کھانے کے بعد", .enteringHome: "گھر میں داخلہ", .leavingHome: "گھر سے نکلنا", .distress: "پریشانی اور غم", .forgiveness: "مغفرت اور توبہ"]
+        ]
+        return names[Localizer.shared.current.code]?[self]
+            ?? names["en"]?[self]
+            ?? arabicName
+    }
     /// Default schedule anchor for auto-play ("manual" = no schedule).
     var defaultAnchor: String {
         switch self {
@@ -757,15 +785,27 @@ struct AdhkarEntry: Codable, Identifiable, Equatable {
 struct AdhkarCollection: Codable, Identifiable, Equatable {
     var id:         UUID
     var name:       String
+    /// Stable bundled category key (`AdhkarSet.rawValue`). Nil means this is
+    /// a fully user-defined collection whose name must be preserved verbatim.
+    var categoryKey: String?
     /// "manual" (no schedule) | "shuruq" | "fajr" | "dhuhr" | "asr" | "maghrib" | "isha"
     var anchorKind: String
     /// When true, the collection auto-recites at `anchorKind` time once/day.
     var autoPlay:   Bool
     var items:      [AdhkarEntry]
-    init(id: UUID = UUID(), name: String, anchorKind: String = "manual",
-         autoPlay: Bool = false, items: [AdhkarEntry] = []) {
-        self.id = id; self.name = name; self.anchorKind = anchorKind
+    init(id: UUID = UUID(), name: String, categoryKey: String? = nil,
+         anchorKind: String = "manual", autoPlay: Bool = false,
+         items: [AdhkarEntry] = []) {
+        self.id = id; self.name = name; self.categoryKey = categoryKey
+        self.anchorKind = anchorKind
         self.autoPlay = autoPlay; self.items = items
+    }
+
+    var displayName: String {
+        guard let key = categoryKey, let set = AdhkarSet(rawValue: key) else {
+            return name
+        }
+        return set.localizedName
     }
 }
 
@@ -832,7 +872,8 @@ func migrateAdhkarExpandedCatalog() {
         if set == .evening { anchor = eAnchor }
         // Only morning/evening/sleep auto-play by default; the rest are manual.
         let plays = (set == .morning || set == .evening) ? autoOn : false
-        existing.append(AdhkarCollection(name: name, anchorKind: anchor,
+        existing.append(AdhkarCollection(name: name, categoryKey: set.rawValue,
+                                          anchorKind: anchor,
                                           autoPlay: plays, items: items))
     }
     AdhkarLibrary.save(existing)
@@ -853,10 +894,48 @@ func seedAllDefaultCollections() {
         if set == .morning { anchor = mAnchor }
         if set == .evening { anchor = eAnchor }
         let plays = (set == .morning || set == .evening) ? autoOn : false
-        seeded.append(AdhkarCollection(name: set.arabicName, anchorKind: anchor,
+        seeded.append(AdhkarCollection(name: set.arabicName,
+                                       categoryKey: set.rawValue,
+                                       anchorKind: anchor,
                                        autoPlay: plays, items: items))
     }
     AdhkarLibrary.save(seeded)
+}
+
+/// Attach stable identities to collections created by pre-v3.7 builds. Only
+/// exact bundled Arabic names are migrated, so custom or renamed collections
+/// are never reclassified or overwritten.
+func migrateAdhkarCollectionIdentity() {
+    guard !UserDefaults.standard.bool(forKey: kAdhkarIdentityMigrated) else { return }
+    let byArabicName = Dictionary(uniqueKeysWithValues:
+        AdhkarSet.allCases.map { ($0.arabicName, $0.rawValue) })
+    var collections = AdhkarLibrary.load()
+    var changed = false
+    for i in collections.indices where collections[i].categoryKey == nil {
+        if let key = byArabicName[collections[i].name] {
+            collections[i].categoryKey = key
+            changed = true
+        }
+    }
+    if changed { AdhkarLibrary.save(collections) }
+    UserDefaults.standard.set(true, forKey: kAdhkarIdentityMigrated)
+}
+
+/// Keep the legacy morning/evening preference keys and the v3 collection
+/// model synchronized. The collection model is the scheduler's source of
+/// truth; the legacy keys remain for compatibility with older installs.
+func updateBuiltInAdhkarSchedule(_ set: AdhkarSet,
+                                 anchor: String? = nil,
+                                 autoPlay: Bool? = nil) {
+    var collections = AdhkarLibrary.load()
+    guard let i = collections.firstIndex(where: { $0.categoryKey == set.rawValue }) else { return }
+    if let anchor = anchor { collections[i].anchorKind = anchor }
+    if let autoPlay = autoPlay { collections[i].autoPlay = autoPlay }
+    AdhkarLibrary.save(collections)
+    if let anchor = anchor {
+        if set == .morning { UserDefaults.standard.set(anchor, forKey: kAdhkarMorningAnchor) }
+        if set == .evening { UserDefaults.standard.set(anchor, forKey: kAdhkarEveningAnchor) }
+    }
 }
 
 /// Resolves an `audioRef` to a playable URL, or nil if not found.
@@ -979,7 +1058,7 @@ func presentAudioImportPanel() -> String? {
 /// Drives adhkar playback. Owns its own `AVAudioPlayer` (separate from the
 /// adhan player so the two never collide). The owning panel drives the UI by
 /// setting `onItemChange` / `onPlaybackStateChange` / `onFinish` closures.
-final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
+final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
 
     /// `(current item, current item index 0-based, total items)`.
     var onItemChange:          ((AdhkarEntry, Int, Int) -> Void)?
@@ -996,6 +1075,13 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     private var targetPlays = 1
 
     private var player: AVAudioPlayer?
+    private let speechSynthesizer = AVSpeechSynthesizer()
+    private var activeCategoryKey: String?
+    private var cleanSegments: [ClosedRange<TimeInterval>] = []
+    private var cleanSegmentIndex = 0
+    private var cleanSegmentTimer: Timer?
+    private var sessionGeneration = 0
+    private var isStoppingSpeech = false
     private(set) var isPlaying  = false
     private(set) var isPaused   = false
     private(set) var isMuted    = false
@@ -1018,6 +1104,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     func start(collection: AdhkarCollection) {
         stop()
         items = collection.items
+        activeCategoryKey = collection.categoryKey
         guard !items.isEmpty else { return }
         index = 0
         playsSoFar = 0
@@ -1029,7 +1116,9 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     /// morning/evening entries (which now read from the user's library).
     func start(set: AdhkarSet) {
         let entries = AdhkarData.items(for: set).map { AdhkarEntry(from: $0) }
-        start(collection: AdhkarCollection(name: set.rawValue, items: entries))
+        start(collection: AdhkarCollection(name: set.arabicName,
+                                            categoryKey: set.rawValue,
+                                            items: entries))
     }
 
     /// Advance to the next item (skips remaining repeats of the current one).
@@ -1059,6 +1148,9 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     func pause() {
         guard isPlaying else { return }
         player?.pause()
+        if speechSynthesizer.isSpeaking {
+            speechSynthesizer.pauseSpeaking(at: .immediate)
+        }
         isPlaying = false
         isPaused  = true
         onPlaybackStateChange?()
@@ -1066,7 +1158,9 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
 
     func resume() {
         guard isPaused else { return }
-        if player?.play() ?? false {
+        let resumed = (player?.play() ?? false)
+            || (speechSynthesizer.isPaused && speechSynthesizer.continueSpeaking())
+        if resumed {
             isPlaying = true
             isPaused  = false
             onPlaybackStateChange?()
@@ -1078,15 +1172,24 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     func setMuted(_ m: Bool) {
         guard isMuted != m else { return }
         isMuted = m
-        player?.volume = m ? 0 : 1.0
+        player?.volume = m ? 0 : savedAdhkarVolume()
         onPlaybackStateChange?()
     }
 
     /// Hard stop — abandons the session and releases the player.
     func stop() {
+        sessionGeneration += 1
+        cleanSegmentTimer?.invalidate()
+        cleanSegmentTimer = nil
         player?.stop()
         player = nil
+        if speechSynthesizer.isSpeaking || speechSynthesizer.isPaused {
+            isStoppingSpeech = true
+            speechSynthesizer.stopSpeaking(at: .immediate)
+            isStoppingSpeech = false
+        }
         items = []
+        activeCategoryKey = nil
         index = 0
         playsSoFar = 0
         isPlaying = false
@@ -1105,53 +1208,156 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
         targetPlays = max(1, min(item.count, 3))
         playsSoFar = 0
         onItemChange?(item, index, items.count)
-        playAudioRef(item.audioRef)
+        playAudioRef(item.audioRef, text: item.arabic)
     }
 
     /// Resolve a logical audioRef to a URL and start playback. Handles both
     /// bundled ("bundled:75.mp3") and imported ("imported:abc.mp3") refs via
     /// resolveAdhkarAudio(). Falls back to auto-advance if audio is missing.
-    private func playAudioRef(_ ref: String) {
+    private func playAudioRef(_ ref: String, text: String) {
+        cleanSegmentTimer?.invalidate()
+        cleanSegmentTimer = nil
         player?.stop()
+        if speechSynthesizer.isSpeaking || speechSynthesizer.isPaused {
+            isStoppingSpeech = true
+            speechSynthesizer.stopSpeaking(at: .immediate)
+            isStoppingSpeech = false
+        }
         // If the entry has no audio at all, just advance after a beat.
         guard !ref.isEmpty else {
             scheduleAutoAdvance()
             return
         }
+
+        // Several evening files contain the morning wording followed by a
+        // spoken instruction explaining what to substitute at night. Reading
+        // that file would contradict the text on screen, so use the installed
+        // macOS Arabic voice for these exact variants instead.
+        let eveningVariants: Set<String> = [
+            "bundled:77.mp3", "bundled:78.mp3", "bundled:80.mp3",
+            "bundled:81.mp3", "bundled:89.mp3", "bundled:90.mp3"
+        ]
+        if activeCategoryKey == AdhkarSet.evening.rawValue,
+           eveningVariants.contains(ref) {
+            playSpokenText(text)
+            return
+        }
         guard let url = resolveAdhkarAudio(ref),
               FileManager.default.fileExists(atPath: url.path),
               let p = try? AVAudioPlayer(contentsOf: url) else {
-            scheduleAutoAdvance()
+            // Expanded collections in older installs referenced Hisn files
+            // that were never bundled. Read their exact Arabic text instead
+            // of silently flashing past them in half a second.
+            if ref.hasPrefix("bundled:"), !text.isEmpty {
+                playSpokenText(text)
+            } else {
+                scheduleAutoAdvance()
+            }
             return
         }
         player = p
         p.delegate = self
         // Apply volume from settings (default 1.0), silenced if muted.
-        let savedVolume = UserDefaults.standard.float(forKey: kAdhkarVolume)
-        let vol = savedVolume > 0 ? savedVolume : 1.0
-        p.volume = isMuted ? 0 : vol
+        p.volume = isMuted ? 0 : savedAdhkarVolume()
         // Route to the selected output device (mirrors playAdhan's routing).
         let wantedUID = UserDefaults.standard.string(forKey: kAdhkarAudioDevice) ?? ""
         if !wantedUID.isEmpty { p.currentDevice = wantedUID }
         p.prepareToPlay()
+
+        // Hisn recordings often append phrases such as "three times" or
+        // "and in the evening say…". These ranges contain only the dhikr
+        // itself. File 75 has two ranges so its title and "Ayat al-Kursi"
+        // announcement are skipped while the ta'awwudh is preserved.
+        cleanSegments = cleanRecitationSegments(for: ref)
+        cleanSegmentIndex = 0
+        if let first = cleanSegments.first { p.currentTime = first.lowerBound }
         if p.play() {
             isPlaying = true
             isPaused  = false
+            startCleanSegmentMonitorIfNeeded()
             onPlaybackStateChange?()
         }
+    }
+
+    private func savedAdhkarVolume() -> Float {
+        if UserDefaults.standard.object(forKey: kAdhkarVolume) == nil { return 1.0 }
+        return min(1, max(0, UserDefaults.standard.float(forKey: kAdhkarVolume)))
+    }
+
+    private func cleanRecitationSegments(for ref: String) -> [ClosedRange<TimeInterval>] {
+        let ranges: [String: [ClosedRange<TimeInterval>]] = [
+            "bundled:75.mp3":  [13.60...16.96, 18.36...74.80],
+            "bundled:77.mp3":  [0.0...40.60],
+            "bundled:78.mp3":  [0.0...12.16],
+            "bundled:80.mp3":  [0.0...20.86],
+            "bundled:82.mp3":  [0.0...26.90],
+            "bundled:83.mp3":  [0.0...7.94],
+            "bundled:86.mp3":  [0.0...9.34],
+            "bundled:87.mp3":  [0.0...11.14],
+            "bundled:91.mp3":  [0.0...3.44],
+            "bundled:92.mp3":  [0.0...11.59],
+            "bundled:93.mp3":  [0.0...10.78],
+            "bundled:94.mp3":  [0.0...12.20],
+            "bundled:95.mp3":  [0.0...8.84],
+            "bundled:96.mp3":  [0.0...4.50],
+            "bundled:97.mp3":  [0.0...5.86]
+        ]
+        return ranges[ref] ?? []
+    }
+
+    private func startCleanSegmentMonitorIfNeeded() {
+        guard !cleanSegments.isEmpty else { return }
+        cleanSegmentTimer?.invalidate()
+        cleanSegmentTimer = Timer.scheduledTimer(withTimeInterval: 0.05,
+                                                  repeats: true) { [weak self] timer in
+            guard let self = self, let p = self.player else {
+                timer.invalidate(); return
+            }
+            guard p.isPlaying,
+                  self.cleanSegments.indices.contains(self.cleanSegmentIndex) else { return }
+            let range = self.cleanSegments[self.cleanSegmentIndex]
+            guard p.currentTime >= range.upperBound else { return }
+            if self.cleanSegmentIndex + 1 < self.cleanSegments.count {
+                self.cleanSegmentIndex += 1
+                p.currentTime = self.cleanSegments[self.cleanSegmentIndex].lowerBound
+            } else {
+                timer.invalidate()
+                self.cleanSegmentTimer = nil
+                p.stop()
+                self.player = nil
+                self.completeCurrentPlay()
+            }
+        }
+    }
+
+    private func playSpokenText(_ text: String) {
+        guard !text.isEmpty else { scheduleAutoAdvance(); return }
+        speechSynthesizer.delegate = self
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.voice = AVSpeechSynthesisVoice(language: "ar-SA")
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.82
+        utterance.pitchMultiplier = 0.98
+        utterance.volume = isMuted ? 0 : savedAdhkarVolume()
+        isPlaying = true
+        isPaused = false
+        speechSynthesizer.speak(utterance)
+        onPlaybackStateChange?()
     }
 
     /// If audio is missing, auto-advance after a beat so the session never
     /// stalls on a single broken/silent entry.
     private func scheduleAutoAdvance() {
+        let generation = sessionGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             guard let self = self else { return }
-            let dummy = AVAudioPlayer()
-            self.audioPlayerDidFinishPlaying(dummy, successfully: true)
+            guard generation == self.sessionGeneration, !self.items.isEmpty else { return }
+            self.completeCurrentPlay()
         }
     }
 
     private func finish() {
+        cleanSegmentTimer?.invalidate()
+        cleanSegmentTimer = nil
         player?.stop()
         player = nil
         isPlaying = false
@@ -1164,11 +1370,17 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
 
     // MARK: - AVAudioPlayerDelegate
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        cleanSegmentTimer?.invalidate()
+        cleanSegmentTimer = nil
+        completeCurrentPlay()
+    }
+
+    private func completeCurrentPlay() {
         playsSoFar += 1
         if playsSoFar < targetPlays {
             // Same item, repeat.
             if items.indices.contains(index) {
-                playAudioRef(items[index].audioRef)
+                playAudioRef(items[index].audioRef, text: items[index].arabic)
             }
             return
         }
@@ -1179,6 +1391,12 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
         } else {
             finish()
         }
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                           didFinish utterance: AVSpeechUtterance) {
+        guard !isStoppingSpeech, !items.isEmpty else { return }
+        completeCurrentPlay()
     }
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         // Skip to next on decode failure rather than stalling.
@@ -1198,6 +1416,9 @@ final class AdhkarPanel: NSPanel {
 
     private let session = AdhkarSession()
     private var currentSet: AdhkarSet = .morning
+    private var currentCollection: AdhkarCollection?
+    var onDismiss: (() -> Void)?
+    private var isFinishing = false
 
     // UI elements
     private var titleLabel:    NSTextField!
@@ -1237,15 +1458,14 @@ final class AdhkarPanel: NSPanel {
     /// Open (or reopen) the panel and start reciting the chosen set.
     func present(set: AdhkarSet, autoPlay: Bool = true) {
         currentSet = set
-        titleLabel.stringValue = (set == .morning)
-            ? t("adhkar.morning_title")
-            : t("adhkar.evening_title")
+        currentCollection = matchingUserCollection(for: set)
+        titleLabel.stringValue = set.localizedName
         centerOnActiveScreen()
         makeKeyAndOrderFront(nil)
         if autoPlay {
             // Try to play from the user's matching collection first; fall back
             // to the bundled set if no user collection exists.
-            if let c = matchingUserCollection(for: set) {
+            if let c = currentCollection {
                 session.start(collection: c)
             } else {
                 session.start(set: set)
@@ -1255,20 +1475,22 @@ final class AdhkarPanel: NSPanel {
 
     /// v3 entry point — present a specific user-edited collection.
     func present(collection: AdhkarCollection, autoPlay: Bool = true) {
-        titleLabel.stringValue = collection.name
+        currentCollection = collection
+        if let key = collection.categoryKey, let set = AdhkarSet(rawValue: key) {
+            currentSet = set
+        }
+        titleLabel.stringValue = collection.displayName
         centerOnActiveScreen()
         makeKeyAndOrderFront(nil)
         if autoPlay { session.start(collection: collection) }
     }
 
-    /// Find the user's first collection whose name matches the set's localized
-    /// title (so the right-click "Adhkar of the Morning" plays the user's
-    /// "Morning" collection, including any edits they've made).
+    /// Find the user's built-in collection by stable category identity. The
+    /// Arabic-name fallback only exists for libraries not yet migrated.
     private func matchingUserCollection(for set: AdhkarSet) -> AdhkarCollection? {
-        let target = (set == .morning)
-            ? t("adhkar.morning_title")
-            : t("adhkar.evening_title")
-        return AdhkarLibrary.load().first(where: { $0.name == target })
+        return AdhkarLibrary.load().first(where: {
+            $0.categoryKey == set.rawValue || $0.name == set.arabicName
+        })
     }
 
     func togglePlayPause() {
@@ -1410,6 +1632,7 @@ final class AdhkarPanel: NSPanel {
             self?.refreshPlayButton()
         }
         session.onFinish = { [weak self] in
+            self?.isFinishing = true
             self?.close()
         }
     }
@@ -1468,6 +1691,15 @@ final class AdhkarPanel: NSPanel {
 
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
+
+    override func close() {
+        if !isFinishing { session.stop() }
+        isFinishing = false
+        super.close()
+        let callback = onDismiss
+        onDismiss = nil
+        callback?()
+    }
 }
 
 // ============================================================================
@@ -4806,12 +5038,12 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         UserDefaults.standard.set(sender.state == .on, forKey: kAdhkarEnabled)
     }
     @objc private func morningAnchorChanged(_ sender: NSPopUpButton) {
-        UserDefaults.standard.set(sender.indexOfSelectedItem == 1 ? "fajr" : "shuruq",
-                                  forKey: kAdhkarMorningAnchor)
+        let anchor = sender.indexOfSelectedItem == 1 ? "fajr" : "shuruq"
+        updateBuiltInAdhkarSchedule(.morning, anchor: anchor)
     }
     @objc private func eveningAnchorChanged(_ sender: NSPopUpButton) {
-        UserDefaults.standard.set(sender.indexOfSelectedItem == 1 ? "maghrib" : "asr",
-                                  forKey: kAdhkarEveningAnchor)
+        let anchor = sender.indexOfSelectedItem == 1 ? "maghrib" : "asr"
+        updateBuiltInAdhkarSchedule(.evening, anchor: anchor)
     }
     @objc private func accentTapped(_ sender: AccentSwatchButton) {
         UserDefaults.standard.set(sender.accentKey, forKey: kAccentPref)
@@ -5318,7 +5550,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
                 radius: 8))
         }
 
-        let nameLbl = NSTextField(labelWithString: c.name)
+        let nameLbl = NSTextField(labelWithString: c.displayName)
         nameLbl.font = Localizer.shared.font(size: 13, weight: isSel ? .semibold : .regular)
         nameLbl.textColor = isSel ? .controlAccentColor : .labelColor
         nameLbl.alignment = Localizer.shared.isRTL ? .right : .left
@@ -5495,13 +5727,16 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         alert.addButton(withTitle: t("adhkar.editor.save"))
         alert.addButton(withTitle: t("adhkar.editor.cancel"))
         let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
-        input.stringValue = collections[idx].name
+        input.stringValue = collections[idx].displayName
         alert.accessoryView = input
         alert.window.initialFirstResponder = input
         if alert.runModal() == .alertFirstButtonReturn {
             let trimmed = input.stringValue.trimmingCharacters(in: .whitespaces)
             if !trimmed.isEmpty {
                 collections[idx].name = trimmed
+                // Renaming a bundled collection turns the name into a true
+                // user-owned value instead of replacing it on language change.
+                collections[idx].categoryKey = nil
                 persist()
                 rebuildCollectionList()
                 rebuildItemsPane()
@@ -5515,6 +5750,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
               let kind = dict["kind"] as? String,
               let idx = collections.firstIndex(where: { $0.id == id }) else { return }
         collections[idx].anchorKind = kind
+        if collections[idx].categoryKey == AdhkarSet.morning.rawValue {
+            UserDefaults.standard.set(kind, forKey: kAdhkarMorningAnchor)
+        } else if collections[idx].categoryKey == AdhkarSet.evening.rawValue {
+            UserDefaults.standard.set(kind, forKey: kAdhkarEveningAnchor)
+        }
         persist(); rebuildCollectionList()
     }
     @objc private func toggleAutoPlay(_ mi: NSMenuItem) {
@@ -5583,7 +5823,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             return
         }
         let c = collections[idx]
-        itemsHeaderLabel.stringValue = String(format: t("adhkar.editor.items_in"), c.name)
+        itemsHeaderLabel.stringValue = String(format: t("adhkar.editor.items_in"), c.displayName)
         emptyStateLabel.isHidden = !c.items.isEmpty
         itemsScrollView.isHidden = c.items.isEmpty
         if c.items.isEmpty {
@@ -6286,6 +6526,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// Floating adhkar window. Lazily instantiated on first use (auto-trigger
     /// or manual menu open) so it costs nothing until needed.
     var adhkarPanel: AdhkarPanel?
+    /// Scheduled collections wait here so two collections sharing an anchor
+    /// never replace each other in the single reader panel.
+    private var scheduledAdhkarQueue: [AdhkarCollection] = []
 
     /// Full management window (v3). Lazily instantiated on first open.
     var mainWindow: MainWindow?
@@ -6408,6 +6651,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         // One-time migrations: v2→v3 (morning/evening) + v3.1 (expanded catalog).
         migrateAdhkarDefaults()
         migrateAdhkarExpandedCatalog()
+        migrateAdhkarCollectionIdentity()
         Localizer.shared.onChange = { [weak self] in self?.applyLanguageChange() }
 
         loadCachedInfo()
@@ -7686,6 +7930,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             return
         }
 
+        // Adhkar must be checked before the adhan→iqama early return below;
+        // otherwise Fajr/Dhuhr/Asr/Maghrib/Isha anchors are skipped for the
+        // entire iqama window and can never trigger that day.
+        checkAdhkarTrigger()
+
         // Adhan→Iqama window: during the ~10 minutes between a prayer's
         // adhan and its iqama, the menu-bar swaps to a RED countdown
         // pill showing how long until the iqama is called. The popover
@@ -7792,7 +8041,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         emphasizeRow(displayRow(for: nextIdx))
 
         checkAdhanTrigger()
-        checkAdhkarTrigger()
     }
 
     func displayRow(for timesIdx: Int) -> Int {
@@ -8150,6 +8398,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// adhkar set once per day when the anchor time is reached, mirroring the
     /// adhan idempotency pattern (marker "YYYY-MM-DD#morning" / "#evening").
     func checkAdhkarTrigger() {
+        guard UserDefaults.standard.bool(forKey: kAdhkarEnabled) else { return }
         // v3: iterate every collection in the user's library. Each has its
         // own anchorKind + autoPlay flag, so the user can schedule any number
         // of independent recitations per day. Idempotency is keyed by the
@@ -8172,7 +8421,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         for c in AdhkarLibrary.load() {
             guard c.autoPlay else { continue }
             guard c.anchorKind != "manual" else { continue }
-            let marker = "\(todayStr)#\(c.id.uuidString.prefix(8))"
+            let marker = "\(todayStr)#\(c.id.uuidString)"
             if fired.contains(marker) { continue }
             guard let t = adhkarAnchorTime(c.anchorKind),
                   let d = fmt.date(from: t) else { continue }
@@ -8180,12 +8429,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             guard let when = cal.date(bySettingHour: comps.hour ?? 0,
                                        minute: comps.minute ?? 0, second: 0, of: today) else { continue }
             let dt = now.timeIntervalSince(when)
-            if dt >= 0 && dt < 60 {
-                presentAdhkar(collection: c, autoPlay: true)
+            // Five-minute grace period covers wake-from-sleep and transient
+            // timer stalls while retaining once-per-day idempotency.
+            if dt >= 0 && dt < 5 * 60 {
+                enqueueScheduledAdhkar(c)
                 fired.append(marker)
             }
         }
         UserDefaults.standard.set(fired, forKey: firedKey)
+    }
+
+    private func enqueueScheduledAdhkar(_ collection: AdhkarCollection) {
+        guard !scheduledAdhkarQueue.contains(where: { $0.id == collection.id }) else { return }
+        scheduledAdhkarQueue.append(collection)
+        presentNextScheduledAdhkarIfPossible()
+    }
+
+    private func presentNextScheduledAdhkarIfPossible() {
+        guard !(adhkarPanel?.isVisible ?? false), !scheduledAdhkarQueue.isEmpty else { return }
+        let next = scheduledAdhkarQueue.removeFirst()
+        if adhkarPanel == nil { adhkarPanel = AdhkarPanel() }
+        adhkarPanel?.onDismiss = { [weak self] in
+            DispatchQueue.main.async { self?.presentNextScheduledAdhkarIfPossible() }
+        }
+        adhkarPanel?.present(collection: next, autoPlay: true)
     }
 
     /// Open the adhkar window. `autoPlay` = true on scheduled trigger; false
