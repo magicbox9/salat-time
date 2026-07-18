@@ -25,7 +25,8 @@ swiftc main.swift \
     -framework AVFoundation \
     -framework CoreLocation \
     -framework UserNotifications \
-    -framework ServiceManagement
+    -framework ServiceManagement \
+    -lsqlite3
 
 # ---------- multi-res icns --------------------------------------------------
 echo "Building icon..."
@@ -67,6 +68,35 @@ verify_quran_asset () {
     fi
 }
 
+verify_quran_translation () {
+    local relative_path="$1"
+    local expected_sha256="$2"
+    local source_path="$QURAN_SOURCE_DIR/$relative_path"
+    verify_quran_asset "$relative_path" "$expected_sha256"
+
+    if ! command -v sqlite3 >/dev/null 2>&1; then
+        echo "sqlite3 is required to validate bundled Qur'an translations" >&2
+        exit 1
+    fi
+
+    local validation
+    validation=$(sqlite3 -readonly "$source_path" \
+        "SELECT (SELECT quick_check FROM pragma_quick_check),
+                COUNT(*),
+                COUNT(DISTINCT sura || ':' || aya),
+                COUNT(DISTINCT sura),
+                SUM(CASE WHEN translation IS NULL
+                              OR length(trim(translation)) = 0
+                         THEN 1 ELSE 0 END)
+           FROM translations;")
+    if [ "$validation" != "ok|6236|6236|114|0" ]; then
+        echo "Corpus validation failed for Qur'an translation: $relative_path" >&2
+        echo "Expected: ok|6236|6236|114|0" >&2
+        echo "Actual:   $validation" >&2
+        exit 1
+    fi
+}
+
 verify_quran_asset "Hafs/hafsData_v2-0.json" \
     "d2960b3217962e7e4252abdcece67bea3d6b48271e4cd3af45bbbb2dd5c872ca"
 verify_quran_asset "Hafs/read.me" \
@@ -83,16 +113,49 @@ verify_quran_asset "MuyassarGhareeb/muyassar_ghareeb_1.json" \
     "aa57282cff9517c8f7b74432b17077f70decb4eb1530ff78d4fb663f435cdc65"
 verify_quran_asset "MuyassarGhareeb/read.me" \
     "565a1d2c610b72b9633dfd7c9e2e161ed0bb03c15a4bc12aee43774d467d8f07"
+verify_quran_asset "Translations/QuranEnc/metadata-snapshot.json" \
+    "8970f932c71eb0ef7e6e362ad605d730f9df1cf5b0988c5dc15fd3379aaaab49"
+verify_quran_translation "Translations/QuranEnc/english_rwwad_v1.0.19.sqlite" \
+    "77e2ede3d8e6d6b5c6e16ff78eda2d2b6cc0a6b7489c94a5dde4f7481f5fdee8"
+verify_quran_translation "Translations/QuranEnc/french_rashid_v1.0.3.sqlite" \
+    "1c8d1f66f3ab8d708ba84db79b8c069dede23a3e40fff253d3ca14deafba87bf"
+verify_quran_translation "Translations/QuranEnc/spanish_garcia_v1.0.2.sqlite" \
+    "63fb0541378f48feb7e9bde6216c85f36a50bda73d0082d21a18a3289bc1aa10"
+verify_quran_translation "Translations/QuranEnc/portuguese_nasr_v1.4.1.sqlite" \
+    "90cc75b18c3c30f4900ea2f03777d7f82f909fc6f01bc02ba64e922017a20057"
+verify_quran_translation "Translations/QuranEnc/chinese_suliman_v1.0.8.sqlite" \
+    "4f1b544720dde2babb845e1278b56678d2768ad830d9da491e328cb58c825fd7"
+verify_quran_translation "Translations/QuranEnc/urdu_junagarhi_v1.1.3.sqlite" \
+    "20ccc96bd25e481ca248e8a02d354a316bda2b6fc325fd2aeb5cdd26f7fb11bb"
+verify_quran_translation "Translations/QuranEnc/hindi_omari_v1.1.5.sqlite" \
+    "9f5208ae22da5b6af4a9be95438cf5f35e0e195a91f217aa26b336f58efed31b"
 verify_quran_asset "source-manifest.json" \
-    "cfe804bfe29f2e636d21718b1742c99587acc8c6ee281a76669e4564a7fab5bf"
+    "44e2ee6d11af71bed1729790c78e23184dcb1891f7b60780fed2d1318488f101"
 
 mkdir -p "$QURAN_BUNDLE_DIR/Hafs" "$QURAN_BUNDLE_DIR/Warsh" \
-    "$QURAN_BUNDLE_DIR/MuyassarGhareeb"
+    "$QURAN_BUNDLE_DIR/MuyassarGhareeb" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc"
 cp "$QURAN_SOURCE_DIR/Hafs/"* "$QURAN_BUNDLE_DIR/Hafs/"
 cp "$QURAN_SOURCE_DIR/Warsh/"* "$QURAN_BUNDLE_DIR/Warsh/"
 cp "$QURAN_SOURCE_DIR/MuyassarGhareeb/"* "$QURAN_BUNDLE_DIR/MuyassarGhareeb/"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/metadata-snapshot.json" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/metadata-snapshot.json"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/english_rwwad_v1.0.19.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/english_rwwad_v1.0.19.sqlite"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/french_rashid_v1.0.3.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/french_rashid_v1.0.3.sqlite"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/spanish_garcia_v1.0.2.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/spanish_garcia_v1.0.2.sqlite"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/portuguese_nasr_v1.4.1.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/portuguese_nasr_v1.4.1.sqlite"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/chinese_suliman_v1.0.8.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/chinese_suliman_v1.0.8.sqlite"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/urdu_junagarhi_v1.1.3.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/urdu_junagarhi_v1.1.3.sqlite"
+cp "$QURAN_SOURCE_DIR/Translations/QuranEnc/hindi_omari_v1.1.5.sqlite" \
+    "$QURAN_BUNDLE_DIR/Translations/QuranEnc/hindi_omari_v1.1.5.sqlite"
 cp "$QURAN_SOURCE_DIR/source-manifest.json" "$QURAN_BUNDLE_DIR/source-manifest.json"
-echo "  Hafs + Warsh Mushaf pages and local indexes verified"
+echo "  Hafs + Warsh corpora and 7 Hafs-only translations verified"
 
 # ---------- adhan audio catalog --------------------------------------------
 # 14 hand-picked adhans sourced from assabile.com's curated collection.
