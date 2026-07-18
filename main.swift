@@ -67,7 +67,7 @@ let kAdhkarVolume        = "adhkarVolume"
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 
-let kAppVersion          = "3.7.0"
+let kAppVersion          = "3.7.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1550,13 +1550,10 @@ final class AdhkarPanel: NSPanel {
         header.addSubview(titleLabel)
         header.addSubview(positionLabel)
 
-        let readingCard = NSView()
+        let readingCard = AdaptiveCardView()
         readingCard.translatesAutoresizingMaskIntoConstraints = false
-        readingCard.wantsLayer = true
-        readingCard.layer?.cornerRadius = 14
-        readingCard.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        readingCard.layer?.borderWidth = 0.5
-        readingCard.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+        readingCard.cornerRadius = 14
+        readingCard.addsDepth = true
         container.addSubview(readingCard)
 
         // Big Arabic line — this is the centerpiece. RTL, large Cairo.
@@ -1812,6 +1809,49 @@ final class AdaptiveBackgroundView: NSView {
     // full-frame AdaptiveBackgroundView (like the row selection highlight)
     // eats all clicks, making the parent row unclickable.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// Appearance-aware card that remains fully interactive. Unlike
+/// `AdaptiveBackgroundView`, this view participates in hit testing, so it can
+/// safely contain buttons, sliders, popups, and text fields. The colors are
+/// resolved whenever the effective appearance changes instead of caching a
+/// semantic system color's CGColor from whichever mode happened to be active
+/// when the card was created.
+final class AdaptiveCardView: NSView {
+    var cornerRadius: CGFloat = 12 { didSet { needsDisplay = true } }
+    var addsDepth = false { didSet { needsDisplay = true } }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateLayer() {
+        guard let layer else { return }
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        layer.cornerRadius = cornerRadius
+        layer.backgroundColor = isDark
+            ? NSColor(white: 1.0, alpha: 0.075).cgColor
+            : NSColor(white: 1.0, alpha: 0.82).cgColor
+        layer.borderWidth = 0.5
+        layer.borderColor = isDark
+            ? NSColor.white.withAlphaComponent(0.13).cgColor
+            : NSColor.black.withAlphaComponent(0.10).cgColor
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowOpacity = addsDepth ? (isDark ? 0.22 : 0.10) : 0
+        layer.shadowRadius = addsDepth ? 5 : 0
+        layer.shadowOffset = NSSize(width: 0, height: -1)
+        layer.masksToBounds = false
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
 }
 
 class FlippedView: NSView { override var isFlipped: Bool { true } }
@@ -4906,6 +4946,10 @@ final class MainWindow: NSWindow, NSWindowDelegate {
 
 final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
+    private var sectionControl: NSSegmentedControl!
+    private var settingsScrollView: NSScrollView!
+    private var selectedSection = 0
+
     private var languagePopup: NSPopUpButton!
     private var appearanceSeg: NSSegmentedControl!
     private var materialSeg: NSSegmentedControl!
@@ -4935,24 +4979,56 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     override func loadView() {
         let root = NSView()
-        let scroll = NSScrollView()
-        scroll.drawsBackground = false
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        if Localizer.shared.isRTL { scroll.userInterfaceLayoutDirection = .rightToLeft }
+        sectionControl = NSSegmentedControl()
+        sectionControl.segmentCount = 3
+        sectionControl.setLabel(t("settings.tab.appearance"), forSegment: 0)
+        sectionControl.setLabel(t("settings.section.adhan"), forSegment: 1)
+        sectionControl.setLabel(t("settings.section.adhkar"), forSegment: 2)
+        sectionControl.segmentStyle = .texturedRounded
+        sectionControl.selectedSegment = selectedSection
+        sectionControl.target = self
+        sectionControl.action = #selector(settingsSectionChanged(_:))
+        sectionControl.translatesAutoresizingMaskIntoConstraints = false
 
-        let body = FlippedView(frame: NSRect(x: 0, y: 0, width: 960, height: 1200))
-        scroll.documentView = body
-        root.addSubview(scroll)
+        settingsScrollView = NSScrollView()
+        settingsScrollView.drawsBackground = false
+        settingsScrollView.hasVerticalScroller = true
+        settingsScrollView.autohidesScrollers = true
+        settingsScrollView.translatesAutoresizingMaskIntoConstraints = false
+        if Localizer.shared.isRTL {
+            settingsScrollView.userInterfaceLayoutDirection = .rightToLeft
+        }
+
+        root.addSubview(sectionControl)
+        root.addSubview(settingsScrollView)
         NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: root.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sectionControl.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
+            sectionControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            sectionControl.widthAnchor.constraint(equalToConstant: 420),
+            sectionControl.heightAnchor.constraint(equalToConstant: 30),
+
+            settingsScrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            settingsScrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            settingsScrollView.topAnchor.constraint(equalTo: sectionControl.bottomAnchor,
+                                                     constant: 10),
+            settingsScrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         self.view = root
+        rebuildSelectedSection()
+    }
+
+    private func rebuildSelectedSection() {
+        accentSwatches.removeAll()
+        let body = FlippedView(frame: NSRect(x: 0, y: 0, width: 960, height: 620))
+        settingsScrollView.documentView = body
         buildContent(into: body)
+        body.needsDisplay = true
+    }
+
+    @objc private func settingsSectionChanged(_ sender: NSSegmentedControl) {
+        selectedSection = max(0, sender.selectedSegment)
+        rebuildSelectedSection()
+        tabDidActivate()
     }
 
     private func buildContent(into body: FlippedView) {
@@ -4988,12 +5064,9 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
         func beginCard(rows: Int) -> (NSView, CGFloat) {
             let h = CGFloat(rows) * rowH
-            let card = NSView(frame: NSRect(x: cardX, y: y, width: cardW, height: h))
-            card.wantsLayer = true
-            card.layer?.cornerRadius = 12
-            card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-            card.layer?.borderWidth = 0.5
-            card.layer?.borderColor = NSColor.separatorColor.withAlphaComponent(0.35).cgColor
+            let card = AdaptiveCardView(frame: NSRect(x: cardX, y: y,
+                                                       width: cardW, height: h))
+            card.addsDepth = true
             body.addSubview(card)
             rowY = 0
             return (card, h)
@@ -5028,11 +5101,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
         func endCard(_ height: CGFloat) { y += height + 30 }
 
-        // General settings are deliberately shared by prayer times, Adhan,
-        // and Adhkar. There is one language and one visual system everywhere.
-        sectionHeader(t("settings.tab.appearance"),
-                      subtitle: t("adhkar.editor.title") + " · Salat Time")
-        let (generalCard, generalH) = beginCard(rows: 7)
+        if selectedSection == 0 {
+            // General settings are deliberately shared by prayer times,
+            // Adhan, and Adhkar. There is one language and one visual system
+            // everywhere.
+            sectionHeader(t("settings.tab.appearance"),
+                          subtitle: t("adhkar.editor.title") + " · Salat Time")
+            let (generalCard, generalH) = beginCard(rows: 7)
 
         languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
         kSupportedLanguages.forEach { languagePopup.addItem(withTitle: $0.nativeName) }
@@ -5098,11 +5173,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                                     action: #selector(changeMosque(_:)))
         mosqueButton.bezelStyle = .rounded
         addRow(generalCard, label: t("settings.section.mosque"), control: mosqueButton)
-        endCard(generalH)
+            endCard(generalH)
+        }
 
-        // Complete Adhan controls live here as well as in the compact popup.
-        sectionHeader(t("settings.section.adhan"))
-        let (adhanCard, adhanH) = beginCard(rows: 6)
+        if selectedSection == 1 {
+            // Complete Adhan controls live here as well as in the compact popup.
+            sectionHeader(t("settings.section.adhan"))
+            let (adhanCard, adhanH) = beginCard(rows: 6)
         adhanCheck = NSButton(checkboxWithTitle: t("settings.adhan.play"), target: self,
                               action: #selector(adhanEnabledChanged(_:)))
         adhanCheck.state = UserDefaults.standard.bool(forKey: kAdhanEnabled) ? .on : .off
@@ -5144,12 +5221,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         preAdhanPopup.target = self
         preAdhanPopup.action = #selector(preAdhanChanged(_:))
         addRow(adhanCard, label: t("settings.notif.headsup"), control: preAdhanPopup)
-        endCard(adhanH)
+            endCard(adhanH)
+        }
 
-        // Adhkar-specific sound and schedule settings remain adjacent to the
-        // shared/Adhan settings, rather than living in a disconnected panel.
-        sectionHeader(t("settings.section.adhkar"))
-        let (adhkarCard, adhkarH) = beginCard(rows: 6)
+        if selectedSection == 2 {
+            // Adhkar-specific sound and schedule settings share the same
+            // settings window without becoming another long scrolling page.
+            sectionHeader(t("settings.section.adhkar"))
+            let (adhkarCard, adhkarH) = beginCard(rows: 6)
         adhkarAutoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                       target: self,
                                       action: #selector(adhkarAutoPlayChanged(_:)))
@@ -5195,7 +5274,8 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         eveningPopup.target = self
         eveningPopup.action = #selector(eveningAnchorChanged(_:))
         addRow(adhkarCard, label: t("adhkar.settings.evening_anchor"), control: eveningPopup)
-        endCard(adhkarH)
+            endCard(adhkarH)
+        }
 
         let footer = NSTextField(labelWithString: "Salat Time v\(kAppVersion) · Hisn al-Muslim")
         footer.font = Localizer.shared.font(size: 11)
@@ -6176,18 +6256,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // window background so cards stand out.
         // Interactive container: AdaptiveBackgroundView is deliberately
         // hit-test transparent and therefore cannot own these buttons.
-        let card = NSView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        let card = AdaptiveCardView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         card.translatesAutoresizingMaskIntoConstraints = false
-        card.wantsLayer = true
-        card.layer?.cornerRadius = 12
-        card.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
-        card.layer?.borderWidth = 0.5
-        card.layer?.borderColor = NSColor.white.withAlphaComponent(0.1).cgColor
-        // Subtle shadow for depth.
-        card.layer?.shadowOpacity = 0.15
-        card.layer?.shadowRadius = 4
-        card.layer?.shadowOffset = NSSize(width: 0, height: -1)
-        card.layer?.masksToBounds = false
+        card.addsDepth = true
 
         let arabic = NSTextField(wrappingLabelWithString: entry.arabic)
         arabic.font = Localizer.shared.font(size: 18, weight: .medium)
