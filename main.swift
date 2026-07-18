@@ -115,7 +115,7 @@ let kQuranTranslationVisible     = "quranTranslationVisible"
 let kQuranTranslationKey         = "quranTranslationKey"
 let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 
-let kAppVersion          = "3.20.0"
+let kAppVersion          = "3.20.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -13839,6 +13839,8 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     private var settingsScrollView: NSScrollView!
     private var selectedSection: SettingsSection = .general
     private var embeddedMosquePicker: MosquePickerView?
+    private var lastBuiltWidth: CGFloat = 0
+    private var settingsRebuildWorkItem: DispatchWorkItem?
 
     private var languagePopup: NSPopUpButton!
     private var appearanceSeg: NSSegmentedControl!
@@ -13923,7 +13925,8 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         NSLayoutConstraint.activate([
             sectionControl.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
             sectionControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            sectionControl.widthAnchor.constraint(equalToConstant: 600),
+            sectionControl.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor,
+                                                  constant: -40),
             sectionControl.heightAnchor.constraint(equalToConstant: 30),
 
             settingsScrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
@@ -13938,10 +13941,21 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     override func viewDidLayout() {
         super.viewDidLayout()
-        guard let picker = embeddedMosquePicker else { return }
-        let size = settingsScrollView.contentSize
-        picker.frame = NSRect(x: 0, y: 0, width: max(780, size.width),
-                              height: max(470, size.height))
+        if let picker = embeddedMosquePicker {
+            let size = settingsScrollView.contentSize
+            picker.frame = NSRect(x: 0, y: 0, width: max(780, size.width),
+                                  height: max(470, size.height))
+            return
+        }
+        // Keep the grouped cards centered when the window is resized. The
+        // content is frame-based, so a wider clip view needs a rebuild —
+        // debounced so a live resize doesn't rebuild on every tick.
+        guard settingsScrollView != nil,
+              abs(settingsScrollView.contentSize.width - lastBuiltWidth) > 4 else { return }
+        settingsRebuildWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.rebuildSelectedSection() }
+        settingsRebuildWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: work)
     }
 
     private func rebuildSelectedSection() {
@@ -13961,7 +13975,10 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             return
         }
         settingsScrollView.hasVerticalScroller = true
-        let body = FlippedView(frame: NSRect(x: 0, y: 0, width: 960, height: 620))
+        let clipWidth = settingsScrollView.contentSize.width
+        lastBuiltWidth = clipWidth
+        let body = FlippedView(frame: NSRect(x: 0, y: 0,
+                                             width: max(760, clipWidth), height: 620))
         settingsScrollView.documentView = body
         buildContent(into: body)
         body.needsDisplay = true
@@ -13978,13 +13995,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
     private func buildContent(into body: FlippedView) {
         let isRTL = Localizer.shared.isRTL
-        let width: CGFloat = 960
-        let cardX: CGFloat = 140
+        let width: CGFloat = body.frame.width
         let cardW: CGFloat = 680
+        let cardX: CGFloat = max(24, (width - cardW) / 2)
         let rowH: CGFloat = 44
         let labelW: CGFloat = 190
         var y: CGFloat = 26
         var rowY: CGFloat = 0
+        var cardHeight: CGFloat = 0
 
         func sectionHeader(_ title: String, subtitle: String? = nil) {
             let label = NSTextField(labelWithString: title)
@@ -14022,12 +14040,18 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             card.addsDepth = true
             body.addSubview(card)
             rowY = 0
+            cardHeight = h
             return (card, h)
         }
 
+        // The card is a plain (non-flipped) view, so frame math converts each
+        // logical top-down row index into bottom-origin coordinates. Rows now
+        // appear in the same order they are added — previously every card
+        // rendered its rows reversed.
         func addRow(_ card: NSView, label text: String, control: NSView) {
+            let rowBottom = cardHeight - rowY - rowH
             if rowY > 0 {
-                let separator = NSBox(frame: NSRect(x: 14, y: rowY,
+                let separator = NSBox(frame: NSRect(x: 14, y: rowBottom + rowH,
                                                      width: cardW - 28, height: 1))
                 separator.boxType = .separator
                 card.addSubview(separator)
@@ -14044,13 +14068,20 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                 let labelHeight = max(20, localizedTextHeight(text, font: label.font!,
                                                              width: labelW))
                 label.frame = NSRect(x: labelX,
-                                     y: rowY + (rowH - labelHeight) / 2,
+                                     y: rowBottom + (rowH - labelHeight) / 2,
                                      width: labelW, height: labelHeight)
                 card.addSubview(label)
             }
-            let x = text.isEmpty ? 14 : controlX
-            let w = text.isEmpty ? cardW - 28 : controlW
-            control.frame = NSRect(x: x, y: rowY + 8, width: w, height: 28)
+            var x = text.isEmpty ? 14 : controlX
+            var w = text.isEmpty ? cardW - 28 : controlW
+            // A push button stretched across the card reads as a banner, not
+            // a control — give unlabeled action buttons a natural width.
+            if text.isEmpty, let button = control as? NSButton,
+               button.bezelStyle == .rounded {
+                w = 160
+                x = isRTL ? cardW - 14 - w : 14
+            }
+            control.frame = NSRect(x: x, y: rowBottom + 8, width: w, height: 28)
             card.addSubview(control)
             rowY += rowH
         }
@@ -14061,8 +14092,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             // General settings are deliberately shared by prayer times,
             // Adhan, and Adhkar. There is one language and one visual system
             // everywhere.
-            sectionHeader(t("settings.tab.appearance"),
-                          subtitle: t("adhkar.editor.title") + " · Salat Time")
+            sectionHeader(featureText("settings.general"))
             let generalRows = 7 + (Localizer.shared.isArabic ? 1 : 0)
             let (generalCard, generalH) = beginCard(rows: generalRows)
 
@@ -14222,7 +14252,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let adhanTest = NSButton(title: t("adhkar.settings.test"), target: self,
                                  action: #selector(testAdhan(_:)))
         adhanTest.bezelStyle = .rounded
-        addRow(adhanCard, label: t("settings.adhan.sound"), control: adhanTest)
+        addRow(adhanCard, label: "", control: adhanTest)
 
         notificationCheck = NSButton(checkboxWithTitle: t("settings.notif.show"), target: self,
                                      action: #selector(notificationChanged(_:)))
@@ -14292,7 +14322,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let adhkarTest = NSButton(title: t("adhkar.settings.test"), target: self,
                                   action: #selector(testAdhkar(_:)))
         adhkarTest.bezelStyle = .rounded
-        addRow(adhkarCard, label: t("adhkar.settings.sound"), control: adhkarTest)
+        addRow(adhkarCard, label: "", control: adhkarTest)
 
         morningPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         morningPopup.addItems(withTitles: [t("adhkar.editor.schedule.shuruq"),
@@ -16545,9 +16575,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         updateUI()
 
         // TEMP-DEV: auto-open a destination for visual verification.
-        if let destination = ProcessInfo.processInfo.environment["SALAT_OPEN_TAB"],
-           let index = Int(destination) {
-            openMainWindow(selecting: index)
+        if let destination = ProcessInfo.processInfo.environment["SALAT_OPEN_TAB"] {
+            if destination.hasPrefix("settings") {
+                let raw = destination.split(separator: ":").last.flatMap { Int($0) } ?? 0
+                openMainWindow()
+                mainWindow?.showSettingsWindow(section:
+                    SettingsSection(rawValue: raw) ?? .general)
+            } else if let index = Int(destination) {
+                openMainWindow(selecting: index)
+            }
         }
         // TEMP-DEV: self-snapshot the main window then quit.
         if let snapshotPath = ProcessInfo.processInfo.environment["SALAT_SNAPSHOT"] {
