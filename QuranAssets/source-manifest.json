@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "runtimePolicy": "offline-only",
+  "provider": "King Fahd Glorious Qur'an Printing Complex",
+  "providerDeveloperPage": "https://qurancomplex.gov.sa/quran-dev/",
+  "verifiedOn": "2026-07-18",
+  "publisherArchiveIntegrity": [
+    {
+      "archive": "KFGQPC Hafs Uthmanic Data",
+      "publisherUpdate": "13.0",
+      "sha1": "36EA5AB0D7EA1702F17FF43F9B50924CCCD77EBF"
+    },
+    {
+      "archive": "KFGQPC Warsh Uthmanic Data",
+      "publisherUpdate": "6.0",
+      "sha1": "44ECEA8FEB23817FDC01A8EE2162A6A0CF08CAE7"
+    },
+    {
+      "archive": "KFGQPC Muyassar Ghareeb Al-Quran Data",
+      "publisherVersion": "0.1",
+      "sha1": "055A908C6EC7F06912C33BD00920406C665CC5F9"
+    }
+  ],
+  "notes": [
+    "The app renders the publisher PDFs without OCR, page rewriting, or a network fallback.",
+    "The publisher JSON is an accessible verse index and never replaces the canonical Mushaf pages.",
+    "Muyassar Ghareeb v0.1 contains Arabic word meanings for the Hafs reference and is not a full tafsir.",
+    "Full Tafsir Muyassar v3 is intentionally excluded because the obtained file did not match the publisher's published integrity checksum."
+  ],
+  "assets": [
+    {
+      "path": "Hafs/uthmanic_hafs_v2-0.pdf",
+      "role": "canonical-mushaf-pages",
+      "edition": "Hafs",
+      "version": "2.0",
+      "pages": 604,
+      "bytes": 6079669,
+      "sha256": "c0d57c9f193e509272d17b9c5bbd6d6ca8077de15e1de6f775d8c7aca64d6406"
+    },
+    {
+      "path": "Hafs/hafsData_v2-0.json",
+      "role": "verse-index-and-accessible-text",
+      "edition": "Hafs",
+      "version": "2.0",
+      "records": 6236,
+      "bytes": 3594552,
+      "sha256": "d2960b3217962e7e4252abdcece67bea3d6b48271e4cd3af45bbbb2dd5c872ca"
+    },
+    {
+      "path": "Hafs/read.me",
+      "role": "publisher-release-notes",
+      "edition": "Hafs",
+      "version": "2.0",
+      "bytes": 2302,
+      "sha256": "d334f9ad7c70c3a95778509ba7b705b25bcc7a76fea51af135559b93ee60cdb8"
+    },
+    {
+      "path": "Warsh/uthmanic_warsh_v21.pdf",
+      "role": "canonical-mushaf-pages",
+      "edition": "Warsh",
+      "version": "2.1",
+      "pages": 604,
+      "bytes": 6365212,
+      "sha256": "b99cd519590bdc8036e54eae8589857cb4cc9c5dc8f303692de79725d93deb9e"
+    },
+    {
+      "path": "Warsh/warshData_v2-1.json",
+      "role": "verse-index-and-accessible-text",
+      "edition": "Warsh",
+      "version": "2.1",
+      "records": 6214,
+      "bytes": 2764531,
+      "sha256": "c6017e688cc599d88f6fdb1a19cafc9c51d024b3530955f1a878f17d26b9bcbc"
+    },
+    {
+      "path": "Warsh/read.me",
+      "role": "publisher-release-notes",
+      "edition": "Warsh",
+      "version": "2.1",
+      "bytes": 2238,
+      "sha256": "fdd2782afccfabdd380cf0706a0601a09f8d1cc048a7ac5f663b3a4bf59ad36a"
+    },
+    {
+      "path": "MuyassarGhareeb/muyassar_ghareeb_1.json",
+      "role": "arabic-word-meanings",
+      "edition": "Hafs-reference",
+      "version": "0.1",
+      "records": 11384,
+      "bytes": 2472560,
+      "sha256": "aa57282cff9517c8f7b74432b17077f70decb4eb1530ff78d4fb663f435cdc65"
+    },
+    {
+      "path": "MuyassarGhareeb/read.me",
+      "role": "publisher-release-notes",
+      "edition": "Hafs-reference",
+      "version": "0.1",
+      "bytes": 659,
+      "sha256": "565a1d2c610b72b9633dfd7c9e2e161ed0bb03c15a4bc12aee43774d467d8f07"
+    }
+  ]
+}

@@ -21,6 +21,7 @@ swiftc main.swift \
     -o "$MACOS_DIR/$BINARY" \
     -framework Cocoa \
     -framework WebKit \
+    -framework PDFKit \
     -framework AVFoundation \
     -framework CoreLocation \
     -framework UserNotifications \
@@ -39,6 +40,59 @@ rm -rf "$ICONSET"
 
 # Also copy the raw icon for in-app header display
 cp icon.png "$RESOURCES_DIR/icon.png"
+
+# ---------- verified offline Qur'an assets ---------------------------------
+# Canonical KFGQPC Mushaf pages and developer indexes are committed locally.
+# Fail closed if any reviewed byte changes; there is deliberately no build- or
+# runtime-network fallback for Qur'an reading, search, or word meanings.
+echo "Verifying offline Qur'an assets..."
+QURAN_SOURCE_DIR="QuranAssets"
+QURAN_BUNDLE_DIR="$RESOURCES_DIR/Quran"
+
+verify_quran_asset () {
+    local relative_path="$1"
+    local expected_sha256="$2"
+    local source_path="$QURAN_SOURCE_DIR/$relative_path"
+    if [ ! -f "$source_path" ]; then
+        echo "Missing verified Qur'an asset: $source_path" >&2
+        exit 1
+    fi
+    local actual_sha256
+    actual_sha256=$(shasum -a 256 "$source_path" | awk '{print $1}')
+    if [ "$actual_sha256" != "$expected_sha256" ]; then
+        echo "Integrity check failed for Qur'an asset: $relative_path" >&2
+        echo "Expected: $expected_sha256" >&2
+        echo "Actual:   $actual_sha256" >&2
+        exit 1
+    fi
+}
+
+verify_quran_asset "Hafs/hafsData_v2-0.json" \
+    "d2960b3217962e7e4252abdcece67bea3d6b48271e4cd3af45bbbb2dd5c872ca"
+verify_quran_asset "Hafs/read.me" \
+    "d334f9ad7c70c3a95778509ba7b705b25bcc7a76fea51af135559b93ee60cdb8"
+verify_quran_asset "Hafs/uthmanic_hafs_v2-0.pdf" \
+    "c0d57c9f193e509272d17b9c5bbd6d6ca8077de15e1de6f775d8c7aca64d6406"
+verify_quran_asset "Warsh/read.me" \
+    "fdd2782afccfabdd380cf0706a0601a09f8d1cc048a7ac5f663b3a4bf59ad36a"
+verify_quran_asset "Warsh/uthmanic_warsh_v21.pdf" \
+    "b99cd519590bdc8036e54eae8589857cb4cc9c5dc8f303692de79725d93deb9e"
+verify_quran_asset "Warsh/warshData_v2-1.json" \
+    "c6017e688cc599d88f6fdb1a19cafc9c51d024b3530955f1a878f17d26b9bcbc"
+verify_quran_asset "MuyassarGhareeb/muyassar_ghareeb_1.json" \
+    "aa57282cff9517c8f7b74432b17077f70decb4eb1530ff78d4fb663f435cdc65"
+verify_quran_asset "MuyassarGhareeb/read.me" \
+    "565a1d2c610b72b9633dfd7c9e2e161ed0bb03c15a4bc12aee43774d467d8f07"
+verify_quran_asset "source-manifest.json" \
+    "cfe804bfe29f2e636d21718b1742c99587acc8c6ee281a76669e4564a7fab5bf"
+
+mkdir -p "$QURAN_BUNDLE_DIR/Hafs" "$QURAN_BUNDLE_DIR/Warsh" \
+    "$QURAN_BUNDLE_DIR/MuyassarGhareeb"
+cp "$QURAN_SOURCE_DIR/Hafs/"* "$QURAN_BUNDLE_DIR/Hafs/"
+cp "$QURAN_SOURCE_DIR/Warsh/"* "$QURAN_BUNDLE_DIR/Warsh/"
+cp "$QURAN_SOURCE_DIR/MuyassarGhareeb/"* "$QURAN_BUNDLE_DIR/MuyassarGhareeb/"
+cp "$QURAN_SOURCE_DIR/source-manifest.json" "$QURAN_BUNDLE_DIR/source-manifest.json"
+echo "  Hafs + Warsh Mushaf pages and local indexes verified"
 
 # ---------- adhan audio catalog --------------------------------------------
 # 14 hand-picked adhans sourced from assabile.com's curated collection.

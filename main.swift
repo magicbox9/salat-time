@@ -1,6 +1,7 @@
 import Cocoa
 import CoreText
 import WebKit
+import PDFKit
 import AVFoundation
 import CoreAudio
 import CoreLocation
@@ -91,20 +92,21 @@ enum SettingsSection: Int, CaseIterable {
     case adhkar
 }
 
-// --- Qur'an reader ----------------------------------------------------------
-// Canonical reading surfaces are the King Fahd Complex's explicitly
-// embeddable publications. No Qur'an text is generated, OCR'd, transformed,
-// or copied into UserDefaults; local state stores locators only.
-let kQuranEditionKey       = "quranEdition"              // "hafs" | "warsh"
-let kQuranBookmarksKey     = "quranBookmarksJSON_v1"
-let kQuranLastHafsURL      = "quranLastHafsURL"
-let kQuranLastWarshURL     = "quranLastWarshURL"
-let kQuranHafsReaderURL    = "https://qurancomplex.gov.sa/isdarat-hafs/#flipbook-df_11301/1/"
-let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbook-df_11326/1/"
-let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
-let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
+// --- Offline Qur'an reader -------------------------------------------------
+// Canonical KFGQPC pages and verse indexes are immutable bundled resources.
+// UserDefaults stores only edition/page locators and never Qur'an content.
+let kQuranEditionKey             = "quranEdition" // "hafs" | "warsh"
+let kQuranBookmarksKey           = "quranBookmarksJSON_v2"
+let kQuranLegacyBookmarksKey     = "quranBookmarksJSON_v1"
+let kQuranLegacyBookmarksBackup  = "quranBookmarksJSON_v1_backup"
+let kQuranUnsupportedBookmarks   = "quranBookmarksJSON_v1_unsupported"
+let kQuranBookmarkMigrationDone  = "quranBookmarksMigration_v2"
+let kQuranLastHafsPage           = "quranLastHafsPage"
+let kQuranLastWarshPage          = "quranLastWarshPage"
+let kQuranViewMode               = "quranOfflineViewMode"
+let kQuranSidebarVisible         = "quranOfflineSidebarVisible"
 
-let kAppVersion          = "3.16.0"
+let kAppVersion          = "3.17.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2662,144 +2664,144 @@ private let quranTranslationKeys = [
 
 private let quranTranslationRows: [String: [String]] = [
     "en": [
-        "Qur’an", "App destinations", "Official King Fahd Complex reader",
-        "Source and integrity", "Official Moroccan Mushaf",
-        "Open the Ministry of Habous’ official Warsh Mushaf Mohammadi",
-        "Forward", "Search the Qur’an or enter 2:255", "Search",
-        "Tafsir sources", "Official data", "Bookmarks", "Add bookmark",
-        "Remove current bookmark", "Official Mushaf reader",
-        "Enter a verse, for example 2:255", "King Fahd Complex developer data",
-        "Study results use Hafs; the Warsh Mushaf remains separate",
-        "Quran Foundation search and tafsir", "Name this reading place.",
+        "Qur’an", "App destinations", "Bundled King Fahd Complex Mushaf",
+        "Source and integrity", "Offline Warsh Mushaf",
+        "Use the bundled verified Warsh pages",
+        "Next", "Search the Qur’an or enter 2:255", "Search",
+        "Word meanings", "Verified local data", "Bookmarks", "Add bookmark",
+        "Remove current bookmark", "Offline Mushaf reader",
+        "Enter a verse, for example 2:255", "Bundled verse index",
+        "Word meanings follow the Hafs reference and are unavailable in Warsh",
+        "Muyassar Ghareeb word meanings", "Name this reading place.",
         "Reading bookmark", "No bookmarks yet", "Verified Qur’an sources",
-        "Hafs and Warsh pages load unchanged from the King Fahd Complex. Local bookmarks store only their location; no Qur’an text is generated or rewritten.",
-        "Open official source", "Verified content is currently unavailable",
+        "The unchanged Hafs and Warsh pages and verse indexes are bundled from the King Fahd Complex. Reading and search are fully offline; bookmarks store only edition and page.",
+        "Close", "Verified bundled content is unavailable",
     ],
     "fr": [
-        "Coran", "Sections de l’app", "Lecteur officiel du Complexe du roi Fahd",
-        "Source et intégrité", "Mushaf marocain officiel",
-        "Ouvrir le Mushaf Mohammadi officiel en Warsh du ministère des Habous",
+        "Coran", "Sections de l’app", "Mushaf intégré du Complexe du roi Fahd",
+        "Source et intégrité", "Mushaf Warsh hors ligne",
+        "Utiliser les pages Warsh vérifiées intégrées",
         "Suivant", "Rechercher dans le Coran ou saisir 2:255", "Recherche",
-        "Sources de tafsir", "Données officielles", "Signets", "Ajouter un signet",
-        "Supprimer le signet actuel", "Lecteur officiel du Mushaf",
-        "Saisissez un verset, par exemple 2:255", "Données développeur du Complexe du roi Fahd",
-        "L’étude utilise Hafs ; le Mushaf Warsh reste séparé",
-        "Recherche et tafsir de Quran Foundation", "Nommez cet emplacement de lecture.",
+        "Sens des mots", "Données locales vérifiées", "Signets", "Ajouter un signet",
+        "Supprimer le signet actuel", "Lecteur du Mushaf hors ligne",
+        "Saisissez un verset, par exemple 2:255", "Index de versets intégré",
+        "Les sens suivent la référence Hafs et ne sont pas disponibles en Warsh",
+        "Sens des mots Muyassar Ghareeb", "Nommez cet emplacement de lecture.",
         "Signet de lecture", "Aucun signet", "Sources coraniques vérifiées",
-        "Les pages Hafs et Warsh sont chargées sans modification depuis le Complexe du roi Fahd. Les signets ne stockent que l’emplacement ; aucun texte coranique n’est généré ni réécrit.",
-        "Ouvrir la source officielle", "Le contenu vérifié est indisponible pour le moment",
+        "Les pages Hafs et Warsh inchangées et leurs index sont intégrés depuis le Complexe du roi Fahd. Lecture et recherche sont hors ligne ; les signets ne gardent que l’édition et la page.",
+        "Fermer", "Le contenu intégré vérifié est indisponible",
     ],
     "es": [
-        "Corán", "Secciones de la app", "Lector oficial del Complejo Rey Fahd",
-        "Fuente e integridad", "Mushaf marroquí oficial",
-        "Abrir el Mushaf Mohammadi oficial en Warsh del Ministerio de Habices",
-        "Adelante", "Buscar en el Corán o escribir 2:255", "Buscar",
-        "Fuentes de tafsir", "Datos oficiales", "Marcadores", "Añadir marcador",
-        "Quitar marcador actual", "Lector oficial del Mushaf",
-        "Escribe una aleya, por ejemplo 2:255", "Datos para desarrolladores del Complejo Rey Fahd",
-        "El estudio usa Hafs; el Mushaf Warsh permanece separado",
-        "Búsqueda y tafsir de Quran Foundation", "Pon un nombre a este punto de lectura.",
+        "Corán", "Secciones de la app", "Mushaf integrado del Complejo Rey Fahd",
+        "Fuente e integridad", "Mushaf Warsh sin conexión",
+        "Usar las páginas Warsh verificadas integradas",
+        "Siguiente", "Buscar en el Corán o escribir 2:255", "Buscar",
+        "Significados", "Datos locales verificados", "Marcadores", "Añadir marcador",
+        "Quitar marcador actual", "Lector Mushaf sin conexión",
+        "Escribe una aleya, por ejemplo 2:255", "Índice de aleyas integrado",
+        "Los significados siguen la referencia Hafs y no están disponibles en Warsh",
+        "Significados Muyassar Ghareeb", "Pon un nombre a este punto de lectura.",
         "Marcador de lectura", "Aún no hay marcadores", "Fuentes coránicas verificadas",
-        "Las páginas Hafs y Warsh se cargan sin cambios desde el Complejo Rey Fahd. Los marcadores solo guardan la ubicación; ningún texto coránico se genera ni reescribe.",
-        "Abrir fuente oficial", "El contenido verificado no está disponible ahora",
+        "Las páginas Hafs y Warsh sin cambios y sus índices se integran desde el Complejo Rey Fahd. Lectura y búsqueda son locales; los marcadores solo guardan edición y página.",
+        "Cerrar", "El contenido integrado verificado no está disponible",
     ],
     "ar": [
-        "القرآن", "أقسام التطبيق", "قارئ رسمي من مجمع الملك فهد",
-        "المصدر وسلامة المحتوى", "المصحف المغربي الرسمي",
-        "فتح المصحف المحمدي الرسمي برواية ورش لوزارة الأوقاف والشؤون الإسلامية",
+        "القرآن", "أقسام التطبيق", "مصحف مجمع الملك فهد المضمّن",
+        "المصدر وسلامة المحتوى", "مصحف ورش دون اتصال",
+        "استخدام صفحات ورش الموثّقة والمضمّنة",
         "التالي", "ابحث في القرآن أو أدخل 2:255", "بحث",
-        "مصادر التفسير", "البيانات الرسمية", "العلامات المرجعية", "إضافة علامة",
-        "حذف العلامة الحالية", "قارئ المصحف الرسمي",
-        "أدخل آية، مثل 2:255", "بيانات المطورين لمجمع الملك فهد",
-        "نتائج البحث والتفسير برواية حفص، ويظل مصحف ورش مستقلاً",
-        "بحث وتفاسير مؤسسة القرآن", "سمِّ موضع القراءة هذا.",
+        "معاني الكلمات", "بيانات محلية موثّقة", "العلامات المرجعية", "إضافة علامة",
+        "حذف العلامة الحالية", "قارئ المصحف دون اتصال",
+        "أدخل آية، مثل 2:255", "فهرس الآيات المضمّن",
+        "تتبع المعاني مرجع حفص ولا تتاح في مصحف ورش",
+        "معاني ميسّر غريب القرآن", "سمِّ موضع القراءة هذا.",
         "علامة قراءة", "لا توجد علامات بعد", "مصادر قرآن موثّقة",
-        "تُحمَّل صفحات حفص وورش كما هي من مجمع الملك فهد. تحفظ العلامات الموضع فقط، ولا يُولَّد النص القرآني ولا يُعاد تحريره.",
-        "فتح المصدر الرسمي", "المحتوى الموثّق غير متاح حاليًا",
+        "صفحات حفص وورش وفهارس الآيات الموثّقة مضمّنة كما هي من مجمع الملك فهد. القراءة والبحث دون اتصال، وتحفظ العلامات الرواية والصفحة فقط.",
+        "إغلاق", "المحتوى المضمّن الموثّق غير متاح",
     ],
     "zh": [
-        "古兰经", "应用分区", "法赫德国王古兰经印刷院官方阅读器",
-        "来源与完整性", "摩洛哥官方穆斯哈夫",
-        "打开宗教基金部官方 Warsh《穆罕默迪穆斯哈夫》",
-        "前进", "搜索古兰经或输入 2:255", "搜索",
-        "经注来源", "官方数据", "书签", "添加书签",
-        "移除当前书签", "官方穆斯哈夫阅读器",
-        "输入经文，例如 2:255", "法赫德国王印刷院开发者数据",
-        "研读结果使用 Hafs；Warsh 穆斯哈夫保持独立",
-        "Quran Foundation 搜索与经注", "为此阅读位置命名。",
+        "古兰经", "应用分区", "内置法赫德国王印刷院穆斯哈夫",
+        "来源与完整性", "离线 Warsh 穆斯哈夫",
+        "使用内置且已验证的 Warsh 页面",
+        "下一页", "搜索古兰经或输入 2:255", "搜索",
+        "词义", "已验证的本地数据", "书签", "添加书签",
+        "移除当前书签", "离线穆斯哈夫阅读器",
+        "输入经文，例如 2:255", "内置经文索引",
+        "词义以 Hafs 为参考，在 Warsh 中不可用",
+        "Muyassar Ghareeb 词义", "为此阅读位置命名。",
         "阅读书签", "暂无书签", "已验证的古兰经来源",
-        "Hafs 与 Warsh 页面由法赫德国王印刷院原样加载。本地书签只保存位置，不生成或改写任何古兰经文本。",
-        "打开官方来源", "已验证内容暂时不可用",
+        "Hafs 与 Warsh 原始页面及经文索引由法赫德国王印刷院内置提供。阅读和搜索完全离线；书签只保存版本和页码。",
+        "关闭", "已验证的内置内容不可用",
     ],
     "hi": [
-        "क़ुरआन", "ऐप के भाग", "किंग फ़हद कॉम्प्लेक्स का आधिकारिक रीडर",
-        "स्रोत और शुद्धता", "आधिकारिक मोरक्को मुसहफ़",
-        "हबूस मंत्रालय का आधिकारिक वार्श मुसहफ़ मोहम्मदी खोलें",
-        "आगे", "क़ुरआन खोजें या 2:255 लिखें", "खोज",
-        "तफ़सीर स्रोत", "आधिकारिक डेटा", "बुकमार्क", "बुकमार्क जोड़ें",
-        "मौजूदा बुकमार्क हटाएँ", "आधिकारिक मुसहफ़ रीडर",
-        "आयत लिखें, जैसे 2:255", "किंग फ़हद कॉम्प्लेक्स डेवलपर डेटा",
-        "अध्ययन परिणाम हफ़्स में हैं; वार्श मुसहफ़ अलग रहता है",
-        "Quran Foundation खोज और तफ़सीर", "इस पढ़ने की जगह को नाम दें।",
+        "क़ुरआन", "ऐप के भाग", "किंग फ़हद कॉम्प्लेक्स का अंतर्निहित मुसहफ़",
+        "स्रोत और शुद्धता", "ऑफ़लाइन वार्श मुसहफ़",
+        "अंतर्निहित सत्यापित वार्श पृष्ठ उपयोग करें",
+        "अगला", "क़ुरआन खोजें या 2:255 लिखें", "खोज",
+        "शब्दार्थ", "सत्यापित स्थानीय डेटा", "बुकमार्क", "बुकमार्क जोड़ें",
+        "मौजूदा बुकमार्क हटाएँ", "ऑफ़लाइन मुसहफ़ रीडर",
+        "आयत लिखें, जैसे 2:255", "अंतर्निहित आयत सूचकांक",
+        "शब्दार्थ हफ़्स संदर्भ के हैं और वार्श में उपलब्ध नहीं हैं",
+        "मुयस्सर ग़रीब शब्दार्थ", "इस पढ़ने की जगह को नाम दें।",
         "पढ़ने का बुकमार्क", "अभी कोई बुकमार्क नहीं", "सत्यापित क़ुरआन स्रोत",
-        "हफ़्स और वार्श पृष्ठ किंग फ़हद कॉम्प्लेक्स से बिना बदलाव लोड होते हैं। बुकमार्क केवल स्थान रखते हैं; क़ुरआन पाठ बनाया या बदला नहीं जाता।",
-        "आधिकारिक स्रोत खोलें", "सत्यापित सामग्री अभी उपलब्ध नहीं है",
+        "हफ़्स और वार्श के अपरिवर्तित पृष्ठ व सूचकांक किंग फ़हद कॉम्प्लेक्स से अंतर्निहित हैं। पढ़ना और खोज पूरी तरह ऑफ़लाइन हैं; बुकमार्क केवल संस्करण और पृष्ठ रखते हैं।",
+        "बंद करें", "सत्यापित अंतर्निहित सामग्री उपलब्ध नहीं है",
     ],
     "bn": [
-        "কুরআন", "অ্যাপের বিভাগ", "কিং ফাহদ কমপ্লেক্সের সরকারি পাঠক",
-        "উৎস ও অখণ্ডতা", "সরকারি মরক্কোর মুসহাফ",
-        "হাবুস মন্ত্রণালয়ের সরকারি ওয়ারশ মুসহাফ মোহাম্মদি খুলুন",
-        "সামনে", "কুরআনে খুঁজুন বা 2:255 লিখুন", "খোঁজ",
-        "তাফসিরের উৎস", "সরকারি ডেটা", "বুকমার্ক", "বুকমার্ক যোগ করুন",
-        "বর্তমান বুকমার্ক মুছুন", "সরকারি মুসহাফ পাঠক",
-        "আয়াত লিখুন, যেমন 2:255", "কিং ফাহদ কমপ্লেক্স ডেভেলপার ডেটা",
-        "অধ্যয়নের ফল হাফস ব্যবহার করে; ওয়ারশ মুসহাফ আলাদা থাকে",
-        "Quran Foundation খোঁজ ও তাফসির", "এই পড়ার স্থানটির নাম দিন।",
+        "কুরআন", "অ্যাপের বিভাগ", "কিং ফাহদ কমপ্লেক্সের অন্তর্ভুক্ত মুসহাফ",
+        "উৎস ও অখণ্ডতা", "অফলাইন ওয়ারশ মুসহাফ",
+        "অন্তর্ভুক্ত যাচাইকৃত ওয়ারশ পৃষ্ঠা ব্যবহার করুন",
+        "পরের পৃষ্ঠা", "কুরআনে খুঁজুন বা 2:255 লিখুন", "খোঁজ",
+        "শব্দার্থ", "যাচাইকৃত স্থানীয় ডেটা", "বুকমার্ক", "বুকমার্ক যোগ করুন",
+        "বর্তমান বুকমার্ক মুছুন", "অফলাইন মুসহাফ পাঠক",
+        "আয়াত লিখুন, যেমন 2:255", "অন্তর্ভুক্ত আয়াত সূচি",
+        "শব্দার্থ হাফস রেফারেন্স অনুসরণ করে এবং ওয়ারশে পাওয়া যায় না",
+        "মুয়াসসার গরীব শব্দার্থ", "এই পড়ার স্থানটির নাম দিন।",
         "পড়ার বুকমার্ক", "এখনও কোনো বুকমার্ক নেই", "যাচাইকৃত কুরআনের উৎস",
-        "হাফস ও ওয়ারশ পৃষ্ঠা কিং ফাহদ কমপ্লেক্স থেকে অপরিবর্তিতভাবে লোড হয়। বুকমার্ক শুধু অবস্থান রাখে; কুরআনের পাঠ তৈরি বা বদলানো হয় না।",
-        "সরকারি উৎস খুলুন", "যাচাইকৃত বিষয়বস্তু এখন পাওয়া যাচ্ছে না",
+        "হাফস ও ওয়ারশের অপরিবর্তিত পৃষ্ঠা ও সূচি কিং ফাহদ কমপ্লেক্স থেকে অন্তর্ভুক্ত। পড়া ও খোঁজ সম্পূর্ণ অফলাইন; বুকমার্ক শুধু সংস্করণ ও পৃষ্ঠা রাখে।",
+        "বন্ধ করুন", "যাচাইকৃত অন্তর্ভুক্ত বিষয়বস্তু পাওয়া যাচ্ছে না",
     ],
     "ru": [
-        "Коран", "Разделы приложения", "Официальный ридер Комплекса короля Фахда",
-        "Источник и целостность", "Официальный марокканский мусхаф",
-        "Открыть официальный марокканский Мусхаф Мухаммади в чтении Варш",
-        "Вперёд", "Поиск по Корану или ссылка 2:255", "Поиск",
-        "Источники тафсира", "Официальные данные", "Закладки", "Добавить закладку",
-        "Удалить текущую закладку", "Официальный ридер мусхафа",
-        "Введите аят, например 2:255", "Данные для разработчиков Комплекса короля Фахда",
-        "Материалы для изучения используют Хафс; мусхаф Варш остаётся отдельным",
-        "Поиск и тафсиры Quran Foundation", "Назовите это место чтения.",
+        "Коран", "Разделы приложения", "Встроенный мусхаф Комплекса короля Фахда",
+        "Источник и целостность", "Офлайн-мусхаф Варш",
+        "Использовать встроенные проверенные страницы Варш",
+        "Далее", "Поиск по Корану или ссылка 2:255", "Поиск",
+        "Значения слов", "Проверенные локальные данные", "Закладки", "Добавить закладку",
+        "Удалить текущую закладку", "Офлайн-ридер мусхафа",
+        "Введите аят, например 2:255", "Встроенный индекс аятов",
+        "Значения следуют Хафс и недоступны в Варш",
+        "Значения слов Muyassar Ghareeb", "Назовите это место чтения.",
         "Закладка чтения", "Закладок пока нет", "Проверенные источники Корана",
-        "Страницы Хафс и Варш загружаются без изменений из Комплекса короля Фахда. Закладки хранят только позицию; текст Корана не создаётся и не переписывается.",
-        "Открыть официальный источник", "Проверенное содержимое сейчас недоступно",
+        "Неизменённые страницы Хафс и Варш и индексы встроены из Комплекса короля Фахда. Чтение и поиск полностью офлайн; закладки хранят только издание и страницу.",
+        "Закрыть", "Проверенное встроенное содержимое недоступно",
     ],
     "pt": [
-        "Alcorão", "Secções da app", "Leitor oficial do Complexo Rei Fahd",
-        "Fonte e integridade", "Mushaf marroquino oficial",
-        "Abrir o Mushaf Mohammadi oficial em Warsh do Ministério dos Habous",
-        "Avançar", "Pesquisar no Alcorão ou introduzir 2:255", "Pesquisa",
-        "Fontes de tafsir", "Dados oficiais", "Marcadores", "Adicionar marcador",
-        "Remover marcador atual", "Leitor oficial do Mushaf",
-        "Introduza um versículo, por exemplo 2:255", "Dados para programadores do Complexo Rei Fahd",
-        "O estudo usa Hafs; o Mushaf Warsh permanece separado",
-        "Pesquisa e tafsir da Quran Foundation", "Dê um nome a este ponto de leitura.",
+        "Alcorão", "Secções da app", "Mushaf integrado do Complexo Rei Fahd",
+        "Fonte e integridade", "Mushaf Warsh offline",
+        "Usar as páginas Warsh verificadas integradas",
+        "Seguinte", "Pesquisar no Alcorão ou introduzir 2:255", "Pesquisa",
+        "Significados", "Dados locais verificados", "Marcadores", "Adicionar marcador",
+        "Remover marcador atual", "Leitor Mushaf offline",
+        "Introduza um versículo, por exemplo 2:255", "Índice de versículos integrado",
+        "Os significados seguem a referência Hafs e não estão disponíveis em Warsh",
+        "Significados Muyassar Ghareeb", "Dê um nome a este ponto de leitura.",
         "Marcador de leitura", "Ainda não há marcadores", "Fontes do Alcorão verificadas",
-        "As páginas Hafs e Warsh são carregadas sem alterações do Complexo Rei Fahd. Os marcadores guardam apenas a posição; nenhum texto do Alcorão é gerado ou reescrito.",
-        "Abrir fonte oficial", "O conteúdo verificado está indisponível neste momento",
+        "As páginas Hafs e Warsh inalteradas e os índices estão integrados pelo Complexo Rei Fahd. Leitura e pesquisa são offline; os marcadores guardam apenas edição e página.",
+        "Fechar", "O conteúdo integrado verificado está indisponível",
     ],
     "ur": [
-        "قرآن", "ایپ کے حصے", "کنگ فہد کمپلیکس کا سرکاری قاری",
-        "ماخذ اور صحت", "سرکاری مراکشی مصحف",
-        "وزارتِ اوقاف کا سرکاری ورش مصحف محمدی کھولیں",
-        "آگے", "قرآن میں تلاش کریں یا 2:255 لکھیں", "تلاش",
-        "تفاسیر کے ماخذ", "سرکاری ڈیٹا", "بک مارکس", "بک مارک شامل کریں",
-        "موجودہ بک مارک ہٹائیں", "سرکاری مصحف قاری",
-        "آیت لکھیں، مثلاً 2:255", "کنگ فہد کمپلیکس کا ڈویلپر ڈیٹا",
-        "مطالعہ کے نتائج حفص میں ہیں؛ ورش مصحف الگ رہتا ہے",
-        "Quran Foundation تلاش اور تفاسیر", "اس مطالعہ کی جگہ کو نام دیں۔",
+        "قرآن", "ایپ کے حصے", "کنگ فہد کمپلیکس کا شامل مصحف",
+        "ماخذ اور صحت", "آف لائن ورش مصحف",
+        "شامل شدہ تصدیق شدہ ورش صفحات استعمال کریں",
+        "اگلا", "قرآن میں تلاش کریں یا 2:255 لکھیں", "تلاش",
+        "الفاظ کے معنی", "تصدیق شدہ مقامی ڈیٹا", "بک مارکس", "بک مارک شامل کریں",
+        "موجودہ بک مارک ہٹائیں", "آف لائن مصحف قاری",
+        "آیت لکھیں، مثلاً 2:255", "شامل شدہ آیات کا اشاریہ",
+        "معانی حفص کے حوالے کے مطابق ہیں اور ورش میں دستیاب نہیں",
+        "میسر غریب الفاظ کے معنی", "اس مطالعہ کی جگہ کو نام دیں۔",
         "مطالعہ بک مارک", "ابھی کوئی بک مارک نہیں", "تصدیق شدہ قرآنی ماخذ",
-        "حفص اور ورش کے صفحات کنگ فہد کمپلیکس سے بغیر تبدیلی لوڈ ہوتے ہیں۔ بک مارک صرف مقام محفوظ کرتے ہیں؛ قرآنی متن بنایا یا بدلا نہیں جاتا۔",
-        "سرکاری ماخذ کھولیں", "تصدیق شدہ مواد فی الحال دستیاب نہیں",
+        "حفص اور ورش کے اصل صفحات اور اشاریے کنگ فہد کمپلیکس سے شامل ہیں۔ مطالعہ اور تلاش مکمل آف لائن ہیں؛ بک مارکس صرف روایت اور صفحہ محفوظ کرتے ہیں۔",
+        "بند کریں", "تصدیق شدہ شامل مواد دستیاب نہیں",
     ],
 ]
 
@@ -9261,159 +9263,495 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 }
 
 // ============================================================================
-// MARK: Qur'an — verified Hafs/Warsh reader, study, and local reading state
+// MARK: Qur'an — verified offline Hafs/Warsh Mushaf and local reading state
 // ============================================================================
 
-/// Native shell around the King Fahd Complex's official, explicitly
-/// embeddable Mushaf publications. The shell owns navigation and reading
-/// state; canonical Qur'an content remains untouched at its official source.
+private struct OfflineQuranBookmark: Codable {
+    var id: UUID = UUID()
+    var title: String
+    var edition: String
+    var page: Int
+    var createdAt: Date = Date()
+}
+
+private struct OfflineQuranVerse: Decodable {
+    let id: Int
+    let jozz: Int
+    let pageStart: Int
+    let pageEnd: Int
+    let suraNumber: Int
+    let suraNameEnglish: String
+    let suraNameArabic: String
+    let ayahNumber: Int
+    let uthmanicText: String
+    let searchableText: String
+
+    var pageLabel: String {
+        pageStart == pageEnd ? "\(pageStart)" : "\(pageStart)–\(pageEnd)"
+    }
+
+    func appears(on page: Int) -> Bool { (pageStart...pageEnd).contains(page) }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, jozz, page
+        case suraNumber = "sura_no"
+        case suraNameEnglish = "sura_name_en"
+        case suraNameArabic = "sura_name_ar"
+        case ayahNumber = "aya_no"
+        case uthmanicText = "aya_text"
+        case searchableText = "aya_text_emlaey"
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(Int.self, forKey: .id)
+        jozz = try values.decode(Int.self, forKey: .jozz)
+        suraNumber = try values.decode(Int.self, forKey: .suraNumber)
+        suraNameEnglish = try values.decode(String.self, forKey: .suraNameEnglish)
+        suraNameArabic = try values.decode(String.self, forKey: .suraNameArabic)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        ayahNumber = try values.decode(Int.self, forKey: .ayahNumber)
+        uthmanicText = try values.decode(String.self, forKey: .uthmanicText)
+        searchableText = (try? values.decode(String.self, forKey: .searchableText))
+            ?? uthmanicText
+
+        if let number = try? values.decode(Int.self, forKey: .page) {
+            pageStart = number
+            pageEnd = number
+        } else {
+            let raw = (try? values.decode(String.self, forKey: .page)) ?? "1"
+            let pages = raw.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
+            pageStart = pages.first ?? 1
+            pageEnd = pages.dropFirst().first ?? pageStart
+        }
+    }
+}
+
+private struct OfflineQuranWordMeaning: Decodable {
+    let id: Int
+    let page: Int
+    let suraName: String
+    let ayahNumber: Int
+    let word: String
+    let explanation: String
+
+    private enum CodingKeys: String, CodingKey {
+        case id, page
+        case suraName = "sura_name"
+        case ayahNumber = "aya_no"
+        case word = "quranic_words"
+        case explanation
+    }
+}
+
+private let offlineQuranTextKeys = [
+    "offline", "pages", "text", "words", "page", "of", "previous", "next",
+    "zoom.out", "zoom.fit", "zoom.in", "view.continuous", "view.single",
+    "sidebar", "search.loading", "search.none", "search.count",
+    "words.source", "words.none", "resource.missing", "resource.detail",
+    "provenance.detail", "provenance.omitted", "close"
+]
+
+private let offlineQuranTextRows: [String: [String]] = [
+    "en": [
+        "Offline", "Pages", "Text", "Word meanings", "Page", "of", "Previous page",
+        "Next page", "Zoom out", "Fit page", "Zoom in", "Continuous",
+        "Single page", "Show or hide sidebar", "Preparing offline search…",
+        "No matching verses", "%@ results", "Muyassar Ghareeb word meanings · Hafs reference · not a full tafsir",
+        "No word meanings on this page", "Offline Mushaf unavailable",
+        "A verified bundled Qur’an resource is missing or invalid. Rebuild the app to restore it.",
+        "The 604-page Hafs and Warsh Mushafs, verse indexes, and Muyassar Ghareeb word meanings are bundled locally from the King Fahd Complex. Reading, search, bookmarks, and meanings never load a web page.",
+        "Full Tafsir Muyassar v3 is intentionally not bundled because the downloaded file did not match the publisher’s integrity hash.",
+        "Close"
+    ],
+    "fr": [
+        "Hors ligne", "Pages", "Texte", "Sens des mots", "Page", "sur", "Page précédente",
+        "Page suivante", "Réduire", "Ajuster à la page", "Agrandir", "Continu",
+        "Une page", "Afficher ou masquer la barre latérale", "Préparation de la recherche hors ligne…",
+        "Aucun verset correspondant", "%@ résultats", "Sens des mots Muyassar Ghareeb · référence Hafs · pas un tafsir complet",
+        "Aucun sens de mot sur cette page", "Mushaf hors ligne indisponible",
+        "Une ressource coranique vérifiée manque ou est invalide. Recompilez l’app pour la restaurer.",
+        "Les Mushafs Hafs et Warsh de 604 pages, les index de versets et les sens Muyassar Ghareeb sont intégrés depuis le Complexe du roi Fahd. La lecture, la recherche, les signets et les sens ne chargent jamais de page web.",
+        "Le Tafsir Muyassar v3 complet n’est volontairement pas intégré car le fichier téléchargé ne correspondait pas à l’empreinte d’intégrité de l’éditeur.",
+        "Fermer"
+    ],
+    "ar": [
+        "دون اتصال", "الصفحات", "النص", "معاني الكلمات", "الصفحة", "من", "الصفحة السابقة",
+        "الصفحة التالية", "تصغير", "ملاءمة الصفحة", "تكبير", "عرض متواصل",
+        "صفحة واحدة", "إظهار الشريط الجانبي أو إخفاؤه", "جارٍ تجهيز البحث دون اتصال…",
+        "لا توجد آيات مطابقة", "%@ نتيجة", "معاني ميسّر غريب القرآن · مرجع حفص · ليست تفسيرًا كاملًا",
+        "لا توجد معاني كلمات في هذه الصفحة", "المصحف دون اتصال غير متاح",
+        "أحد موارد القرآن الموثّقة المضمّنة مفقود أو غير صالح. أعد بناء التطبيق لاستعادته.",
+        "مصحفا حفص وورش ذوا 604 صفحات وفهارس الآيات ومعاني ميسّر غريب القرآن مضمّنة محليًا من مجمع الملك فهد. لا تحمّل القراءة والبحث والعلامات والمعاني أي صفحة ويب.",
+        "لم يُضمَّن التفسير الميسّر الكامل، الإصدار 3، لأن الملف المنزّل لم يطابق بصمة السلامة المنشورة.",
+        "إغلاق"
+    ],
+    "es": [
+        "Sin conexión", "Páginas", "Texto", "Significados", "Página", "de", "Página anterior",
+        "Página siguiente", "Alejar", "Ajustar página", "Acercar", "Continuo",
+        "Página única", "Mostrar u ocultar la barra lateral", "Preparando la búsqueda local…",
+        "No hay aleyas coincidentes", "%@ resultados", "Significados Muyassar Ghareeb · referencia Hafs · no es un tafsir completo",
+        "No hay significados en esta página", "Mushaf sin conexión no disponible",
+        "Falta un recurso coránico verificado o no es válido. Vuelve a compilar la app para restaurarlo.",
+        "Los Mushafs Hafs y Warsh de 604 páginas, los índices y los significados Muyassar Ghareeb se incluyen localmente desde el Complejo Rey Fahd. La lectura, búsqueda, marcadores y significados nunca cargan una web.",
+        "El Tafsir Muyassar v3 completo no se incluye porque el archivo descargado no coincidía con la huella de integridad publicada.",
+        "Cerrar"
+    ],
+    "zh": [
+        "离线", "页面", "文本", "词义", "第", "共", "上一页", "下一页", "缩小", "适合页面",
+        "放大", "连续", "单页", "显示或隐藏侧边栏", "正在准备离线搜索…", "没有匹配的经文",
+        "%@ 个结果", "Muyassar Ghareeb 词义 · Hafs 参考 · 非完整经注", "本页没有词义",
+        "离线穆斯哈夫不可用", "缺少或损坏了经验证的内置古兰经资源。请重新构建应用以恢复。",
+        "604 页 Hafs 与 Warsh 穆斯哈夫、经文索引和 Muyassar Ghareeb 词义均来自法赫德国王印刷院并内置本地。阅读、搜索、书签和词义不会加载网页。",
+        "未内置完整 Tafsir Muyassar v3，因为下载文件与发布方的完整性哈希不符。", "关闭"
+    ],
+    "hi": [
+        "ऑफ़लाइन", "पृष्ठ", "पाठ", "शब्दार्थ", "पृष्ठ", "में से", "पिछला पृष्ठ", "अगला पृष्ठ",
+        "ज़ूम आउट", "पृष्ठ में फ़िट", "ज़ूम इन", "निरंतर", "एक पृष्ठ", "साइडबार दिखाएँ या छिपाएँ",
+        "ऑफ़लाइन खोज तैयार हो रही है…", "कोई मिलती आयत नहीं", "%@ परिणाम",
+        "मुयस्सर ग़रीब शब्दार्थ · हफ़्स संदर्भ · पूर्ण तफ़सीर नहीं", "इस पृष्ठ पर शब्दार्थ नहीं",
+        "ऑफ़लाइन मुसहफ़ उपलब्ध नहीं", "सत्यापित बंडल क़ुरआन संसाधन गायब या अमान्य है। इसे लौटाने के लिए ऐप फिर बनाएँ।",
+        "604-पृष्ठ हफ़्स व वार्श मुसहफ़, आयत सूचकांक और मुयस्सर ग़रीब शब्दार्थ किंग फ़हद कॉम्प्लेक्स से स्थानीय रूप से शामिल हैं। पढ़ना, खोजना, बुकमार्क और शब्दार्थ कोई वेब पृष्ठ नहीं खोलते।",
+        "पूर्ण तफ़सीर मुयस्सर v3 शामिल नहीं है क्योंकि डाउनलोड फ़ाइल प्रकाशक की अखंडता हैश से मेल नहीं खाई।", "बंद करें"
+    ],
+    "bn": [
+        "অফলাইন", "পৃষ্ঠা", "পাঠ", "শব্দের অর্থ", "পৃষ্ঠা", "এর মধ্যে", "আগের পৃষ্ঠা", "পরের পৃষ্ঠা",
+        "ছোট করুন", "পৃষ্ঠা মানান", "বড় করুন", "ধারাবাহিক", "এক পৃষ্ঠা", "সাইডবার দেখান বা লুকান",
+        "অফলাইন খোঁজ প্রস্তুত হচ্ছে…", "মিল থাকা আয়াত নেই", "%@ ফলাফল",
+        "মুয়াসসার গরীব শব্দার্থ · হাফস রেফারেন্স · পূর্ণ তাফসির নয়", "এই পৃষ্ঠায় শব্দার্থ নেই",
+        "অফলাইন মুসহাফ পাওয়া যায়নি", "যাচাইকৃত অন্তর্ভুক্ত কুরআন রিসোর্স অনুপস্থিত বা অবৈধ। পুনরুদ্ধার করতে অ্যাপটি আবার বিল্ড করুন।",
+        "৬০৪ পৃষ্ঠার হাফস ও ওয়ারশ মুসহাফ, আয়াত সূচি এবং মুয়াসসার গরীব শব্দার্থ কিং ফাহদ কমপ্লেক্স থেকে স্থানীয়ভাবে অন্তর্ভুক্ত। পড়া, খোঁজ, বুকমার্ক ও অর্থ কোনো ওয়েব পৃষ্ঠা লোড করে না।",
+        "সম্পূর্ণ তাফসির মুয়াসসার v3 অন্তর্ভুক্ত নয়, কারণ ডাউনলোড করা ফাইলটি প্রকাশকের অখণ্ডতা হ্যাশের সঙ্গে মেলেনি।", "বন্ধ করুন"
+    ],
+    "ru": [
+        "Офлайн", "Страницы", "Текст", "Значения слов", "Страница", "из", "Предыдущая страница",
+        "Следующая страница", "Уменьшить", "По размеру страницы", "Увеличить", "Непрерывно",
+        "Одна страница", "Показать или скрыть боковую панель", "Подготовка офлайн-поиска…",
+        "Совпадающих аятов нет", "%@ результатов", "Значения слов Muyassar Ghareeb · Хафс · не полный тафсир",
+        "На этой странице нет значений слов", "Офлайн-мусхаф недоступен",
+        "Проверенный встроенный ресурс Корана отсутствует или повреждён. Пересоберите приложение.",
+        "604-страничные мусхафы Хафс и Варш, индексы аятов и значения Muyassar Ghareeb встроены из Комплекса короля Фахда. Чтение, поиск, закладки и значения не загружают веб-страницы.",
+        "Полный Tafsir Muyassar v3 не включён: загруженный файл не совпал с опубликованным хэшем целостности.",
+        "Закрыть"
+    ],
+    "pt": [
+        "Offline", "Páginas", "Texto", "Significados", "Página", "de", "Página anterior",
+        "Página seguinte", "Reduzir", "Ajustar à página", "Ampliar", "Contínuo",
+        "Página única", "Mostrar ou ocultar a barra lateral", "A preparar a pesquisa offline…",
+        "Nenhum versículo correspondente", "%@ resultados", "Significados Muyassar Ghareeb · referência Hafs · não é tafsir completo",
+        "Sem significados nesta página", "Mushaf offline indisponível",
+        "Um recurso verificado do Alcorão está ausente ou inválido. Recompile a app para o restaurar.",
+        "Os Mushafs Hafs e Warsh de 604 páginas, índices e significados Muyassar Ghareeb são incluídos localmente pelo Complexo Rei Fahd. Leitura, pesquisa, marcadores e significados nunca carregam uma página web.",
+        "O Tafsir Muyassar v3 completo não é incluído porque o ficheiro transferido não correspondia ao hash de integridade publicado.",
+        "Fechar"
+    ],
+    "ur": [
+        "آف لائن", "صفحات", "متن", "الفاظ کے معنی", "صفحہ", "میں سے", "پچھلا صفحہ", "اگلا صفحہ",
+        "چھوٹا کریں", "صفحہ فِٹ کریں", "بڑا کریں", "مسلسل", "ایک صفحہ", "سائیڈ بار دکھائیں یا چھپائیں",
+        "آف لائن تلاش تیار ہو رہی ہے…", "کوئی مماثل آیت نہیں", "%@ نتائج",
+        "میسر غریب الفاظ کے معنی · حوالہ حفص · مکمل تفسیر نہیں", "اس صفحے پر الفاظ کے معنی نہیں",
+        "آف لائن مصحف دستیاب نہیں", "تصدیق شدہ شامل قرآنی وسیلہ غائب یا ناقص ہے۔ بحالی کے لیے ایپ دوبارہ بنائیں۔",
+        "604 صفحات کے حفص و ورش مصاحف، آیات کے اشاریے اور میسر غریب کے معانی کنگ فہد کمپلیکس سے مقامی طور پر شامل ہیں۔ مطالعہ، تلاش، بک مارکس اور معانی کوئی ویب صفحہ لوڈ نہیں کرتے۔",
+        "مکمل تفسیر میسر v3 شامل نہیں کیونکہ ڈاؤن لوڈ فائل ناشر کے شائع کردہ سالمیت ہیش سے مماثل نہیں تھی۔", "بند کریں"
+    ]
+]
+
+private func offlineQuranText(_ key: String) -> String {
+    let code = Localizer.shared.current.code
+    let index = offlineQuranTextKeys.firstIndex(of: key)
+    let raw = index.flatMap { offlineQuranTextRows[code]?[$0] }
+        ?? index.flatMap { offlineQuranTextRows["en"]?[$0] }
+        ?? key
+    return applyingArabicDigitPreference(raw, languageCode: code)
+}
+
+private func normalizedQuranSearch(_ value: String) -> String {
+    var folded = value.folding(options: [.diacriticInsensitive, .widthInsensitive,
+                                          .caseInsensitive],
+                               locale: Locale(identifier: "ar"))
+    for (source, target) in [("أ", "ا"), ("إ", "ا"), ("آ", "ا"),
+                             ("ٱ", "ا"), ("ى", "ي"), ("ؤ", "و"),
+                             ("ئ", "ي")] {
+        folded = folded.replacingOccurrences(of: source, with: target)
+    }
+    let filtered = folded.unicodeScalars.filter { scalar in
+        let value = scalar.value
+        if CharacterSet.nonBaseCharacters.contains(scalar) { return false }
+        if (0xFC00...0xFDFF).contains(value) { return false }
+        return true
+    }
+    return String(filtered)
+        .components(separatedBy: .punctuationCharacters).joined(separator: " ")
+        .components(separatedBy: .whitespacesAndNewlines)
+        .filter { !$0.isEmpty }.joined(separator: " ")
+}
+
+private func westernQuranDigits(_ value: String) -> String {
+    let from = Array("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹")
+    let to = Array("01234567890123456789")
+    let map = Dictionary(uniqueKeysWithValues: zip(from, to))
+    return String(value.map { map[$0] ?? $0 })
+}
+
+private func parseQuranReference(_ raw: String) -> (sura: Int, ayah: Int)? {
+    var value = westernQuranDigits(raw).trimmingCharacters(in: .whitespacesAndNewlines)
+    for separator in ["：", "/", "،", "٫"] {
+        value = value.replacingOccurrences(of: separator, with: ":")
+    }
+    let parts = value.split(separator: ":", omittingEmptySubsequences: true)
+    guard parts.count == 2,
+          let sura = Int(parts[0].trimmingCharacters(in: .whitespaces)),
+          let ayah = Int(parts[1].trimmingCharacters(in: .whitespaces)),
+          (1...114).contains(sura), ayah > 0 else { return nil }
+    return (sura, ayah)
+}
+
+/// Native, fully offline reader for the verified KFGQPC 604-page PDF assets.
+/// No URL request, web view, fallback page, or external-open action exists in
+/// this controller.
 final class QuranViewController: NSViewController, MainTabContent,
-                                 WKNavigationDelegate, NSSearchFieldDelegate {
+                                             NSSearchFieldDelegate,
+                                             NSTableViewDataSource,
+                                             NSTableViewDelegate {
     private var editionControl: NSSegmentedControl!
     private var sourceLabel: NSTextField!
     private var searchField: NSSearchField!
-    private var studyPopup: NSPopUpButton!
-    private var webView: WKWebView!
-    private var progress: NSProgressIndicator!
-    private var backButton: HoverIconButton!
-    private var forwardButton: HoverIconButton!
-    private var bookmarkButton: HoverIconButton!
+    private var pageField: NSTextField!
+    private var pageStepper: NSStepper!
+    private var displayPopup: NSPopUpButton!
+    private var previousButton: HoverIconButton!
+    private var nextButton: HoverIconButton!
     private var removeBookmarkButton: HoverIconButton!
+    private var sidebar: NSVisualEffectView!
+    private var sidebarWidth: NSLayoutConstraint!
+    private var sidebarMode: NSSegmentedControl!
+    private var sidebarStatus: NSTextField!
+    private var pdfView: PDFView!
+    private var thumbnailView: PDFThumbnailView!
+    private var searchTable: NSTableView!
+    private var searchScroll: NSScrollView!
+    private var pageTextTable: NSTableView!
+    private var pageTextScroll: NSScrollView!
+    private var wordTable: NSTableView!
+    private var wordScroll: NSScrollView!
     private var unavailableOverlay: NSVisualEffectView!
-    private var unavailableHint: NSTextField!
-    private var fallbackButton: NSButton!
-    private var loadWatchdog: Timer?
+    private var unavailableDetail: NSTextField!
+
+    private var verses: [OfflineQuranVerse] = []
+    private var searchResults: [OfflineQuranVerse] = []
+    private var currentPageVerses: [OfflineQuranVerse] = []
+    private var searchMatchCount = 0
+    private var meanings: [OfflineQuranWordMeaning] = []
+    private var visibleMeanings: [OfflineQuranWordMeaning] = []
+    private var selectedReference: OfflineQuranVerse?
+    private var dataGeneration = UUID()
+    private var isSearchReady = false
+    private var isMeaningsReady = false
+    private var loadedEdition = "hafs"
+    private var suppressPagePersistence = false
+    private var isLoadingEdition = false
 
     private var edition: String {
         editionControl?.selectedSegment == 1 ? "warsh" : "hafs"
     }
 
-    deinit { loadWatchdog?.invalidate() }
+    private var currentPageNumber: Int {
+        guard let document = pdfView?.document,
+              let page = pdfView?.currentPage else { return 1 }
+        return document.index(for: page) + 1
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
 
     override func loadView() {
         let root = NSView()
-        let direction: NSUserInterfaceLayoutDirection = Localizer.shared.isRTL
+        root.userInterfaceLayoutDirection = Localizer.shared.isRTL
             ? .rightToLeft : .leftToRight
-        root.userInterfaceLayoutDirection = direction
 
-        let controlBar = NSVisualEffectView()
-        controlBar.material = .headerView
-        controlBar.blendingMode = .withinWindow
-        controlBar.state = .active
-        controlBar.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.userInterfaceLayoutDirection = direction
-        root.addSubview(controlBar)
+        let header = NSVisualEffectView()
+        header.material = .headerView
+        header.blendingMode = .withinWindow
+        header.state = .active
+        header.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(header)
 
-        editionControl = NSSegmentedControl(
-            labels: ["Hafs · حفص", "Warsh · ورش"],
-            trackingMode: .selectOne, target: self,
-            action: #selector(editionChanged(_:)))
+        let hafsLabel = "\u{2066}Hafs\u{2069} · \u{2067}حفص\u{2069}"
+        let warshLabel = "\u{2066}Warsh\u{2069} · \u{2067}ورش\u{2069}"
+        editionControl = NSSegmentedControl(labels: [hafsLabel, warshLabel],
+                                             trackingMode: .selectOne,
+                                             target: self,
+                                             action: #selector(editionChanged(_:)))
         editionControl.segmentStyle = .texturedRounded
         editionControl.selectedSegment = (UserDefaults.standard.string(forKey: kQuranEditionKey)
                                            ?? "hafs") == "warsh" ? 1 : 0
-        editionControl.userInterfaceLayoutDirection = direction
-        editionControl.translatesAutoresizingMaskIntoConstraints = false
         editionControl.setAccessibilityLabel(featureText("quran.tab"))
-        controlBar.addSubview(editionControl)
+        editionControl.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(editionControl)
 
-        sourceLabel = NSTextField(labelWithString: featureText("quran.source.kfgqpc"))
+        sourceLabel = NSTextField(labelWithString: "")
         sourceLabel.font = Localizer.shared.font(size: 11.5, weight: .medium)
         sourceLabel.textColor = .secondaryLabelColor
         sourceLabel.lineBreakMode = .byTruncatingTail
         sourceLabel.alignment = Localizer.shared.leadingAlignment
         sourceLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         sourceLabel.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.addSubview(sourceLabel)
+        header.addSubview(sourceLabel)
 
-        progress = NSProgressIndicator()
-        progress.style = .spinning
-        progress.controlSize = .small
-        progress.isDisplayedWhenStopped = false
-        progress.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.addSubview(progress)
-
-        let sourceButton = HoverIconButton(symbol: "checkmark.shield.fill",
+        let provenanceButton = HoverIconButton(symbol: "checkmark.shield.fill",
             toolTip: featureText("quran.provenance"), target: self,
             action: #selector(showProvenance), pointSize: 14,
-            size: NSSize(width: 38, height: 30))
-        sourceButton.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.addSubview(sourceButton)
-
-        let moroccanButton = NSButton(title: featureText("quran.official_moroccan"),
-                                      target: self,
-                                      action: #selector(openMoroccanMushaf))
-        moroccanButton.bezelStyle = .rounded
-        moroccanButton.image = templateSymbol("safari.fill", pointSize: 12)
-        moroccanButton.imagePosition = Localizer.shared.isRTL ? .imageRight : .imageLeft
-        moroccanButton.toolTip = featureText("quran.official_moroccan.help")
-        moroccanButton.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.addSubview(moroccanButton)
-
-        backButton = HoverIconButton(symbol: backChevronSymbol,
-            toolTip: t("tooltip.back"), target: self,
-            action: #selector(goBack), pointSize: 13,
-            size: NSSize(width: 34, height: 28))
-        forwardButton = HoverIconButton(symbol: Localizer.shared.isRTL
-                                            ? "chevron.left" : "chevron.right",
-            toolTip: featureText("quran.forward"), target: self,
-            action: #selector(goForward), pointSize: 13,
-            size: NSSize(width: 34, height: 28))
-        let reloadButton = HoverIconButton(symbol: "arrow.clockwise",
-            toolTip: t("tooltip.refresh"), target: self,
-            action: #selector(reloadReader), pointSize: 13,
-            size: NSSize(width: 34, height: 28))
-        for button in [backButton!, forwardButton!, reloadButton] {
+            size: NSSize(width: 44, height: 44))
+        let bookmarkButton = HoverIconButton(symbol: "bookmark.fill",
+            toolTip: featureText("quran.bookmarks"), target: self,
+            action: #selector(showBookmarks(_:)), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        let addBookmarkButton = HoverIconButton(symbol: "bookmark.badge.plus",
+            toolTip: featureText("quran.bookmark.add"), target: self,
+            action: #selector(addBookmark), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        removeBookmarkButton = HoverIconButton(symbol: "bookmark.slash",
+            toolTip: featureText("quran.bookmark.remove"), target: self,
+            action: #selector(removeCurrentBookmark), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        for button in [provenanceButton, bookmarkButton, addBookmarkButton,
+                       removeBookmarkButton!] {
             button.translatesAutoresizingMaskIntoConstraints = false
-            controlBar.addSubview(button)
+            header.addSubview(button)
         }
+
+        let sidebarButton = HoverIconButton(symbol: Localizer.shared.isRTL
+                                                ? "sidebar.right" : "sidebar.left",
+            toolTip: offlineQuranText("sidebar"), target: self,
+            action: #selector(toggleSidebar), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        previousButton = HoverIconButton(
+            symbol: Localizer.shared.isRTL ? "chevron.right" : "chevron.left",
+            toolTip: offlineQuranText("previous"), target: self,
+            action: #selector(previousPage), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        nextButton = HoverIconButton(
+            symbol: Localizer.shared.isRTL ? "chevron.left" : "chevron.right",
+            toolTip: offlineQuranText("next"), target: self,
+            action: #selector(nextPage), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        for button in [sidebarButton, previousButton!, nextButton!] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            header.addSubview(button)
+        }
+
+        pageField = NSTextField()
+        pageField.alignment = .center
+        pageField.font = NSFont.monospacedDigitSystemFont(ofSize: 12.5, weight: .medium)
+        pageField.target = self
+        pageField.action = #selector(jumpToPage)
+        pageField.setAccessibilityLabel(offlineQuranText("page"))
+        pageField.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(pageField)
+
+        pageStepper = NSStepper()
+        pageStepper.minValue = 1
+        pageStepper.maxValue = 604
+        pageStepper.increment = 1
+        pageStepper.valueWraps = false
+        pageStepper.target = self
+        pageStepper.action = #selector(stepPage(_:))
+        pageStepper.setAccessibilityLabel(offlineQuranText("page"))
+        pageStepper.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(pageStepper)
+
+        let zoomOut = HoverIconButton(symbol: "minus.magnifyingglass",
+            toolTip: offlineQuranText("zoom.out"), target: self,
+            action: #selector(zoomOut), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        let fitPage = HoverIconButton(symbol: "arrow.up.left.and.arrow.down.right",
+            toolTip: offlineQuranText("zoom.fit"), target: self,
+            action: #selector(fitPage), pointSize: 12,
+            size: NSSize(width: 44, height: 44))
+        let zoomIn = HoverIconButton(symbol: "plus.magnifyingglass",
+            toolTip: offlineQuranText("zoom.in"), target: self,
+            action: #selector(zoomIn), pointSize: 13,
+            size: NSSize(width: 44, height: 44))
+        for button in [zoomOut, fitPage, zoomIn] {
+            button.translatesAutoresizingMaskIntoConstraints = false
+            header.addSubview(button)
+        }
+
+        displayPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        displayPopup.addItems(withTitles: [offlineQuranText("view.continuous"),
+                                           offlineQuranText("view.single")])
+        displayPopup.target = self
+        displayPopup.action = #selector(displayModeChanged(_:))
+        displayPopup.setAccessibilityLabel(featureText("quran.reader"))
+        displayPopup.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(displayPopup)
 
         searchField = NSSearchField()
         searchField.placeholderString = featureText("quran.search.placeholder")
         searchField.font = Localizer.shared.font(size: 12.5)
         searchField.target = self
-        searchField.action = #selector(runStudySearch)
+        searchField.action = #selector(runSearch)
         searchField.delegate = self
-        searchField.userInterfaceLayoutDirection = direction
+        searchField.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
         searchField.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.addSubview(searchField)
+        header.addSubview(searchField)
 
-        studyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        studyPopup.addItems(withTitles: [featureText("quran.study.search"),
-                                         "Tafsir · Ibn Kathir (العربية)",
-                                         "Tafsir · Al-Sa’di (العربية)",
-                                         "Tafsir · Ma’arif al-Qur’an (English)",
-                                         featureText("quran.study.official_source")])
-        studyPopup.target = self
-        studyPopup.action = #selector(studyModeChanged(_:))
-        studyPopup.userInterfaceLayoutDirection = direction
-        studyPopup.translatesAutoresizingMaskIntoConstraints = false
-        controlBar.addSubview(studyPopup)
+        sidebar = NSVisualEffectView()
+        sidebar.material = .sidebar
+        sidebar.blendingMode = .withinWindow
+        sidebar.state = .active
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(sidebar)
 
-        bookmarkButton = HoverIconButton(symbol: "bookmark.fill",
-            toolTip: featureText("quran.bookmarks"), target: self,
-            action: #selector(showBookmarks(_:)), pointSize: 13,
-            size: NSSize(width: 36, height: 28))
-        let addBookmarkButton = HoverIconButton(symbol: "bookmark.badge.plus",
-            toolTip: featureText("quran.bookmark.add"), target: self,
-            action: #selector(addBookmark), pointSize: 13,
-            size: NSSize(width: 36, height: 28))
-        removeBookmarkButton = HoverIconButton(symbol: "bookmark.slash",
-            toolTip: featureText("quran.bookmark.remove"), target: self,
-            action: #selector(removeCurrentBookmark), pointSize: 13,
-            size: NSSize(width: 36, height: 28))
-        for button in [bookmarkButton!, addBookmarkButton, removeBookmarkButton!] {
-            button.translatesAutoresizingMaskIntoConstraints = false
-            controlBar.addSubview(button)
+        sidebarMode = NSSegmentedControl(labels: [offlineQuranText("pages"),
+                                                   featureText("quran.study.search"),
+                                                   offlineQuranText("text"),
+                                                   offlineQuranText("words")],
+                                                trackingMode: .selectOne,
+                                                target: self,
+                                                action: #selector(sidebarModeChanged(_:)))
+        sidebarMode.segmentStyle = .texturedRounded
+        sidebarMode.selectedSegment = 0
+        sidebarMode.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(sidebarMode)
+
+        sidebarStatus = NSTextField(wrappingLabelWithString: "")
+        sidebarStatus.font = Localizer.shared.font(size: 10.5, weight: .medium)
+        sidebarStatus.textColor = .secondaryLabelColor
+        sidebarStatus.alignment = .center
+        sidebarStatus.maximumNumberOfLines = 2
+        sidebarStatus.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        sidebarStatus.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(sidebarStatus)
+
+        pdfView = PDFView()
+        pdfView.autoScales = true
+        pdfView.displayMode = .singlePageContinuous
+        pdfView.displayDirection = .vertical
+        pdfView.displaysPageBreaks = true
+        pdfView.pageShadowsEnabled = true
+        pdfView.backgroundColor = .windowBackgroundColor
+        pdfView.minScaleFactor = 0.2
+        pdfView.maxScaleFactor = 5
+        pdfView.setAccessibilityLabel(featureText("quran.reader"))
+        pdfView.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(pdfView)
+
+        thumbnailView = PDFThumbnailView()
+        thumbnailView.thumbnailSize = NSSize(width: 110, height: 154)
+        thumbnailView.pdfView = pdfView
+        thumbnailView.setAccessibilityLabel(offlineQuranText("pages"))
+        thumbnailView.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(thumbnailView)
+
+        (searchScroll, searchTable) = makeTable(accessibilityLabel: featureText("quran.study.search"))
+        (pageTextScroll, pageTextTable) = makeTable(accessibilityLabel: offlineQuranText("text"))
+        (wordScroll, wordTable) = makeTable(accessibilityLabel: offlineQuranText("words"))
+        for scroll in [searchScroll!, pageTextScroll!, wordScroll!] {
+            scroll.translatesAutoresizingMaskIntoConstraints = false
+            sidebar.addSubview(scroll)
         }
-
-        let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
-        webView = WKWebView(frame: .zero, configuration: configuration)
-        webView.navigationDelegate = self
-        webView.allowsMagnification = true
-        webView.translatesAutoresizingMaskIntoConstraints = false
-        webView.setAccessibilityLabel(featureText("quran.reader"))
-        root.addSubview(webView)
 
         let separator = NSBox()
         separator.boxType = .separator
@@ -9426,341 +9764,754 @@ final class QuranViewController: NSViewController, MainTabContent,
         unavailableOverlay.state = .active
         unavailableOverlay.wantsLayer = true
         unavailableOverlay.layer?.cornerRadius = 16
-        unavailableOverlay.translatesAutoresizingMaskIntoConstraints = false
         unavailableOverlay.isHidden = true
         unavailableOverlay.setAccessibilityElement(true)
         unavailableOverlay.setAccessibilityRole(.group)
-        unavailableOverlay.setAccessibilityLabel(featureText("quran.unavailable"))
+        unavailableOverlay.setAccessibilityLabel(offlineQuranText("resource.missing"))
+        unavailableOverlay.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(unavailableOverlay)
 
-        let unavailableTitle = NSTextField(labelWithString: featureText("quran.unavailable"))
+        let unavailableTitle = NSTextField(labelWithString: offlineQuranText("resource.missing"))
         unavailableTitle.font = Localizer.shared.font(size: 20, weight: .semibold)
         unavailableTitle.alignment = .center
-        unavailableTitle.translatesAutoresizingMaskIntoConstraints = false
-
-        unavailableHint = NSTextField(wrappingLabelWithString: featureText("quran.study.hafs_only"))
-        unavailableHint.font = Localizer.shared.font(size: 12.5)
-        unavailableHint.textColor = .secondaryLabelColor
-        unavailableHint.alignment = .center
-        unavailableHint.maximumNumberOfLines = 3
-        unavailableHint.translatesAutoresizingMaskIntoConstraints = false
-
-        let retryButton = NSButton(title: t("tooltip.refresh"), target: self,
-                                   action: #selector(retryOfficialReader))
-        retryButton.bezelStyle = .rounded
-        let officialButton = NSButton(title: featureText("quran.provenance.open"),
-                                      target: self,
-                                      action: #selector(openOfficialReaderExternally))
-        officialButton.bezelStyle = .rounded
-        fallbackButton = NSButton(title: featureText("quran.source.foundation"),
-                                  target: self,
-                                  action: #selector(openReaderFallback))
-        fallbackButton.bezelStyle = .rounded
-        fallbackButton.keyEquivalent = "\r"
-
-        let unavailableActions = NSStackView(views: [retryButton, officialButton,
-                                                      fallbackButton])
-        unavailableActions.orientation = .horizontal
-        unavailableActions.alignment = .centerY
-        unavailableActions.distribution = .fillEqually
-        unavailableActions.spacing = 8
-        unavailableActions.userInterfaceLayoutDirection = direction
-        unavailableActions.translatesAutoresizingMaskIntoConstraints = false
-
-        let unavailableStack = NSStackView(views: [unavailableTitle, unavailableHint,
-                                                    unavailableActions])
+        unavailableDetail = NSTextField(wrappingLabelWithString: offlineQuranText("resource.detail"))
+        unavailableDetail.font = Localizer.shared.font(size: 12.5)
+        unavailableDetail.textColor = .secondaryLabelColor
+        unavailableDetail.alignment = .center
+        unavailableDetail.maximumNumberOfLines = 4
+        let unavailableStack = NSStackView(views: [unavailableTitle, unavailableDetail])
         unavailableStack.orientation = .vertical
         unavailableStack.alignment = .centerX
-        unavailableStack.spacing = 14
-        unavailableStack.edgeInsets = NSEdgeInsets(top: 22, left: 22,
-                                                    bottom: 22, right: 22)
-        unavailableStack.userInterfaceLayoutDirection = direction
+        unavailableStack.spacing = 10
+        unavailableStack.edgeInsets = NSEdgeInsets(top: 22, left: 22, bottom: 22, right: 22)
         unavailableStack.translatesAutoresizingMaskIntoConstraints = false
         unavailableOverlay.addSubview(unavailableStack)
 
+        sidebarWidth = sidebar.widthAnchor.constraint(equalToConstant:
+            UserDefaults.standard.object(forKey: kQuranSidebarVisible) == nil
+                || UserDefaults.standard.bool(forKey: kQuranSidebarVisible) ? 292 : 0)
+
         NSLayoutConstraint.activate([
-            controlBar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            controlBar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            controlBar.topAnchor.constraint(equalTo: root.topAnchor),
-            controlBar.heightAnchor.constraint(equalToConstant: 94),
+            header.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            header.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            header.topAnchor.constraint(equalTo: root.topAnchor),
+            header.heightAnchor.constraint(equalToConstant: 112),
 
-            editionControl.leadingAnchor.constraint(equalTo: controlBar.leadingAnchor,
-                                                     constant: 20),
-            editionControl.topAnchor.constraint(equalTo: controlBar.topAnchor, constant: 12),
-            editionControl.widthAnchor.constraint(equalToConstant: 260),
-            editionControl.heightAnchor.constraint(equalToConstant: 28),
-
-            sourceLabel.leadingAnchor.constraint(equalTo: editionControl.trailingAnchor,
-                                                  constant: 12),
+            editionControl.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 20),
+            editionControl.topAnchor.constraint(equalTo: header.topAnchor, constant: 6),
+            editionControl.widthAnchor.constraint(equalToConstant: 220),
+            editionControl.heightAnchor.constraint(equalToConstant: 44),
+            sourceLabel.leadingAnchor.constraint(equalTo: editionControl.trailingAnchor, constant: 12),
             sourceLabel.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
-            progress.leadingAnchor.constraint(equalTo: sourceLabel.trailingAnchor, constant: 7),
-            progress.centerYAnchor.constraint(equalTo: sourceLabel.centerYAnchor),
-            progress.widthAnchor.constraint(equalToConstant: 16),
-            progress.heightAnchor.constraint(equalToConstant: 16),
-
-            sourceButton.trailingAnchor.constraint(equalTo: moroccanButton.leadingAnchor,
-                                                     constant: -8),
-            sourceButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
-            sourceButton.widthAnchor.constraint(equalToConstant: 38),
-            sourceButton.heightAnchor.constraint(equalToConstant: 30),
-            moroccanButton.trailingAnchor.constraint(equalTo: controlBar.trailingAnchor,
-                                                      constant: -20),
-            moroccanButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
-            moroccanButton.widthAnchor.constraint(equalToConstant: 180),
-            sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: sourceButton.leadingAnchor,
+            sourceLabel.trailingAnchor.constraint(lessThanOrEqualTo: provenanceButton.leadingAnchor,
                                                    constant: -8),
-
-            backButton.leadingAnchor.constraint(equalTo: controlBar.leadingAnchor, constant: 20),
-            backButton.topAnchor.constraint(equalTo: controlBar.topAnchor, constant: 54),
-            backButton.widthAnchor.constraint(equalToConstant: 34),
-            backButton.heightAnchor.constraint(equalToConstant: 28),
-            forwardButton.leadingAnchor.constraint(equalTo: backButton.trailingAnchor, constant: 2),
-            forwardButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            forwardButton.widthAnchor.constraint(equalToConstant: 34),
-            forwardButton.heightAnchor.constraint(equalToConstant: 28),
-            reloadButton.leadingAnchor.constraint(equalTo: forwardButton.trailingAnchor, constant: 2),
-            reloadButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            reloadButton.widthAnchor.constraint(equalToConstant: 34),
-            reloadButton.heightAnchor.constraint(equalToConstant: 28),
-
-            searchField.leadingAnchor.constraint(equalTo: reloadButton.trailingAnchor, constant: 10),
-            searchField.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            searchField.heightAnchor.constraint(equalToConstant: 28),
-            studyPopup.leadingAnchor.constraint(equalTo: searchField.trailingAnchor, constant: 8),
-            studyPopup.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            studyPopup.widthAnchor.constraint(equalToConstant: 230),
-            studyPopup.heightAnchor.constraint(equalToConstant: 28),
-            bookmarkButton.leadingAnchor.constraint(equalTo: studyPopup.trailingAnchor, constant: 8),
-            bookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            bookmarkButton.widthAnchor.constraint(equalToConstant: 36),
-            bookmarkButton.heightAnchor.constraint(equalToConstant: 28),
-            addBookmarkButton.leadingAnchor.constraint(equalTo: bookmarkButton.trailingAnchor,
-                                                        constant: 2),
-            addBookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            addBookmarkButton.widthAnchor.constraint(equalToConstant: 36),
-            addBookmarkButton.heightAnchor.constraint(equalToConstant: 28),
-            removeBookmarkButton.leadingAnchor.constraint(equalTo: addBookmarkButton.trailingAnchor,
-                                                           constant: 2),
-            removeBookmarkButton.trailingAnchor.constraint(equalTo: controlBar.trailingAnchor,
+            provenanceButton.trailingAnchor.constraint(equalTo: bookmarkButton.leadingAnchor,
+                                                        constant: -4),
+            provenanceButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            provenanceButton.widthAnchor.constraint(equalToConstant: 44),
+            provenanceButton.heightAnchor.constraint(equalToConstant: 44),
+            bookmarkButton.trailingAnchor.constraint(equalTo: addBookmarkButton.leadingAnchor,
+                                                      constant: -2),
+            bookmarkButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            bookmarkButton.widthAnchor.constraint(equalToConstant: 44),
+            bookmarkButton.heightAnchor.constraint(equalToConstant: 44),
+            addBookmarkButton.trailingAnchor.constraint(equalTo: removeBookmarkButton.leadingAnchor,
+                                                         constant: -2),
+            addBookmarkButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            addBookmarkButton.widthAnchor.constraint(equalToConstant: 44),
+            addBookmarkButton.heightAnchor.constraint(equalToConstant: 44),
+            removeBookmarkButton.trailingAnchor.constraint(equalTo: header.trailingAnchor,
                                                             constant: -20),
-            removeBookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            removeBookmarkButton.widthAnchor.constraint(equalToConstant: 36),
-            removeBookmarkButton.heightAnchor.constraint(equalToConstant: 28),
+            removeBookmarkButton.centerYAnchor.constraint(equalTo: editionControl.centerYAnchor),
+            removeBookmarkButton.widthAnchor.constraint(equalToConstant: 44),
+            removeBookmarkButton.heightAnchor.constraint(equalToConstant: 44),
 
-            separator.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            separator.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            separator.topAnchor.constraint(equalTo: controlBar.bottomAnchor),
-            separator.heightAnchor.constraint(equalToConstant: 1),
-            webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            webView.topAnchor.constraint(equalTo: separator.bottomAnchor),
-            webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sidebarButton.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 20),
+            sidebarButton.topAnchor.constraint(equalTo: header.topAnchor, constant: 62),
+            sidebarButton.widthAnchor.constraint(equalToConstant: 44),
+            sidebarButton.heightAnchor.constraint(equalToConstant: 44),
+            previousButton.leadingAnchor.constraint(equalTo: sidebarButton.trailingAnchor, constant: 8),
+            previousButton.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            previousButton.widthAnchor.constraint(equalToConstant: 44),
+            previousButton.heightAnchor.constraint(equalToConstant: 44),
+            nextButton.leadingAnchor.constraint(equalTo: previousButton.trailingAnchor, constant: 2),
+            nextButton.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            nextButton.widthAnchor.constraint(equalToConstant: 44),
+            nextButton.heightAnchor.constraint(equalToConstant: 44),
+            pageField.leadingAnchor.constraint(equalTo: nextButton.trailingAnchor, constant: 8),
+            pageField.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            pageField.widthAnchor.constraint(equalToConstant: 74),
+            pageField.heightAnchor.constraint(equalToConstant: 44),
+            pageStepper.leadingAnchor.constraint(equalTo: pageField.trailingAnchor, constant: 2),
+            pageStepper.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            pageStepper.widthAnchor.constraint(equalToConstant: 44),
+            pageStepper.heightAnchor.constraint(equalToConstant: 44),
+            zoomOut.leadingAnchor.constraint(equalTo: pageStepper.trailingAnchor, constant: 8),
+            zoomOut.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            zoomOut.widthAnchor.constraint(equalToConstant: 44),
+            zoomOut.heightAnchor.constraint(equalToConstant: 44),
+            fitPage.leadingAnchor.constraint(equalTo: zoomOut.trailingAnchor, constant: 2),
+            fitPage.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            fitPage.widthAnchor.constraint(equalToConstant: 44),
+            fitPage.heightAnchor.constraint(equalToConstant: 44),
+            zoomIn.leadingAnchor.constraint(equalTo: fitPage.trailingAnchor, constant: 2),
+            zoomIn.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            zoomIn.widthAnchor.constraint(equalToConstant: 44),
+            zoomIn.heightAnchor.constraint(equalToConstant: 44),
+            displayPopup.leadingAnchor.constraint(equalTo: zoomIn.trailingAnchor, constant: 8),
+            displayPopup.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            displayPopup.widthAnchor.constraint(equalToConstant: 132),
+            displayPopup.heightAnchor.constraint(equalToConstant: 44),
+            searchField.leadingAnchor.constraint(equalTo: displayPopup.trailingAnchor, constant: 10),
+            searchField.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -20),
+            searchField.centerYAnchor.constraint(equalTo: sidebarButton.centerYAnchor),
+            searchField.heightAnchor.constraint(equalToConstant: 44),
+            searchField.widthAnchor.constraint(greaterThanOrEqualToConstant: 150),
 
-            unavailableOverlay.centerXAnchor.constraint(equalTo: webView.centerXAnchor),
-            unavailableOverlay.centerYAnchor.constraint(equalTo: webView.centerYAnchor),
-            unavailableOverlay.widthAnchor.constraint(equalToConstant: 580),
-            unavailableOverlay.leadingAnchor.constraint(greaterThanOrEqualTo: webView.leadingAnchor,
+            sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: header.bottomAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            sidebarWidth,
+            separator.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            separator.topAnchor.constraint(equalTo: header.bottomAnchor),
+            separator.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            separator.widthAnchor.constraint(equalToConstant: 1),
+            pdfView.leadingAnchor.constraint(equalTo: separator.trailingAnchor),
+            pdfView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            pdfView.topAnchor.constraint(equalTo: header.bottomAnchor),
+            pdfView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+
+            sidebarMode.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
+            sidebarMode.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
+            sidebarMode.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 10),
+            sidebarMode.heightAnchor.constraint(equalToConstant: 44),
+            sidebarStatus.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
+            sidebarStatus.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
+            sidebarStatus.topAnchor.constraint(equalTo: sidebarMode.bottomAnchor, constant: 5),
+            sidebarStatus.heightAnchor.constraint(equalToConstant: 54),
+        ] + [thumbnailView, searchScroll, pageTextScroll, wordScroll].flatMap { content in
+            [content.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 6),
+             content.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -6),
+             content.topAnchor.constraint(equalTo: sidebarStatus.bottomAnchor, constant: 4),
+             content.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -6)]
+        } + [
+            unavailableOverlay.centerXAnchor.constraint(equalTo: pdfView.centerXAnchor),
+            unavailableOverlay.centerYAnchor.constraint(equalTo: pdfView.centerYAnchor),
+            unavailableOverlay.widthAnchor.constraint(equalToConstant: 560),
+            unavailableOverlay.leadingAnchor.constraint(greaterThanOrEqualTo: pdfView.leadingAnchor,
                                                          constant: 30),
-            unavailableOverlay.trailingAnchor.constraint(lessThanOrEqualTo: webView.trailingAnchor,
+            unavailableOverlay.trailingAnchor.constraint(lessThanOrEqualTo: pdfView.trailingAnchor,
                                                           constant: -30),
             unavailableStack.leadingAnchor.constraint(equalTo: unavailableOverlay.leadingAnchor),
             unavailableStack.trailingAnchor.constraint(equalTo: unavailableOverlay.trailingAnchor),
             unavailableStack.topAnchor.constraint(equalTo: unavailableOverlay.topAnchor),
             unavailableStack.bottomAnchor.constraint(equalTo: unavailableOverlay.bottomAnchor),
-            unavailableHint.widthAnchor.constraint(lessThanOrEqualToConstant: 500),
-            unavailableActions.widthAnchor.constraint(equalToConstant: 520),
+            unavailableDetail.widthAnchor.constraint(lessThanOrEqualToConstant: 500),
         ])
 
+        let viewMode = UserDefaults.standard.string(forKey: kQuranViewMode) ?? "continuous"
+        displayPopup.selectItem(at: viewMode == "single" ? 1 : 0)
+        applyDisplayMode()
+        sidebar.isHidden = sidebarWidth.constant == 0
+        searchScroll.isHidden = true
+        pageTextScroll.isHidden = true
+        wordScroll.isHidden = true
+        sidebarStatus.stringValue = offlineQuranText("search.loading")
+
+        NotificationCenter.default.addObserver(self,
+            selector: #selector(pdfPageChanged(_:)),
+            name: Notification.Name.PDFViewPageChanged,
+            object: pdfView)
+
         view = root
-        loadEdition(resume: true)
+        loadEdition(targetPage: nil)
     }
 
     func tabDidActivate() {
-        if webView?.url == nil { loadEdition(resume: true) }
-        updateNavigationState()
+        updatePageState()
     }
 
-    private func officialReaderURL(for edition: String) -> String {
-        edition == "warsh" ? kQuranWarshReaderURL : kQuranHafsReaderURL
+    private func makeTable(accessibilityLabel: String) -> (NSScrollView, NSTableView) {
+        let table = NSTableView()
+        table.headerView = nil
+        table.rowSizeStyle = .custom
+        table.usesAlternatingRowBackgroundColors = false
+        table.intercellSpacing = NSSize(width: 0, height: 2)
+        table.delegate = self
+        table.dataSource = self
+        table.setAccessibilityLabel(accessibilityLabel)
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("content"))
+        column.resizingMask = .autoresizingMask
+        table.addTableColumn(column)
+        let scroll = NSScrollView()
+        scroll.documentView = table
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        scroll.drawsBackground = false
+        return (scroll, table)
     }
 
-    private func lastURLKey(for edition: String) -> String {
-        edition == "warsh" ? kQuranLastWarshURL : kQuranLastHafsURL
+    private func quranResourceURL(_ components: [String]) -> URL? {
+        var url = Bundle.main.resourceURL?.appendingPathComponent("Quran", isDirectory: true)
+        for component in components { url?.appendPathComponent(component) }
+        return url
     }
 
-    private func loadEdition(resume: Bool) {
-        UserDefaults.standard.set(edition, forKey: kQuranEditionKey)
-        var raw = officialReaderURL(for: edition)
-        if resume, let saved = UserDefaults.standard.string(forKey: lastURLKey(for: edition)),
-           isAllowedReaderURL(saved), saved.contains("qurancomplex.gov.sa") {
-            raw = saved
+    private func pdfResourceURL(for edition: String) -> URL? {
+        quranResourceURL(edition == "warsh"
+            ? ["Warsh", "uthmanic_warsh_v21.pdf"]
+            : ["Hafs", "uthmanic_hafs_v2-0.pdf"])
+    }
+
+    private func dataResourceURL(for edition: String) -> URL? {
+        quranResourceURL(edition == "warsh"
+            ? ["Warsh", "warshData_v2-1.json"]
+            : ["Hafs", "hafsData_v2-0.json"])
+    }
+
+    private func lastPageKey(for edition: String) -> String {
+        edition == "warsh" ? kQuranLastWarshPage : kQuranLastHafsPage
+    }
+
+    private func normalizedEdition(_ raw: String) -> String? {
+        let value = normalizedQuranSearch(raw)
+        let isHafs = value.contains("hafs") || value.contains("حفص")
+        let isWarsh = value.contains("warsh") || value.contains("ورش")
+        if isHafs != isWarsh { return isHafs ? "hafs" : "warsh" }
+        return nil
+    }
+
+    /// Accept only the two KFGQPC flipbooks used by the former reader. A
+    /// random URL ending in digits is never promoted into a local bookmark.
+    private func recognizedLegacyPage(_ raw: String, edition: String) -> Int? {
+        guard let components = URLComponents(string: raw),
+              components.scheme?.lowercased() == "https",
+              let host = components.host?.lowercased(),
+              host == "qurancomplex.gov.sa" || host.hasSuffix(".qurancomplex.gov.sa"),
+              let fragment = components.fragment else { return nil }
+        let flipbook = edition == "warsh" ? "11326" : "11301"
+        let pattern = "^flipbook-df_\(flipbook)/([1-9][0-9]{0,2})/?$"
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: fragment,
+                  range: NSRange(fragment.startIndex..., in: fragment)),
+              let range = Range(match.range(at: 1), in: fragment),
+              let page = Int(fragment[range]), (1...604).contains(page) else { return nil }
+        return page
+    }
+
+    private func restoredPage(for edition: String) -> Int {
+        let defaults = UserDefaults.standard
+        let key = lastPageKey(for: edition)
+        if defaults.object(forKey: key) != nil {
+            return min(max(defaults.integer(forKey: key), 1), 604)
         }
-        guard let url = URL(string: raw) else { return }
-        sourceLabel.stringValue = featureText("quran.source.kfgqpc")
-        webView.isHidden = true
-        webView.load(URLRequest(url: url,
-                                cachePolicy: .returnCacheDataElseLoad,
-                                timeoutInterval: 30))
+        // Preserve the user's last reading place from the former flipbook.
+        let legacyKey = edition == "warsh" ? "quranLastWarshURL" : "quranLastHafsURL"
+        if let raw = defaults.string(forKey: legacyKey) {
+            let backupKey = "\(legacyKey)_backup"
+            if defaults.object(forKey: backupKey) == nil { defaults.set(raw, forKey: backupKey) }
+            if let page = recognizedLegacyPage(raw, edition: edition) {
+                defaults.set(page, forKey: key)
+                return page
+            }
+        }
+        return 1
     }
 
-    private func isAllowedReaderURL(_ raw: String) -> Bool {
-        guard let host = URL(string: raw)?.host?.lowercased() else { return false }
-        return host == "qurancomplex.gov.sa"
-            || host.hasSuffix(".qurancomplex.gov.sa")
-            || host == "quran.com" || host.hasSuffix(".quran.com")
+    private func loadEdition(targetPage: Int?) {
+        if !isLoadingEdition, pdfView.document != nil, !suppressPagePersistence {
+            UserDefaults.standard.set(currentPageNumber, forKey: lastPageKey(for: loadedEdition))
+        }
+        isLoadingEdition = true
+        suppressPagePersistence = true
+        dataGeneration = UUID()
+        let generation = dataGeneration
+        let selectedEdition = edition
+        UserDefaults.standard.set(selectedEdition, forKey: kQuranEditionKey)
+        verses = []
+        searchResults = []
+        currentPageVerses = []
+        visibleMeanings = []
+        meanings = []
+        isMeaningsReady = selectedEdition == "warsh"
+        searchMatchCount = 0
+        isSearchReady = false
+        selectedReference = nil
+        searchTable.reloadData()
+        pageTextTable.reloadData()
+        wordTable.reloadData()
+        sidebarStatus.stringValue = offlineQuranText("search.loading")
+        pdfView.document = nil
+        thumbnailView.pdfView = nil
+
+        guard let pdfURL = pdfResourceURL(for: selectedEdition),
+              FileManager.default.fileExists(atPath: pdfURL.path),
+              let document = PDFDocument(url: pdfURL),
+              document.pageCount == 604,
+              let dataURL = dataResourceURL(for: selectedEdition),
+              FileManager.default.fileExists(atPath: dataURL.path) else {
+            showUnavailable()
+            return
+        }
+
+        unavailableOverlay.isHidden = true
+        pdfView.document = document
+        thumbnailView.pdfView = pdfView
+        loadedEdition = selectedEdition
+        sidebarMode.setEnabled(selectedEdition == "hafs", forSegment: 3)
+        if selectedEdition == "warsh" && sidebarMode.selectedSegment == 3 {
+            sidebarMode.selectedSegment = 0
+            sidebarModeChanged(sidebarMode)
+        }
+        sourceLabel.stringValue = "\(offlineQuranText("offline")) · King Fahd Complex · "
+            + (selectedEdition == "warsh" ? "Warsh v2.1" : "Hafs v2.0")
+
+        goToPage(targetPage ?? restoredPage(for: selectedEdition),
+                 clearReference: false, persist: false)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.dataGeneration == generation else { return }
+            self.pdfView.autoScales = true
+            self.suppressPagePersistence = false
+            self.isLoadingEdition = false
+        }
+
+        let meaningsURL = quranResourceURL(["MuyassarGhareeb", "muyassar_ghareeb_1.json"])
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            do {
+                let verseData = try Data(contentsOf: dataURL, options: .mappedIfSafe)
+                let decodedVerses = try JSONDecoder().decode([OfflineQuranVerse].self,
+                                                              from: verseData)
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.dataGeneration == generation,
+                          self.edition == selectedEdition else { return }
+                    self.verses = decodedVerses
+                    self.isSearchReady = true
+                    self.updatePageState()
+                    self.updateCurrentPageContent()
+                }
+            } catch {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.dataGeneration == generation else { return }
+                    self.isSearchReady = false
+                    self.sidebarStatus.stringValue = featureText("quran.unavailable")
+                }
+            }
+        }
+
+        // Ghareeb is optional, Hafs-only study material. Its failure must not
+        // hide or disable the canonical PDF and verse index.
+        if selectedEdition == "hafs", let meaningsURL {
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                let decoded = (try? Data(contentsOf: meaningsURL, options: .mappedIfSafe))
+                    .flatMap { try? JSONDecoder().decode([OfflineQuranWordMeaning].self, from: $0) }
+                    ?? []
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.dataGeneration == generation,
+                          self.edition == "hafs" else { return }
+                    self.meanings = decoded
+                    self.isMeaningsReady = true
+                    self.updateVisibleMeanings()
+                }
+            }
+        }
+    }
+
+    private func showUnavailable(detail: String? = nil) {
+        pdfView.document = nil
+        thumbnailView.pdfView = nil
+        sourceLabel.stringValue = offlineQuranText("resource.missing")
+        unavailableDetail.stringValue = [offlineQuranText("resource.detail"), detail]
+            .compactMap { $0 }.joined(separator: "\n")
+        unavailableOverlay.isHidden = false
+        previousButton.isEnabled = false
+        nextButton.isEnabled = false
+        isLoadingEdition = false
+        suppressPagePersistence = false
     }
 
     @objc private func editionChanged(_ sender: NSSegmentedControl) {
-        loadEdition(resume: true)
+        loadEdition(targetPage: nil)
     }
 
-    @objc private func goBack() { if webView.canGoBack { webView.goBack() } }
-    @objc private func goForward() { if webView.canGoForward { webView.goForward() } }
-    @objc private func reloadReader() {
-        if unavailableOverlay?.isHidden == false {
-            retryOfficialReader()
-        } else {
-            webView.isHidden = true
-            webView.reload()
-        }
-    }
+    @objc private func previousPage() { goToPage(currentPageNumber - 1) }
+    @objc private func nextPage() { goToPage(currentPageNumber + 1) }
 
-    private func scheduleLoadWatchdog() {
-        loadWatchdog?.invalidate()
-        let timer = Timer(timeInterval: 12, repeats: false) { [weak self] _ in
-            self?.showUnavailableReader()
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        loadWatchdog = timer
-    }
-
-    private func cancelLoadWatchdog() {
-        loadWatchdog?.invalidate()
-        loadWatchdog = nil
-    }
-
-    private func showUnavailableReader() {
-        progress?.stopAnimation(nil)
-        webView?.isHidden = true
-        sourceLabel?.stringValue = featureText("quran.unavailable")
-        let isWarsh = edition == "warsh"
-        unavailableHint?.stringValue = isWarsh
-            ? featureText("quran.official_moroccan.help")
-            : featureText("quran.study.hafs_only")
-        fallbackButton?.title = isWarsh
-            ? featureText("quran.official_moroccan")
-            : featureText("quran.source.foundation")
-        unavailableOverlay?.isHidden = false
-    }
-
-    @objc private func retryOfficialReader() {
-        cancelLoadWatchdog()
-        unavailableOverlay?.isHidden = true
-        loadEdition(resume: false)
-    }
-
-    @objc private func openOfficialReaderExternally() {
-        guard let url = URL(string: officialReaderURL(for: edition)) else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    @objc private func openReaderFallback() {
-        if edition == "warsh" {
-            openMoroccanMushaf()
+    @objc private func jumpToPage() {
+        let raw = westernQuranDigits(pageField.stringValue)
+        guard let page = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            updatePageState()
+            NSSound.beep()
             return
         }
-        guard let url = URL(string: "https://quran.com/1") else { return }
-        unavailableOverlay?.isHidden = true
-        sourceLabel.stringValue = featureText("quran.source.foundation")
-        webView.isHidden = true
-        webView.load(URLRequest(url: url, timeoutInterval: 30))
+        goToPage(page)
     }
 
-    @objc private func studyModeChanged(_ sender: NSPopUpButton) {
-        searchField.placeholderString = (1...3).contains(sender.indexOfSelectedItem)
-            ? featureText("quran.tafsir.placeholder")
-            : featureText("quran.search.placeholder")
-        if sender.indexOfSelectedItem == 4 {
-            webView.isHidden = true
-            webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
-            sourceLabel.stringValue = featureText("quran.source.kfgqpc.developer")
+    @objc private func stepPage(_ sender: NSStepper) {
+        goToPage(sender.integerValue)
+    }
+
+    private func goToPage(_ pageNumber: Int, clearReference: Bool = true,
+                          persist: Bool = true) {
+        guard let document = pdfView.document else { return }
+        let clamped = min(max(pageNumber, 1), document.pageCount)
+        guard let page = document.page(at: clamped - 1) else { return }
+        if clearReference { selectedReference = nil }
+        pdfView.go(to: page)
+        if persist && !suppressPagePersistence && loadedEdition == edition {
+            UserDefaults.standard.set(clamped, forKey: lastPageKey(for: loadedEdition))
+        }
+        updatePageState()
+    }
+
+    @objc private func pdfPageChanged(_ notification: Notification) {
+        if pdfView.document != nil && !suppressPagePersistence
+            && !isLoadingEdition && loadedEdition == edition {
+            UserDefaults.standard.set(currentPageNumber, forKey: lastPageKey(for: loadedEdition))
+        }
+        if selectedReference?.appears(on: currentPageNumber) != true { selectedReference = nil }
+        updatePageState()
+        updateCurrentPageContent()
+    }
+
+    private func updatePageState() {
+        let page = currentPageNumber
+        let text = localizedInterfaceDigits("\(page)")
+        pageField?.stringValue = text
+        pageStepper?.integerValue = page
+        previousButton?.isEnabled = pdfView?.document != nil && page > 1
+        nextButton?.isEnabled = pdfView?.document != nil
+            && page < (pdfView?.document?.pageCount ?? 0)
+        removeBookmarkButton?.isEnabled = loadBookmarks().contains {
+            $0.edition == loadedEdition && $0.page == page
+        }
+        guard sidebarMode?.selectedSegment == 0 else { return }
+        sidebarStatus?.stringValue = localizedInterfaceDigits(
+            "\(offlineQuranText("page")) \(page) \(offlineQuranText("of")) 604")
+    }
+
+    @objc private func zoomOut() {
+        pdfView.autoScales = false
+        pdfView.scaleFactor = max(pdfView.minScaleFactor, pdfView.scaleFactor / 1.18)
+    }
+
+    @objc private func fitPage() { pdfView.autoScales = true }
+
+    @objc private func zoomIn() {
+        pdfView.autoScales = false
+        pdfView.scaleFactor = min(pdfView.maxScaleFactor, pdfView.scaleFactor * 1.18)
+    }
+
+    @objc private func displayModeChanged(_ sender: NSPopUpButton) {
+        UserDefaults.standard.set(sender.indexOfSelectedItem == 1 ? "single" : "continuous",
+                                  forKey: kQuranViewMode)
+        applyDisplayMode()
+    }
+
+    private func applyDisplayMode() {
+        let single = displayPopup?.indexOfSelectedItem == 1
+        pdfView?.displayMode = single ? .singlePage : .singlePageContinuous
+        pdfView?.displayDirection = .vertical
+        pdfView?.displaysPageBreaks = true
+        pdfView?.autoScales = true
+    }
+
+    @objc private func toggleSidebar() {
+        let showing = sidebarWidth.constant > 0
+        let targetWidth: CGFloat = showing ? 0 : 292
+        sidebar.isHidden = false
+        UserDefaults.standard.set(!showing, forKey: kQuranSidebarVisible)
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            sidebarWidth.constant = targetWidth
+            view.layoutSubtreeIfNeeded()
+            sidebar.isHidden = showing
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.2
+            sidebarWidth.animator().constant = targetWidth
+            view.layoutSubtreeIfNeeded()
+        } completionHandler: { [weak self] in
+            self?.sidebar.isHidden = showing
         }
     }
 
-    @objc private func runStudySearch() {
+    @objc private func sidebarModeChanged(_ sender: NSSegmentedControl) {
+        thumbnailView.isHidden = sender.selectedSegment != 0
+        searchScroll.isHidden = sender.selectedSegment != 1
+        pageTextScroll.isHidden = sender.selectedSegment != 2
+        wordScroll.isHidden = sender.selectedSegment != 3
+        switch sender.selectedSegment {
+        case 0:
+            updatePageState()
+        case 1:
+            updateSearchStatus()
+        case 2:
+            updateCurrentPageContent()
+        default:
+            updateVisibleMeanings()
+        }
+    }
+
+    @objc private func runSearch() {
+        guard isSearchReady else {
+            sidebarStatus.stringValue = offlineQuranText("search.loading")
+            return
+        }
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty else { return }
-        let studyMode = studyPopup.indexOfSelectedItem
-        if studyMode == 4 {
-            webView.isHidden = true
-            webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
+        guard !query.isEmpty else {
+            searchResults = []
+            searchMatchCount = 0
+            searchTable.reloadData()
+            sidebarMode.selectedSegment = 1
+            sidebarModeChanged(sidebarMode)
             return
         }
-        let isReference = query.range(of: #"^\d{1,3}:\d{1,3}$"#,
-                                      options: .regularExpression) != nil
-        let url: URL?
-        if (1...3).contains(studyMode), isReference {
-            let tafsirSlug = [
-                1: "ar-tafsir-ibn-kathir",
-                2: "ar-tafseer-al-saddi",
-                3: "en-tafsir-maarif-ul-quran",
-            ][studyMode] ?? "ar-tafsir-ibn-kathir"
-            url = URL(string: "https://quran.com/\(query)/tafsirs/\(tafsirSlug)")
-        } else if isReference {
-            url = URL(string: "https://quran.com/\(query)")
+
+        if let reference = parseQuranReference(query),
+           let match = verses.first(where: {
+               $0.suraNumber == reference.sura && $0.ayahNumber == reference.ayah
+           }) {
+            searchResults = [match]
+            searchMatchCount = 1
+            selectedReference = match
+            goToPage(match.pageStart, clearReference: false)
         } else {
-            var components = URLComponents(string: "https://quran.com/search")
-            components?.queryItems = [URLQueryItem(name: "q", value: query)]
-            url = components?.url
+            let needle = normalizedQuranSearch(query)
+            guard !needle.isEmpty else {
+                searchResults = []
+                searchMatchCount = 0
+                searchTable.reloadData()
+                NSSound.beep()
+                updateSearchStatus()
+                return
+            }
+            var firstMatches: [OfflineQuranVerse] = []
+            var total = 0
+            for verse in verses where normalizedQuranSearch(verse.searchableText).contains(needle)
+                || normalizedQuranSearch(verse.suraNameArabic).contains(needle)
+                || normalizedQuranSearch(verse.suraNameEnglish).contains(needle) {
+                total += 1
+                if firstMatches.count < 250 { firstMatches.append(verse) }
+            }
+            searchResults = firstMatches
+            searchMatchCount = total
         }
-        guard let url else { return }
-        webView.isHidden = true
-        webView.load(URLRequest(url: url))
-        sourceLabel.stringValue = edition == "warsh"
-            ? featureText("quran.study.hafs_only")
-            : featureText("quran.source.foundation")
+        searchTable.reloadData()
+        sidebarMode.selectedSegment = 1
+        sidebarModeChanged(sidebarMode)
+        if searchResults.count == 1 { searchTable.selectRowIndexes([0], byExtendingSelection: false) }
     }
 
-    private func loadBookmarks() -> [QuranBookmark] {
+    private func updateSearchStatus() {
+        if !isSearchReady {
+            sidebarStatus.stringValue = offlineQuranText("search.loading")
+        } else if searchResults.isEmpty {
+            sidebarStatus.stringValue = offlineQuranText("search.none")
+        } else if searchMatchCount > searchResults.count {
+            sidebarStatus.stringValue = localizedInterfaceDigits(
+                "\(featureText("quran.study.search")) · \(searchResults.count) / \(searchMatchCount)")
+        } else {
+            let count = localizedInterfaceDigits(String(searchMatchCount))
+            sidebarStatus.stringValue = offlineQuranText("search.count")
+                .replacingOccurrences(of: "%@", with: count)
+        }
+    }
+
+    private func updateVisibleMeanings() {
+        guard edition == "hafs" else {
+            visibleMeanings = []
+            wordTable?.reloadData()
+            if sidebarMode?.selectedSegment == 3 {
+                sidebarStatus?.stringValue = featureText("quran.study.hafs_only")
+            }
+            return
+        }
+        guard !meanings.isEmpty else {
+            visibleMeanings = []
+            wordTable?.reloadData()
+            if sidebarMode?.selectedSegment == 3 {
+                sidebarStatus?.stringValue = isMeaningsReady
+                    ? offlineQuranText("words.none") : offlineQuranText("search.loading")
+            }
+            return
+        }
+        let page = currentPageNumber
+        if let selected = selectedReference, selected.appears(on: page) {
+            let sura = normalizedQuranSearch(selected.suraNameArabic)
+            visibleMeanings = meanings.filter {
+                $0.page == page && $0.ayahNumber == selected.ayahNumber
+                    && normalizedQuranSearch($0.suraName) == sura
+            }
+        } else {
+            visibleMeanings = meanings.filter { $0.page == page }
+        }
+        wordTable?.reloadData()
+        guard sidebarMode?.selectedSegment == 3 else { return }
+        sidebarStatus?.stringValue = visibleMeanings.isEmpty
+            ? offlineQuranText("words.none") : offlineQuranText("words.source")
+    }
+
+    private func updateCurrentPageContent() {
+        currentPageVerses = verses.filter { $0.appears(on: currentPageNumber) }
+        pageTextTable?.reloadData()
+        if sidebarMode?.selectedSegment == 2 {
+            sidebarStatus?.stringValue = currentPageVerses.isEmpty
+                ? featureText("quran.unavailable")
+                : localizedInterfaceDigits("\(offlineQuranText("page")) \(currentPageNumber)")
+        }
+        updateVisibleMeanings()
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int {
+        if tableView === searchTable { return searchResults.count }
+        if tableView === pageTextTable { return currentPageVerses.count }
+        return visibleMeanings.count
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        let value: String
+        if tableView === searchTable, searchResults.indices.contains(row) {
+            value = searchResults[row].uthmanicText
+        } else if tableView === pageTextTable, currentPageVerses.indices.contains(row) {
+            value = currentPageVerses[row].uthmanicText
+        } else if visibleMeanings.indices.contains(row) {
+            value = visibleMeanings[row].explanation
+        } else { return 72 }
+        let font = Localizer.shared.font(size: Localizer.shared.isRTL ? 14.5 : 13.5)
+        let width = max(tableView.bounds.width - 24, 120)
+        let height = (value as NSString).boundingRect(
+            with: NSSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: [.font: font]).height
+        return max(72, ceil(height) + 42)
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?,
+                   row: Int) -> NSView? {
+        let identifier = NSUserInterfaceItemIdentifier(tableView === searchTable
+            ? "quranSearchCell" : (tableView === pageTextTable ? "quranTextCell" : "quranWordCell"))
+        let label = tableView.makeView(withIdentifier: identifier, owner: self) as? NSTextField
+            ?? NSTextField(wrappingLabelWithString: "")
+        label.identifier = identifier
+        label.maximumNumberOfLines = 0
+        label.lineBreakMode = .byWordWrapping
+        label.baseWritingDirection = .rightToLeft
+        label.alignment = .right
+        label.textColor = .labelColor
+        if tableView === searchTable || tableView === pageTextTable {
+            let source = tableView === searchTable ? searchResults : currentPageVerses
+            guard source.indices.contains(row) else { return nil }
+            let verse = source[row]
+            let reference = localizedInterfaceDigits("\(verse.suraNumber):\(verse.ayahNumber)")
+            let page = localizedInterfaceDigits("\(offlineQuranText("page")) \(verse.pageLabel)")
+            label.font = Localizer.shared.font(size: Localizer.shared.isRTL ? 14.5 : 13.5,
+                                               weight: .medium)
+            label.stringValue = "\(verse.suraNameArabic) · \(reference) · \(page)\n\(verse.uthmanicText)"
+            label.setAccessibilityLabel("\(verse.suraNameArabic), \(reference), \(page), \(verse.uthmanicText)")
+        } else {
+            guard visibleMeanings.indices.contains(row) else { return nil }
+            let meaning = visibleMeanings[row]
+            let reference = localizedInterfaceDigits("\(meaning.suraName) \(meaning.ayahNumber)")
+            label.font = Localizer.shared.font(size: Localizer.shared.isRTL ? 14.5 : 13.5)
+            label.stringValue = "\(meaning.word) · \(reference)\n\(meaning.explanation)"
+            label.setAccessibilityLabel(label.stringValue)
+        }
+        return label
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard let table = notification.object as? NSTableView,
+              table === searchTable,
+              searchResults.indices.contains(table.selectedRow) else { return }
+        let verse = searchResults[table.selectedRow]
+        selectedReference = verse
+        goToPage(verse.pageStart, clearReference: false)
+        updateVisibleMeanings()
+    }
+
+    private func loadBookmarks() -> [OfflineQuranBookmark] {
+        migrateLegacyBookmarksIfNeeded()
         guard let data = UserDefaults.standard.data(forKey: kQuranBookmarksKey),
-              let values = try? JSONDecoder().decode([QuranBookmark].self, from: data) else {
-            return []
+              let decoded = try? JSONDecoder().decode([OfflineQuranBookmark].self,
+                                                       from: data) else { return [] }
+        return decoded.compactMap { value in
+            guard let edition = normalizedEdition(value.edition),
+                  (1...604).contains(value.page) else { return nil }
+            var normalized = value
+            normalized.edition = edition
+            return normalized
         }
-        return values
     }
 
-    private func saveBookmarks(_ values: [QuranBookmark]) {
+    private func migrateLegacyBookmarksIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: kQuranBookmarkMigrationDone) else { return }
+        defer { defaults.set(true, forKey: kQuranBookmarkMigrationDone) }
+        guard let legacyData = defaults.data(forKey: kQuranLegacyBookmarksKey) else { return }
+        if defaults.data(forKey: kQuranLegacyBookmarksBackup) == nil {
+            defaults.set(legacyData, forKey: kQuranLegacyBookmarksBackup)
+        }
+        guard let legacy = try? JSONDecoder().decode([QuranBookmark].self,
+                                                      from: legacyData) else {
+            defaults.set(legacyData, forKey: kQuranUnsupportedBookmarks)
+            return
+        }
+        var supported: [OfflineQuranBookmark] = []
+        var unsupported: [QuranBookmark] = []
+        for item in legacy {
+            guard let edition = normalizedEdition(item.edition),
+                  let page = recognizedLegacyPage(item.url, edition: edition) else {
+                unsupported.append(item)
+                continue
+            }
+            supported.append(OfflineQuranBookmark(id: item.id, title: item.title,
+                                                   edition: edition, page: page,
+                                                   createdAt: item.createdAt))
+        }
+        if defaults.data(forKey: kQuranBookmarksKey) == nil { saveBookmarks(supported) }
+        if !unsupported.isEmpty, let data = try? JSONEncoder().encode(unsupported) {
+            defaults.set(data, forKey: kQuranUnsupportedBookmarks)
+        }
+    }
+
+    private func saveBookmarks(_ values: [OfflineQuranBookmark]) {
         guard let data = try? JSONEncoder().encode(values) else { return }
         UserDefaults.standard.set(data, forKey: kQuranBookmarksKey)
     }
 
     @objc private func addBookmark() {
-        guard let url = webView.url, isAllowedReaderURL(url.absoluteString) else { return }
+        guard pdfView.document != nil else { return }
+        let page = currentPageNumber
+        let nearby = verses.first { $0.appears(on: page) }
+        let suggested = nearby.map {
+            "\($0.suraNameArabic) · " + localizedInterfaceDigits("\($0.suraNumber):\($0.ayahNumber)")
+        } ?? "\(featureText("quran.bookmark")) · "
+            + localizedInterfaceDigits("\(offlineQuranText("page")) \(page)")
         let alert = NSAlert()
         alert.messageText = featureText("quran.bookmark.add")
         alert.informativeText = featureText("quran.bookmark.name.help")
         alert.addButton(withTitle: t("settings.save"))
         alert.addButton(withTitle: t("adhkar.editor.cancel"))
         let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        field.stringValue = webView.title?.trimmingCharacters(in: .whitespacesAndNewlines)
-            .nonEmpty ?? (edition == "warsh" ? "Warsh · ورش" : "Hafs · حفص")
+        field.stringValue = suggested
         alert.accessoryView = field
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let title = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         var values = loadBookmarks()
-        if let existing = values.firstIndex(where: { $0.url == url.absoluteString }) {
-            values[existing].title = title.nonEmpty ?? values[existing].title
+        if let index = values.firstIndex(where: { $0.edition == loadedEdition && $0.page == page }) {
+            values[index].title = title.isEmpty ? suggested : title
         } else {
-            values.append(QuranBookmark(title: title.nonEmpty ?? featureText("quran.bookmark"),
-                                        url: url.absoluteString, edition: edition))
+            values.append(OfflineQuranBookmark(title: title.isEmpty ? suggested : title,
+                                               edition: loadedEdition, page: page))
         }
         saveBookmarks(values)
-        updateNavigationState()
+        updatePageState()
     }
 
     @objc private func showBookmarks(_ sender: NSButton) {
         let menu = NSMenu()
-        let values = loadBookmarks()
+        let values = loadBookmarks().sorted { $0.createdAt > $1.createdAt }
         if values.isEmpty {
             let empty = NSMenuItem(title: featureText("quran.bookmarks.empty"),
                                    action: nil, keyEquivalent: "")
@@ -9768,122 +10519,52 @@ final class QuranViewController: NSViewController, MainTabContent,
             menu.addItem(empty)
         } else {
             for (index, bookmark) in values.enumerated() {
-                let item = NSMenuItem(title: bookmark.title,
+                let page = localizedInterfaceDigits("\(offlineQuranText("page")) \(bookmark.page)")
+                let item = NSMenuItem(title: "\(bookmark.title) · \(page)",
                                       action: #selector(openBookmark(_:)),
                                       keyEquivalent: "")
                 item.tag = index
+                item.representedObject = values
                 item.image = templateSymbol(bookmark.edition == "warsh"
                                                 ? "book.closed.fill" : "book.fill",
                                              pointSize: 11)
                 menu.addItem(item)
             }
         }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4),
-                   in: sender)
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
 
     @objc private func openBookmark(_ sender: NSMenuItem) {
-        let values = loadBookmarks()
-        guard values.indices.contains(sender.tag),
-              let url = URL(string: values[sender.tag].url),
-              isAllowedReaderURL(url.absoluteString) else { return }
-        editionControl.selectedSegment = values[sender.tag].edition == "warsh" ? 1 : 0
-        UserDefaults.standard.set(values[sender.tag].edition, forKey: kQuranEditionKey)
-        webView.isHidden = true
-        webView.load(URLRequest(url: url))
+        guard let values = sender.representedObject as? [OfflineQuranBookmark],
+              values.indices.contains(sender.tag) else { return }
+        let bookmark = values[sender.tag]
+        let segment = bookmark.edition == "warsh" ? 1 : 0
+        if editionControl.selectedSegment != segment {
+            editionControl.selectedSegment = segment
+            loadEdition(targetPage: bookmark.page)
+        } else {
+            goToPage(bookmark.page)
+        }
     }
 
     @objc private func removeCurrentBookmark() {
-        guard let raw = webView.url?.absoluteString else { return }
+        let page = currentPageNumber
         var values = loadBookmarks()
-        values.removeAll { $0.url == raw }
+        values.removeAll { $0.edition == loadedEdition && $0.page == page }
         saveBookmarks(values)
-        updateNavigationState()
+        updatePageState()
     }
 
     @objc private func showProvenance() {
         let alert = NSAlert()
         alert.messageText = featureText("quran.provenance.title")
-        alert.informativeText = featureText("quran.provenance.detail")
-            + "\n\nHafs v13 · SHA-1 36EA5AB0D7EA1702F17FF43F9B50924CCCD77EBF"
-            + "\nWarsh v6 · SHA-1 44ECEA8FEB23817FDC01A8EE2162A6A0CF08CAE7"
-            + "\nTafsir Muyassar v3 · SHA-1 5F533113C2F54F32EDED734BB49E6A5837965722"
-        alert.addButton(withTitle: featureText("quran.provenance.open"))
-        alert.addButton(withTitle: t("adhkar.editor.cancel"))
-        if alert.runModal() == .alertFirstButtonReturn,
-           let url = URL(string: kQuranDeveloperURL) {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    @objc private func openMoroccanMushaf() {
-        guard let url = URL(string: kMoroccanMushafURL) else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    private func updateNavigationState() {
-        backButton?.isEnabled = webView?.canGoBack ?? false
-        forwardButton?.isEnabled = webView?.canGoForward ?? false
-        let current = webView?.url?.absoluteString
-        removeBookmarkButton?.isEnabled = current.map { raw in
-            loadBookmarks().contains { $0.url == raw }
-        } ?? false
-    }
-
-    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
-        unavailableOverlay?.isHidden = true
-        progress.startAnimation(nil)
-        scheduleLoadWatchdog()
-        updateNavigationState()
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        cancelLoadWatchdog()
-        unavailableOverlay?.isHidden = true
-        webView.isHidden = false
-        progress.stopAnimation(nil)
-        if let raw = webView.url?.absoluteString, raw.contains("qurancomplex.gov.sa") {
-            UserDefaults.standard.set(raw, forKey: lastURLKey(for: edition))
-            sourceLabel.stringValue = featureText("quran.source.kfgqpc")
-        } else if webView.url?.host?.contains("quran.com") == true {
-            sourceLabel.stringValue = edition == "warsh"
-                ? featureText("quran.study.hafs_only")
-                : featureText("quran.source.foundation")
-        }
-        updateNavigationState()
-    }
-
-    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
-                 withError error: Error) {
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
-        cancelLoadWatchdog()
-        showUnavailableReader()
-    }
-
-    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
-                 withError error: Error) {
-        let nsError = error as NSError
-        if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorCancelled { return }
-        cancelLoadWatchdog()
-        showUnavailableReader()
-    }
-
-    func webView(_ webView: WKWebView,
-                 decidePolicyFor navigationAction: WKNavigationAction,
-                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
-        guard let url = navigationAction.request.url else {
-            decisionHandler(.cancel)
-            return
-        }
-        if isAllowedReaderURL(url.absoluteString) || url.scheme == "about" {
-            decisionHandler(.allow)
-        } else if navigationAction.navigationType == .linkActivated {
-            NSWorkspace.shared.open(url)
-            decisionHandler(.cancel)
-        } else {
-            decisionHandler(.cancel)
-        }
+        alert.informativeText = offlineQuranText("provenance.detail")
+            + "\n\nHafs PDF v2.0 · 604 pages\nSHA-256 c0d57c9f193e509272d17b9c5bbd6d6ca8077de15e1de6f775d8c7aca64d6406"
+            + "\n\nWarsh PDF v2.1 · 604 pages\nSHA-256 b99cd519590bdc8036e54eae8589857cb4cc9c5dc8f303692de79725d93deb9e"
+            + "\n\nMuyassar Ghareeb v0.1\nSHA-256 aa57282cff9517c8f7b74432b17077f70decb4eb1530ff78d4fb663f435cdc65"
+            + "\n\n" + offlineQuranText("provenance.omitted")
+        alert.addButton(withTitle: offlineQuranText("close"))
+        alert.runModal()
     }
 }
 
