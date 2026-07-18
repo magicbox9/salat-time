@@ -106,7 +106,7 @@ let kQuranLastWarshPage          = "quranLastWarshPage"
 let kQuranViewMode               = "quranOfflineViewMode"
 let kQuranSidebarVisible         = "quranOfflineSidebarVisible"
 
-let kAppVersion          = "3.17.2"
+let kAppVersion          = "3.17.3"
 
 // ============================================================================
 // MARK: Theme palette
@@ -6940,6 +6940,7 @@ final class PrayerEventAccessibilityElement: NSAccessibilityElement {
          pressHandler: @escaping () -> Void) {
         self.pressHandler = pressHandler
         super.init()
+        setAccessibilityEnabled(true)
         setAccessibilityRole(.button)
         setAccessibilityParent(parent)
         setAccessibilityFrameInParentSpace(frame)
