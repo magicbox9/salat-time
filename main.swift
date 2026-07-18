@@ -71,7 +71,7 @@ let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
 let kAdhkarAfterAdhanOptions = [0, 2, 5, 10, 15]
 
-let kAppVersion          = "3.10.0"
+let kAppVersion          = "3.10.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2490,7 +2490,8 @@ final class HoverIconButton: NSButton {
         self.bezelStyle = .regularSquare
         self.imagePosition = .imageOnly
         self.imageScaling = .scaleProportionallyDown
-        self.focusRingType = .none
+        self.focusRingType = .default
+        self.setAccessibilityLabel(toolTip)
         self.wantsLayer = true
         self.layer?.cornerRadius = cornerRad
         self.layer?.masksToBounds = true
@@ -6647,9 +6648,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         collectionView.drawsBackground = false
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         collectionView.hasHorizontalScroller = false
-        if let clip = collectionView.contentView as? NSClipView {
-            clip.drawsBackground = false
-        }
+        collectionView.contentView.drawsBackground = false
         // autoresizingMask = .width makes the stack match the scroll view's
         // width. Height is natural (sum of rows), so it scrolls when needed.
         collectionList.autoresizingMask = [.width]
@@ -6702,8 +6701,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         itemsStack = NSStackView()
         itemsStack.orientation = .vertical
         itemsStack.alignment = .leading
-        itemsStack.spacing = 10
-        itemsStack.edgeInsets = NSEdgeInsets(top: 8, left: 0, bottom: 8, right: 0)
+        itemsStack.distribution = .fill
+        itemsStack.spacing = 8
+        itemsStack.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 8, right: 0)
         itemsStack.translatesAutoresizingMaskIntoConstraints = false
 
         itemsScrollView = NSScrollView()
@@ -6718,19 +6718,12 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // ---- inline player bar ----
         // Sits between the add-buttons and the scroll view. Shows play/pause,
         // prev/next, position, volume slider, and a settings gear.
-        // Player bar — translucent "pill" shape with a subtle border, sitting
-        // on the glass background. Vibrant-dark styling for elegance.
-        playerBar = NSVisualEffectView()
-        playerBar.wantsLayer = true
-        playerBar.layer?.cornerRadius = 10
-        if let pv = playerBar as? NSVisualEffectView {
-            pv.material = .sidebar
-            pv.blendingMode = .withinWindow
-            pv.state = .active
-        }
-        // Subtle top border for depth.
-        playerBar.layer?.borderWidth = 0.5
-        playerBar.layer?.borderColor = NSColor.white.withAlphaComponent(0.08).cgColor
+        // An appearance-aware native card remains legible in both light and
+        // dark mode. The previous hard-coded white border disappeared on
+        // light backgrounds and made the player feel detached from the list.
+        let adaptivePlayerBar = AdaptiveCardView(frame: .zero)
+        adaptivePlayerBar.cornerRadius = 10
+        playerBar = adaptivePlayerBar
         playerBar.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(playerBar)
 
@@ -6768,9 +6761,11 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         playerPositionLabel.translatesAutoresizingMaskIntoConstraints = false
         playerBar.addSubview(playerPositionLabel)
 
-        let volumeIcon = NSTextField(labelWithString: "🔊")
-        volumeIcon.font = NSFont.systemFont(ofSize: 12)
-        volumeIcon.textColor = .secondaryLabelColor
+        let volumeIcon = NSImageView()
+        volumeIcon.image = templateSymbol("speaker.wave.2.fill", pointSize: 12)
+        volumeIcon.contentTintColor = .secondaryLabelColor
+        volumeIcon.imageScaling = .scaleProportionallyDown
+        volumeIcon.setAccessibilityLabel(t("settings.adhan.volume"))
         volumeIcon.translatesAutoresizingMaskIntoConstraints = false
         playerBar.addSubview(volumeIcon)
 
@@ -6781,7 +6776,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         playerVolumeSlider.translatesAutoresizingMaskIntoConstraints = false
         playerBar.addSubview(playerVolumeSlider)
 
-        playerSettingsBtn = HoverIconButton(symbol: "speaker.wave.2.fill",
+        playerSettingsBtn = HoverIconButton(symbol: "airplayaudio",
                                               toolTip: t("adhkar.editor.audio"),
                                               target: self,
                                               action: #selector(playerSettingsTapped(_:)),
@@ -6805,13 +6800,13 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // automatically with userInterfaceLayoutDirection.
         NSLayoutConstraint.activate([
             // Sidebar: leading edge in LTR, trailing edge (right) in RTL.
-            leftWrap.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
-            leftWrap.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
-            leftWrap.widthAnchor.constraint(equalToConstant: 220),
+            leftWrap.topAnchor.constraint(equalTo: root.topAnchor),
+            leftWrap.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            leftWrap.widthAnchor.constraint(equalToConstant: 238),
 
-            collectionsTitle.topAnchor.constraint(equalTo: leftWrap.topAnchor),
-            collectionsTitle.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 10),
-            collectionsTitle.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: -10),
+            collectionsTitle.topAnchor.constraint(equalTo: leftWrap.topAnchor, constant: 18),
+            collectionsTitle.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 12),
+            collectionsTitle.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: -12),
 
             newBtn.topAnchor.constraint(equalTo: collectionsTitle.bottomAnchor, constant: 8),
             newBtn.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 8),
@@ -6820,36 +6815,36 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             collectionView.topAnchor.constraint(equalTo: newBtn.bottomAnchor, constant: 10),
             collectionView.leadingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: 6),
             collectionView.trailingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: -4),
-            collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor),
+            collectionView.bottomAnchor.constraint(equalTo: leftWrap.bottomAnchor, constant: -8),
         ])
 
         if isRTL {
             // RTL: sidebar on the RIGHT, items pane on the LEFT.
             NSLayoutConstraint.activate([
-                leftWrap.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
+                leftWrap.trailingAnchor.constraint(equalTo: root.trailingAnchor),
 
-                divider.trailingAnchor.constraint(equalTo: leftWrap.leadingAnchor, constant: -12),
-                divider.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-                divider.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+                divider.trailingAnchor.constraint(equalTo: leftWrap.leadingAnchor),
+                divider.topAnchor.constraint(equalTo: root.topAnchor),
+                divider.bottomAnchor.constraint(equalTo: root.bottomAnchor),
 
-                itemsContainer.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -16),
-                itemsContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
-                itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
-                itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+                itemsContainer.trailingAnchor.constraint(equalTo: divider.leadingAnchor, constant: -24),
+                itemsContainer.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 24),
+                itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 20),
+                itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18),
             ])
         } else {
             // LTR: sidebar on the LEFT, items pane on the RIGHT.
             NSLayoutConstraint.activate([
-                leftWrap.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 16),
+                leftWrap.leadingAnchor.constraint(equalTo: root.leadingAnchor),
 
-                divider.leadingAnchor.constraint(equalTo: leftWrap.trailingAnchor, constant: 12),
-                divider.topAnchor.constraint(equalTo: root.topAnchor, constant: 12),
-                divider.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+                divider.leadingAnchor.constraint(equalTo: leftWrap.trailingAnchor),
+                divider.topAnchor.constraint(equalTo: root.topAnchor),
+                divider.bottomAnchor.constraint(equalTo: root.bottomAnchor),
 
-                itemsContainer.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 16),
-                itemsContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -16),
-                itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 16),
-                itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -16),
+                itemsContainer.leadingAnchor.constraint(equalTo: divider.trailingAnchor, constant: 24),
+                itemsContainer.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -24),
+                itemsContainer.topAnchor.constraint(equalTo: root.topAnchor, constant: 20),
+                itemsContainer.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -18),
             ])
         }
 
@@ -6898,6 +6893,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             playerVolumeSlider.widthAnchor.constraint(equalToConstant: 100),
             volumeIcon.trailingAnchor.constraint(equalTo: playerSettingsBtn.leadingAnchor, constant: -4),
             volumeIcon.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
+            volumeIcon.widthAnchor.constraint(equalToConstant: 18),
+            volumeIcon.heightAnchor.constraint(equalToConstant: 18),
             playerSettingsBtn.trailingAnchor.constraint(equalTo: playerBar.trailingAnchor, constant: -8),
             playerSettingsBtn.centerYAnchor.constraint(equalTo: playerBar.centerYAnchor),
 
@@ -6941,6 +6938,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         row.layer?.cornerRadius = 8
         row.collectionID = c.id
         let isSel = (c.id == selectedCollectionID)
+        row.setAccessibilityRole(.button)
+        row.setAccessibilityLabel(c.displayName)
+        row.setAccessibilitySelected(isSel)
 
         // Selection highlight using the app's accent-aware adaptive background
         // (matches the prayer-row highlight pattern), not a raw layer tint.
@@ -6955,7 +6955,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
         let nameLbl = NSTextField(labelWithString: c.displayName)
         nameLbl.font = Localizer.shared.font(size: 13, weight: isSel ? .semibold : .regular)
-        nameLbl.textColor = isSel ? .controlAccentColor : .labelColor
+        nameLbl.textColor = isSel ? .appGreenAccent : .labelColor
         nameLbl.alignment = Localizer.shared.isRTL ? .right : .left
         nameLbl.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         nameLbl.translatesAutoresizingMaskIntoConstraints = false
@@ -7267,6 +7267,19 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             card.leadingAnchor.constraint(equalTo: itemsStack.leadingAnchor).isActive = true
             card.trailingAnchor.constraint(equalTo: itemsStack.trailingAnchor).isActive = true
         }
+        // A dedicated flexible tail absorbs spare viewport height. Without
+        // it NSStackView stretches an item card, which is the same failure
+        // mode that previously pushed collection rows toward the bottom.
+        if !c.items.isEmpty {
+            let tail = NSView()
+            tail.translatesAutoresizingMaskIntoConstraints = false
+            tail.setContentHuggingPriority(.defaultLow, for: .vertical)
+            tail.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
+            itemsStack.addArrangedSubview(tail)
+            tail.leadingAnchor.constraint(equalTo: itemsStack.leadingAnchor).isActive = true
+            tail.trailingAnchor.constraint(equalTo: itemsStack.trailingAnchor).isActive = true
+            tail.heightAnchor.constraint(greaterThanOrEqualToConstant: 0).isActive = true
+        }
     }
 
     private func makeItemCard(_ entry: AdhkarEntry, index: Int, collectionIndex: Int) -> NSView {
@@ -7277,7 +7290,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         // hit-test transparent and therefore cannot own these buttons.
         let card = AdaptiveCardView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
         card.translatesAutoresizingMaskIntoConstraints = false
-        card.addsDepth = true
+        card.cornerRadius = 12
+        card.addsDepth = false
+        card.setAccessibilityRole(.group)
+        card.setAccessibilityLabel("\(index + 1). \(entry.arabic)")
 
         let arabic = NSTextField(wrappingLabelWithString: entry.arabic)
         arabic.font = Localizer.shared.font(size: 18, weight: .medium)
@@ -7290,11 +7306,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         arabic.cell?.truncatesLastVisibleLine = false
         arabic.cell?.wraps = true
         arabic.maximumNumberOfLines = 0
-        arabic.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        arabic.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        arabic.cell?.truncatesLastVisibleLine = false
-        arabic.cell?.wraps = true
-        arabic.maximumNumberOfLines = 0
+        arabic.isSelectable = true
 
         // Meta line: repeat count + audio source. Uses Cairo so the Arabic
         // numerals/badge render consistently with the rest of the app.
@@ -7570,7 +7582,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     // MARK: - add (library / custom)
 
     @objc private func addFromLibrary() {
-        guard let ci = selectedCollectionIndex() else { return }
+        guard selectedCollectionIndex() != nil else { return }
         // Offer items from ALL 14 categories, deduped by Arabic text.
         var allItems: [AdhkarItem] = []
         for set in AdhkarSet.allCases {
@@ -7593,7 +7605,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     }
 
     @objc private func addCustom() {
-        guard let ci = selectedCollectionIndex() else { return }
+        guard selectedCollectionIndex() != nil else { return }
         let sheet = AdhkarItemEditSheet(arabic: "", count: 1, virtue: "", source: "")
         sheet.onSave = { [weak self] arabic, count, virtue, source in
             guard let self = self,
@@ -7618,10 +7630,35 @@ final class CollectionRowView: NSView {
     var collectionID: UUID?
     var onSelect: ((UUID) -> Void)?
 
+    override var acceptsFirstResponder: Bool { true }
+
+    private func select() {
+        guard let id = collectionID else { return }
+        window?.makeFirstResponder(self)
+        onSelect?(id)
+    }
+
     override func mouseDown(with event: NSEvent) {
-        if let id = collectionID {
-            onSelect?(id)
+        select()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 36 || event.charactersIgnoringModifiers == " " {
+            select()
+        } else {
+            super.keyDown(with: event)
         }
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        select()
+        return true
+    }
+
+    override var focusRingMaskBounds: NSRect { bounds.insetBy(dx: 2, dy: 2) }
+
+    override func drawFocusRingMask() {
+        NSBezierPath(roundedRect: focusRingMaskBounds, xRadius: 7, yRadius: 7).fill()
     }
 }
 
