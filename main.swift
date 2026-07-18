@@ -89,7 +89,7 @@ let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbo
 let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
 let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
 
-let kAppVersion          = "3.13.2"
+let kAppVersion          = "3.13.3"
 
 // ============================================================================
 // MARK: Theme palette
@@ -7137,7 +7137,9 @@ final class QuranViewController: NSViewController, MainTabContent,
 
         studyPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         studyPopup.addItems(withTitles: [featureText("quran.study.search"),
-                                         featureText("quran.study.tafsir"),
+                                         "Tafsir · Ibn Kathir (العربية)",
+                                         "Tafsir · Al-Sa’di (العربية)",
+                                         "Tafsir · Ma’arif al-Qur’an (English)",
                                          featureText("quran.study.official_source")])
         studyPopup.target = self
         studyPopup.action = #selector(studyModeChanged(_:))
@@ -7284,7 +7286,7 @@ final class QuranViewController: NSViewController, MainTabContent,
             searchField.heightAnchor.constraint(equalToConstant: 28),
             studyPopup.leadingAnchor.constraint(equalTo: searchField.trailingAnchor, constant: 8),
             studyPopup.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
-            studyPopup.widthAnchor.constraint(equalToConstant: 190),
+            studyPopup.widthAnchor.constraint(equalToConstant: 230),
             studyPopup.heightAnchor.constraint(equalToConstant: 28),
             bookmarkButton.leadingAnchor.constraint(equalTo: studyPopup.trailingAnchor, constant: 8),
             bookmarkButton.centerYAnchor.constraint(equalTo: backButton.centerYAnchor),
@@ -7429,10 +7431,10 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     @objc private func studyModeChanged(_ sender: NSPopUpButton) {
-        searchField.placeholderString = sender.indexOfSelectedItem == 1
+        searchField.placeholderString = (1...3).contains(sender.indexOfSelectedItem)
             ? featureText("quran.tafsir.placeholder")
             : featureText("quran.search.placeholder")
-        if sender.indexOfSelectedItem == 2 {
+        if sender.indexOfSelectedItem == 4 {
             webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
             sourceLabel.stringValue = featureText("quran.source.kfgqpc.developer")
         }
@@ -7441,15 +7443,21 @@ final class QuranViewController: NSViewController, MainTabContent,
     @objc private func runStudySearch() {
         let query = searchField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return }
-        if studyPopup.indexOfSelectedItem == 2 {
+        let studyMode = studyPopup.indexOfSelectedItem
+        if studyMode == 4 {
             webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
             return
         }
         let isReference = query.range(of: #"^\d{1,3}:\d{1,3}$"#,
                                       options: .regularExpression) != nil
         let url: URL?
-        if studyPopup.indexOfSelectedItem == 1, isReference {
-            url = URL(string: "https://quran.com/\(query)/tafsirs")
+        if (1...3).contains(studyMode), isReference {
+            let tafsirSlug = [
+                1: "ar-tafsir-ibn-kathir",
+                2: "ar-tafseer-al-saddi",
+                3: "en-tafsir-maarif-ul-quran",
+            ][studyMode] ?? "ar-tafsir-ibn-kathir"
+            url = URL(string: "https://quran.com/\(query)/tafsirs/\(tafsirSlug)")
         } else if isReference {
             url = URL(string: "https://quran.com/\(query)")
         } else {
