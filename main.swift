@@ -89,7 +89,7 @@ let kQuranWarshReaderURL   = "https://qurancomplex.gov.sa/isdarat-qiraat/#flipbo
 let kQuranDeveloperURL     = "https://qurancomplex.gov.sa/quran-dev/"
 let kMoroccanMushafURL     = "https://www.habous.gov.ma/fr/islam-au-maroc/6558-la-mise-en-ligne-de-al-moshaf-almohammadi.html"
 
-let kAppVersion          = "3.13.3"
+let kAppVersion          = "3.13.4"
 
 // ============================================================================
 // MARK: Theme palette
@@ -7355,6 +7355,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         guard let url = URL(string: raw) else { return }
         sourceLabel.stringValue = featureText("quran.source.kfgqpc")
+        webView.isHidden = true
         webView.load(URLRequest(url: url,
                                 cachePolicy: .returnCacheDataElseLoad,
                                 timeoutInterval: 30))
@@ -7377,6 +7378,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         if unavailableOverlay?.isHidden == false {
             retryOfficialReader()
         } else {
+            webView.isHidden = true
             webView.reload()
         }
     }
@@ -7397,6 +7399,7 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     private func showUnavailableReader() {
         progress?.stopAnimation(nil)
+        webView?.isHidden = true
         sourceLabel?.stringValue = featureText("quran.unavailable")
         let isWarsh = edition == "warsh"
         unavailableHint?.stringValue = isWarsh
@@ -7427,6 +7430,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         guard let url = URL(string: "https://quran.com/1") else { return }
         unavailableOverlay?.isHidden = true
         sourceLabel.stringValue = featureText("quran.source.foundation")
+        webView.isHidden = true
         webView.load(URLRequest(url: url, timeoutInterval: 30))
     }
 
@@ -7435,6 +7439,7 @@ final class QuranViewController: NSViewController, MainTabContent,
             ? featureText("quran.tafsir.placeholder")
             : featureText("quran.search.placeholder")
         if sender.indexOfSelectedItem == 4 {
+            webView.isHidden = true
             webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
             sourceLabel.stringValue = featureText("quran.source.kfgqpc.developer")
         }
@@ -7445,6 +7450,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         guard !query.isEmpty else { return }
         let studyMode = studyPopup.indexOfSelectedItem
         if studyMode == 4 {
+            webView.isHidden = true
             webView.load(URLRequest(url: URL(string: kQuranDeveloperURL)!))
             return
         }
@@ -7466,6 +7472,7 @@ final class QuranViewController: NSViewController, MainTabContent,
             url = components?.url
         }
         guard let url else { return }
+        webView.isHidden = true
         webView.load(URLRequest(url: url))
         sourceLabel.stringValue = edition == "warsh"
             ? featureText("quran.study.hafs_only")
@@ -7540,6 +7547,7 @@ final class QuranViewController: NSViewController, MainTabContent,
               isAllowedReaderURL(url.absoluteString) else { return }
         editionControl.selectedSegment = values[sender.tag].edition == "warsh" ? 1 : 0
         UserDefaults.standard.set(values[sender.tag].edition, forKey: kQuranEditionKey)
+        webView.isHidden = true
         webView.load(URLRequest(url: url))
     }
 
@@ -7590,6 +7598,7 @@ final class QuranViewController: NSViewController, MainTabContent,
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         cancelLoadWatchdog()
         unavailableOverlay?.isHidden = true
+        webView.isHidden = false
         progress.stopAnimation(nil)
         if let raw = webView.url?.absoluteString, raw.contains("qurancomplex.gov.sa") {
             UserDefaults.standard.set(raw, forKey: lastURLKey(for: edition))
