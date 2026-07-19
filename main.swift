@@ -117,7 +117,7 @@ let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 
-let kAppVersion          = "3.23.0"
+let kAppVersion          = "3.23.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -13895,8 +13895,10 @@ final class QuranViewController: NSViewController, MainTabContent,
             tokenIndex = cut + 1
         }
 
-        // -- page geometry: scale 1.0 fits the whole illuminated page in
-        // the viewport; the size control zooms the page as one unit.
+        // -- page geometry: one constant sheet, like a physical mushaf.
+        // Every page of the book shares the same dimensions (derived from
+        // the window, zoomed by the size control); the type is then fitted
+        // into that fixed sheet, never the other way around.
         var widestLine: CGFloat = 1
         for line in 1...maxLine {
             guard let segments = bodyLines[line] else { continue }
@@ -13906,48 +13908,53 @@ final class QuranViewController: NSViewController, MainTabContent,
         let sidePad = QuranMushafCardView.textInset
         let headerBand: CGFloat = 54
         let footerBand: CGFloat = 52
-        // The Qur'an faces carry very tall intrinsic metrics (room for
-        // stacked marks and medallions); print pages sit much tighter. The
-        // paragraph style pins this exact line height below, so the fit
-        // model and the rendered page always agree.
-        let lineHeightFactor: CGFloat = 1.95
-        let rowFactor = lineHeightFactor
-        let rows = CGFloat(maxLine) + CGFloat(bannerLines.count) * 0.7 + 0.8
         let viewport = mushafPageScroll.contentSize
         let viewportHeight = viewport.height > 100 ? viewport.height
             : max(320, backdrop.bounds.height - 34)
         let viewportWidth = viewport.width > 100 ? viewport.width
             : max(360, backdrop.bounds.width)
-        let textBudget = viewportHeight - headerBand - footerBand - 30
-        let sizePerWidthPoint = referenceSize * 0.985 / widestLine
-        var fitWidth = textBudget / (rows * rowFactor * sizePerWidthPoint)
-            + sidePad * 2
-        fitWidth = min(fitWidth, viewportWidth - 44, 760)
-        let pageWidth = max(330, fitWidth * textScale)
+        let pageAspect: CGFloat = 1.46
+        var basePageHeight = viewportHeight - 26
+        var basePageWidth = basePageHeight / pageAspect
+        if basePageWidth > viewportWidth - 44 {
+            basePageWidth = viewportWidth - 44
+            basePageHeight = basePageWidth * pageAspect
+        }
+        let pageWidth = max(330, basePageWidth * textScale)
+        let pageHeight = pageWidth * pageAspect
         let textWidth = pageWidth - sidePad * 2
-        let bodySize = max(10, referenceSize * (textWidth - 18) / widestLine * 0.98)
+        let targetLineWidth = textWidth - 8
+        // Fixed 15-row grid: the print's line height is a constant fraction
+        // of the sheet, whatever face is selected. The face is sized to the
+        // grid, capped so the densest line of this page still fits the
+        // measure (justification can stretch lines, never compress them).
+        let lineHeightFactor: CGFloat = 1.95
+        let textBlockHeight = pageHeight - headerBand - footerBand - 20
+        let lineHeight = textBlockHeight / 15.4
+        let bodySize = max(9, min(lineHeight / lineHeightFactor,
+                                  referenceSize * (targetLineWidth - 6) / widestLine * 0.98))
 
         let bodyFont = quranScriptFont(size: bodySize)
         let bannerFont = quranScriptFont(size: bodySize * 0.95)
         let bismillahFont = quranScriptFont(size: bodySize * 0.9)
 
         let bodyParagraph = NSMutableParagraphStyle()
-        bodyParagraph.alignment = .justified
+        bodyParagraph.alignment = .right
         bodyParagraph.baseWritingDirection = .rightToLeft
         bodyParagraph.lineBreakMode = .byWordWrapping
-        bodyParagraph.minimumLineHeight = bodySize * lineHeightFactor
-        bodyParagraph.maximumLineHeight = bodySize * lineHeightFactor
+        bodyParagraph.minimumLineHeight = lineHeight
+        bodyParagraph.maximumLineHeight = lineHeight
         let centered = NSMutableParagraphStyle()
         centered.alignment = .center
         centered.baseWritingDirection = .rightToLeft
-        centered.minimumLineHeight = bodySize * lineHeightFactor
-        centered.maximumLineHeight = bodySize * lineHeightFactor
-        centered.paragraphSpacingBefore = bodySize * 0.1
-        centered.paragraphSpacing = bodySize * 0.1
+        centered.minimumLineHeight = lineHeight
+        centered.maximumLineHeight = lineHeight
 
-        // -- compose. Body lines are joined with U+2028 so every line except
-        // a block's last is stretched by justification, exactly like the
-        // fully-justified printed column.
+        // -- compose. Body lines break at the solved cuts (U+2028) and are
+        // then hand-justified: the slack to the full measure is distributed
+        // over the line's word spaces, so every line of the column ends at
+        // exactly the same length, like the printed page. (TextKit's own
+        // justification ignores lines ended by explicit breaks.)
         let result = NSMutableAttributedString()
         var ranges: [(range: NSRange, verse: OfflineQuranVerse)] = []
         var inBodyBlock = false
@@ -13956,6 +13963,24 @@ final class QuranViewController: NSViewController, MainTabContent,
             result.append(NSAttributedString(string: "\n", attributes:
                 [.font: bodyFont, .paragraphStyle: bodyParagraph]))
             inBodyBlock = false
+        }
+        func justifyLine(_ lineRange: NSRange) {
+            guard lineRange.length > 0 else { return }
+            let text = (result.string as NSString).substring(with: lineRange)
+            let natural = (text as NSString).size(withAttributes: [.font: bodyFont]).width
+            let slack = targetLineWidth - 2 - natural
+            guard slack > 0.5 else { return }
+            var spaceOffsets: [Int] = []
+            let nsText = text as NSString
+            for offset in 0..<nsText.length where nsText.character(at: offset) == 32 {
+                spaceOffsets.append(lineRange.location + offset)
+            }
+            guard !spaceOffsets.isEmpty else { return }
+            let kern = min(slack / CGFloat(spaceOffsets.count), bodySize * 1.8)
+            for offset in spaceOffsets {
+                result.addAttribute(.kern, value: kern,
+                                    range: NSRange(location: offset, length: 1))
+            }
         }
         for line in 1...maxLine {
             if let banner = bannerLines[line] {
@@ -13985,6 +14010,7 @@ final class QuranViewController: NSViewController, MainTabContent,
                 result.append(NSAttributedString(string: "\u{2028}", attributes:
                     [.font: bodyFont, .paragraphStyle: bodyParagraph]))
             }
+            let lineStart = result.length
             for (index, segment) in segments.enumerated() {
                 if index > 0 {
                     result.append(NSAttributedString(string: " ", attributes:
@@ -14000,15 +14026,16 @@ final class QuranViewController: NSViewController, MainTabContent,
                                            length: segment.text.utf16.count), verse))
                 }
             }
+            justifyLine(NSRange(location: lineStart, length: result.length - lineStart))
             inBodyBlock = true
         }
         mushafText.textStorage?.setAttributedString(result)
         mushafRanges = ranges
         applyMushafSelectionHighlight()
 
-        // -- lay the illuminated page out: measure the typeset block, give
-        // the sheet printed-Mushaf proportions, and center it in the
-        // scrollable surface.
+        // -- lay the illuminated page out on the constant sheet: measure the
+        // typeset block and center it between the header cartouche and the
+        // page-number medallion (ornamental short pages float centered).
         mushafText.textContainer?.containerSize = NSSize(
             width: textWidth - 8, height: CGFloat.greatestFiniteMagnitude)
         var textHeight: CGFloat = 200
@@ -14018,9 +14045,7 @@ final class QuranViewController: NSViewController, MainTabContent,
             textHeight = ceil(layoutManager.usedRect(for: container).height) + 10
         }
         let contentHeight = headerBand + textHeight + footerBand
-        let pageTargetHeight = pageWidth * 1.46
-        let pageHeight = max(contentHeight, min(pageTargetHeight, contentHeight + 260))
-        let slack = (pageHeight - contentHeight) / 2
+        let slack = max(0, (pageHeight - contentHeight) / 2)
         let documentWidth = max(viewportWidth, pageWidth + 36)
         let documentHeight = max(viewportHeight, pageHeight + 32)
         mushafDocument.frame = NSRect(x: 0, y: 0, width: documentWidth,
