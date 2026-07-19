@@ -118,7 +118,7 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.25.0"
+let kAppVersion          = "3.26.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1252,13 +1252,22 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
 
     /// Begin reciting a full collection. Replaces any in-flight session.
     /// v3 entry point — accepts user-edited collections.
-    func start(collection: AdhkarCollection) {
+    func start(collection: AdhkarCollection, at startIndex: Int = 0) {
         stop()
         items = collection.items
         activeCategoryKey = collection.categoryKey
         guard !items.isEmpty else { return }
-        index = 0
+        index = max(0, min(items.count - 1, startIndex))
         playsSoFar = 0
+        playCurrent()
+    }
+
+    /// Jump straight to a specific item of the active session.
+    func jump(to newIndex: Int) {
+        guard items.indices.contains(newIndex) else { return }
+        index = newIndex
+        playsSoFar = 0
+        if isPaused { onItemChange?(items[index], index, items.count); return }
         playCurrent()
     }
 
@@ -15559,7 +15568,8 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 private let adhkarModeEnglish: [String: String] = [
     "mode.reading": "Reading", "mode.editing": "Editing",
     "reading.empty": "Choose a collection and press play",
-    "reading.repeat": "Recitation", "reading.tap.hint": "Tap to count",
+    "reading.repeat": "Recitation",
+    "reading.tap.hint": "Tap (or press Space) to count a repetition",
     "studio.open": "Audio Studio",
     "studio.hint": "Isolate one dhikr with the handles, preview it, then add it — the selection then jumps ahead so you can walk through the whole recording.",
     "studio.source": "Recording", "studio.import": "Import audio…",
@@ -15574,7 +15584,8 @@ private let adhkarModeEnglish: [String: String] = [
 private let adhkarModeArabic: [String: String] = [
     "mode.reading": "القراءة", "mode.editing": "التحرير",
     "reading.empty": "اختر مجموعة ثم اضغط تشغيل",
-    "reading.repeat": "التلاوة", "reading.tap.hint": "انقر للعدّ",
+    "reading.repeat": "التلاوة",
+    "reading.tap.hint": "انقر أو اضغط مفتاح المسافة لعدّ مرة",
     "studio.open": "استوديو الصوت",
     "studio.hint": "حدّد ذكرًا واحدًا بالمقبضين ثم استمع إليه وأضِفه — ينتقل التحديد تلقائيًا بعدها لتتابع تقسيم التسجيل كاملًا.",
     "studio.source": "التسجيل", "studio.import": "استيراد ملف صوتي…",
@@ -16102,7 +16113,8 @@ final class AdhkarAudioStudioController: NSViewController {
     }
 }
 
-final class AdhkarEditorViewController: NSViewController, MainTabContent {
+final class AdhkarEditorViewController: NSViewController, MainTabContent,
+                                        NSTableViewDataSource, NSTableViewDelegate {
 
     weak var appDelegate: AppDelegate?
 
@@ -16153,8 +16165,17 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     private var tasbihButton: NSButton!
     private var tasbihRemaining = 0
     private var readingTimer: Timer?
+    private var readingListTable: NSTableView!
+    private var readingItems: [AdhkarEntry] = []
+    private var syncingReadingSelection = false
+    private var spaceKeyMonitor: Any?
     private var isReadingMode: Bool {
         (UserDefaults.standard.string(forKey: kAdhkarViewMode) ?? "editing") == "reading"
+    }
+
+    deinit {
+        readingTimer?.invalidate()
+        if let monitor = spaceKeyMonitor { NSEvent.removeMonitor(monitor) }
     }
 
     // Preview uses the same clean-segment/exact-wording pipeline as the
@@ -16358,12 +16379,38 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     // MARK: - reading surface
 
     private func buildReadingSurface(into root: NSView) {
-        let isRTL = Localizer.shared.isRTL
         let backdrop = MoroccanPatternView()
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(backdrop)
 
+        // Full list of the collection's adhkar on the leading side — pick
+        // what to recite, follow along, or jump anywhere.
+        readingListTable = NSTableView()
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("dhikr"))
+        column.resizingMask = .autoresizingMask
+        readingListTable.addTableColumn(column)
+        readingListTable.headerView = nil
+        readingListTable.backgroundColor = .clear
+        readingListTable.rowHeight = 52
+        readingListTable.intercellSpacing = NSSize(width: 0, height: 2)
+        readingListTable.dataSource = self
+        readingListTable.delegate = self
+        readingListTable.setAccessibilityLabel(t("adhkar.editor.title"))
+        let listScroll = NSScrollView()
+        listScroll.documentView = readingListTable
+        listScroll.drawsBackground = false
+        listScroll.hasVerticalScroller = true
+        listScroll.autohidesScrollers = true
+        listScroll.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(listScroll)
+
+        // Layout guide for the reading column (everything beside the list).
+        let contentGuide = NSLayoutGuide()
+        root.addLayoutGuide(contentGuide)
+
         readingCollectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        readingCollectionPopup.target = self
+        readingCollectionPopup.action = #selector(readingCollectionChanged(_:))
         readingCollectionPopup.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(readingCollectionPopup)
 
@@ -16438,6 +16485,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         readingTimeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         readingTimeLabel.textColor = .tertiaryLabelColor
 
+        let isRTL = Localizer.shared.isRTL
         let controlSize = NSSize(width: 44, height: 40)
         let previousButton = HoverIconButton(
             symbol: isRTL ? "forward.fill" : "backward.fill",
@@ -16468,7 +16516,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         progressRow.orientation = .horizontal
         progressRow.spacing = 10
         progressRow.translatesAutoresizingMaskIntoConstraints = false
-        readingProgress.widthAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+        readingProgress.widthAnchor.constraint(greaterThanOrEqualToConstant: 180).isActive = true
         root.addSubview(progressRow)
 
         readingEmptyLabel = NSTextField(labelWithString: adhkarModeText("reading.empty"))
@@ -16483,41 +16531,149 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
             backdrop.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             backdrop.topAnchor.constraint(equalTo: root.topAnchor),
             backdrop.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            listScroll.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 14),
+            listScroll.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
+            listScroll.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -10),
+            listScroll.widthAnchor.constraint(equalToConstant: 262),
+            contentGuide.leadingAnchor.constraint(equalTo: listScroll.trailingAnchor),
+            contentGuide.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             readingCollectionPopup.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
-            readingCollectionPopup.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            readingCollectionPopup.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
+            readingCollectionPopup.centerXAnchor.constraint(equalTo: contentGuide.centerXAnchor),
+            readingCollectionPopup.widthAnchor.constraint(lessThanOrEqualToConstant: 360),
             readingCollectionPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
             readingCard.topAnchor.constraint(equalTo: readingCollectionPopup.bottomAnchor,
-                                             constant: 14),
-            readingCard.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            readingCard.widthAnchor.constraint(lessThanOrEqualToConstant: 660),
-            readingCard.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -120)
-                .withPriority(.defaultHigh),
+                                             constant: 12),
+            readingCard.leadingAnchor.constraint(equalTo: contentGuide.leadingAnchor,
+                                                 constant: 20),
+            readingCard.trailingAnchor.constraint(equalTo: contentGuide.trailingAnchor,
+                                                  constant: -24),
+            readingCard.bottomAnchor.constraint(equalTo: progressRow.topAnchor, constant: -12),
             arabicScroll.topAnchor.constraint(equalTo: readingCard.topAnchor, constant: 22),
             arabicScroll.leadingAnchor.constraint(equalTo: readingCard.leadingAnchor, constant: 24),
             arabicScroll.trailingAnchor.constraint(equalTo: readingCard.trailingAnchor, constant: -24),
-            arabicScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 130),
-            readingVirtueLabel.topAnchor.constraint(equalTo: arabicScroll.bottomAnchor, constant: 12),
+            arabicScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 110),
+            arabicScroll.bottomAnchor.constraint(equalTo: readingVirtueLabel.topAnchor,
+                                                 constant: -12),
             readingVirtueLabel.leadingAnchor.constraint(equalTo: readingCard.leadingAnchor, constant: 28),
             readingVirtueLabel.trailingAnchor.constraint(equalTo: readingCard.trailingAnchor, constant: -28),
             readingSourceLabel.topAnchor.constraint(equalTo: readingVirtueLabel.bottomAnchor, constant: 4),
             readingSourceLabel.leadingAnchor.constraint(equalTo: readingCard.leadingAnchor, constant: 28),
             readingSourceLabel.trailingAnchor.constraint(equalTo: readingCard.trailingAnchor, constant: -28),
-            tasbihButton.topAnchor.constraint(equalTo: readingSourceLabel.bottomAnchor, constant: 14),
+            tasbihButton.topAnchor.constraint(equalTo: readingSourceLabel.bottomAnchor, constant: 12),
             tasbihButton.centerXAnchor.constraint(equalTo: readingCard.centerXAnchor),
             tasbihButton.widthAnchor.constraint(equalToConstant: 68),
             tasbihButton.heightAnchor.constraint(equalToConstant: 68),
             readingRepeatLabel.topAnchor.constraint(equalTo: tasbihButton.bottomAnchor, constant: 6),
             readingRepeatLabel.centerXAnchor.constraint(equalTo: readingCard.centerXAnchor),
-            readingRepeatLabel.bottomAnchor.constraint(equalTo: readingCard.bottomAnchor, constant: -18),
-            progressRow.topAnchor.constraint(equalTo: readingCard.bottomAnchor, constant: 14),
-            progressRow.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            controls.topAnchor.constraint(equalTo: progressRow.bottomAnchor, constant: 8),
-            controls.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            controls.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -14),
-            readingEmptyLabel.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            readingRepeatLabel.bottomAnchor.constraint(equalTo: readingCard.bottomAnchor, constant: -16),
+            progressRow.centerXAnchor.constraint(equalTo: contentGuide.centerXAnchor),
+            progressRow.bottomAnchor.constraint(equalTo: controls.topAnchor, constant: -6),
+            controls.centerXAnchor.constraint(equalTo: contentGuide.centerXAnchor),
+            controls.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -12),
+            readingEmptyLabel.centerXAnchor.constraint(equalTo: contentGuide.centerXAnchor),
             readingEmptyLabel.centerYAnchor.constraint(equalTo: readingCard.centerYAnchor),
         ])
+
+        // Space bar counts a manual repetition while the reading surface is
+        // active (mirrors tapping the tasbih circle).
+        spaceKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+            [weak self] event in
+            guard let self, self.isReadingMode,
+                  self.readingRoot?.isHidden == false,
+                  self.view.window?.isKeyWindow == true,
+                  !(self.view.window?.firstResponder is NSText),
+                  event.keyCode == 49,
+                  !event.modifierFlags.contains(.command) else { return event }
+            self.tasbihTapped()
+            return nil
+        }
+    }
+
+    /// The collection the reading surface points at (popup selection).
+    private func readingSelectedCollection() -> AdhkarCollection? {
+        let index = readingCollectionPopup?.indexOfSelectedItem ?? -1
+        guard collections.indices.contains(index) else { return nil }
+        return collections[index]
+    }
+
+    @objc private func readingCollectionChanged(_ sender: NSPopUpButton) {
+        guard let collection = readingSelectedCollection() else { return }
+        selectedCollectionID = collection.id
+        reloadReadingList()
+    }
+
+    private func reloadReadingList() {
+        readingItems = readingSelectedCollection()?.items ?? []
+        readingListTable?.reloadData()
+        syncReadingListSelection()
+    }
+
+    private func syncReadingListSelection() {
+        guard readingListTable != nil else { return }
+        guard let position = session.position, session.currentItem != nil,
+              position.1 == readingItems.count,
+              readingItems.indices.contains(position.0 - 1) else {
+            syncingReadingSelection = true
+            readingListTable.deselectAll(nil)
+            syncingReadingSelection = false
+            return
+        }
+        syncingReadingSelection = true
+        readingListTable.selectRowIndexes(IndexSet(integer: position.0 - 1),
+                                          byExtendingSelection: false)
+        readingListTable.scrollRowToVisible(position.0 - 1)
+        syncingReadingSelection = false
+    }
+
+    // Reading list table.
+    func numberOfRows(in tableView: NSTableView) -> Int { readingItems.count }
+
+    func tableView(_ tableView: NSTableView,
+                   viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        let identifier = NSUserInterfaceItemIdentifier("adhkar.reading.row")
+        let cell = (tableView.makeView(withIdentifier: identifier, owner: self)
+                    as? NSTableCellView) ?? {
+            let view = NSTableCellView()
+            view.identifier = identifier
+            let text = NSTextField(wrappingLabelWithString: "")
+            text.font = Localizer.shared.font(size: 12.5)
+            text.maximumNumberOfLines = 2
+            text.cell?.truncatesLastVisibleLine = true
+            text.alignment = .right
+            text.baseWritingDirection = .rightToLeft
+            text.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview(text)
+            view.textField = text
+            NSLayoutConstraint.activate([
+                text.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8),
+                text.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8),
+                text.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            ])
+            return view
+        }()
+        guard readingItems.indices.contains(row) else { return cell }
+        let entry = readingItems[row]
+        let count = entry.count > 1
+            ? "  ×\(localizedInterfaceDigits(String(entry.count)))" : ""
+        cell.textField?.stringValue =
+            "\(localizedInterfaceDigits(String(row + 1))). \(entry.arabic)\(count)"
+        return cell
+    }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { 52 }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+        guard !syncingReadingSelection,
+              let table = notification.object as? NSTableView,
+              table === readingListTable else { return }
+        let row = readingListTable.selectedRow
+        guard readingItems.indices.contains(row),
+              let collection = readingSelectedCollection() else { return }
+        if session.currentItem != nil, session.count == collection.items.count {
+            session.jump(to: row)
+        } else {
+            session.start(collection: collection, at: row)
+        }
     }
 
     private func rebuildReadingCollectionPopup() {
@@ -16530,6 +16686,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
            let index = collections.firstIndex(where: { $0.id == id }) {
             readingCollectionPopup.selectItem(at: index)
         }
+        reloadReadingList()
     }
 
     /// Reflect the session's live state onto the reading surface (also used
@@ -16571,6 +16728,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         updateTasbihButton()
         updateReadingRepeat(session.repeatState.0, session.repeatState.1)
         refreshReadingControls()
+        syncReadingListSelection()
     }
 
     private func updateReadingRepeat(_ done: Int, _ target: Int) {
@@ -18590,6 +18748,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             } else if let index = Int(destination) {
                 openMainWindow(selecting: index)
             }
+            if let wide = ProcessInfo.processInfo.environment["SALAT_WIN"],
+               let comma = wide.firstIndex(of: "x"),
+               let width = Double(wide[..<comma]),
+               let height = Double(wide[wide.index(after: comma)...]) {
+                mainWindow?.setContentSize(NSSize(width: width, height: height))
+                mainWindow?.center()
+            }
         }
         // TEMP-DEV: self-snapshot the main window (or open popup) then quit.
         if let snapshotPath = ProcessInfo.processInfo.environment["SALAT_SNAPSHOT"] {
@@ -19323,16 +19488,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let centers: [CGFloat] = [W * 0.125, W * 0.375, W * 0.625, W * 0.875]
 
         // Preferences now live exclusively in the full Settings surface, so
-        // the compact toolbar keeps only daily actions.
-        let refreshBtn = HoverIconButton(
-            symbol: "arrow.clockwise",
-            toolTip: t("tooltip.refresh"),
+        // the compact toolbar keeps only destinations. The first button
+        // opens the full app on the prayer dashboard.
+        let appBtn = HoverIconButton(
+            symbol: "macwindow",
+            toolTip: "Salat Time",
             target: self,
-            action: #selector(menuRefresh),
+            action: #selector(openPrayerFromPopup),
             pointSize: 15,
             size: btnSize)
-        refreshBtn.setFrameOrigin(NSPoint(x: centers[0] - btnSize.width/2, y: btnY))
-        content.addSubview(refreshBtn)
+        appBtn.setFrameOrigin(NSPoint(x: centers[0] - btnSize.width/2, y: btnY))
+        content.addSubview(appBtn)
 
         let quranBtn = HoverIconButton(
             symbol: "book.pages.fill",
@@ -19398,7 +19564,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 chip.isHidden = false
             }
         }
-        attachHint(refreshBtn, t("tooltip.refresh"))
+        attachHint(appBtn, "Salat Time")
         attachHint(quranBtn, featureText("quran.tab"))
         attachHint(adhkarBtn, t("adhkar.editor.title"))
         attachHint(settingsBtn, t("tooltip.settings"))
@@ -19419,6 +19585,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     @objc func openAdhkarFromPopup() {
         popover?.performClose(nil)
         openMainWindow(selecting: 1)
+    }
+    @objc func openPrayerFromPopup() {
+        popover?.performClose(nil)
+        openMainWindow(selecting: 0)
     }
     @objc func settingsTapped() {
         // Prayer popup → Adhan settings; compact Adhkar → Adhkar settings.
