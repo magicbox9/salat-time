@@ -117,7 +117,7 @@ let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 
-let kAppVersion          = "3.23.1"
+let kAppVersion          = "3.24.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -3361,6 +3361,9 @@ final class HoverIconButton: NSButton {
     var hoverTint: NSColor = .labelColor
     var hoverBG:   NSColor = NSColor(white: 0.5, alpha: 0.18)
     var cornerRad: CGFloat = 8 { didSet { layer?.cornerRadius = cornerRad } }
+    /// Fired on hover start/end — lets hosts show an instant hint (native
+    /// tooltips only appear after a system delay).
+    var onHoverChange: ((Bool) -> Void)?
 
     init(symbol: String,
          toolTip: String,
@@ -3422,6 +3425,7 @@ final class HoverIconButton: NSButton {
             ctx.allowsImplicitAnimation = true
             self.layer?.backgroundColor = self.hoverBG.cgColor
         }
+        onHoverChange?(true)
     }
 
     override func mouseExited(with event: NSEvent) {
@@ -3433,6 +3437,7 @@ final class HoverIconButton: NSButton {
             ctx.allowsImplicitAnimation = true
             self.layer?.backgroundColor = NSColor.clear.cgColor
         }
+        onHoverChange?(false)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -17549,14 +17554,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 openMainWindow()
                 mainWindow?.showSettingsWindow(section:
                     SettingsSection(rawValue: raw) ?? .general)
+            } else if destination == "popup" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                    self?.togglePopover()
+                }
             } else if let index = Int(destination) {
                 openMainWindow(selecting: index)
             }
         }
-        // TEMP-DEV: self-snapshot the main window then quit.
+        // TEMP-DEV: self-snapshot the main window (or open popup) then quit.
         if let snapshotPath = ProcessInfo.processInfo.environment["SALAT_SNAPSHOT"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
-                if let view = self?.mainWindow?.contentView,
+                if let view = self?.mainWindow?.contentView
+                    ?? self?.popover?.contentViewController?.view,
                    let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
                     view.cacheDisplay(in: view.bounds, to: rep)
                     try? rep.representation(using: .png, properties: [:])?
@@ -18305,14 +18315,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         quranBtn.setFrameOrigin(NSPoint(x: centers[1] - btnSize.width/2, y: btnY))
         content.addSubview(quranBtn)
 
-        // Adhkar button — switches this same compact surface between prayer
-        // times and the compact reader. The reader itself exposes a "More
-        // controls" affordance for the full management window.
+        // Adhkar button — opens the full management window on the Adhkar
+        // destination, mirroring the Qur'an button. (The compact in-popup
+        // reader remains the surface for scheduled auto-presentations.)
         let adhkarBtn = HoverIconButton(
             symbol: "text.book.closed.fill",
             toolTip: t("adhkar.editor.title"),
             target: self,
-            action: #selector(toggleCompactAdhkar),
+            action: #selector(openAdhkarFromPopup),
             pointSize: 15,
             size: btnSize)
         adhkarBtn.setFrameOrigin(NSPoint(x: centers[2] - btnSize.width/2, y: btnY))
@@ -18329,6 +18339,41 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         settingsBtn.setFrameOrigin(NSPoint(x: centers[3] - btnSize.width/2, y: btnY))
         content.addSubview(settingsBtn)
 
+        // Instant hover hints: native tooltips only appear after a system
+        // delay, so the toolbar names each destination the moment the
+        // pointer reaches a button.
+        let hintChip = NSTextField(labelWithString: "")
+        hintChip.font = Localizer.shared.font(size: 11, weight: .semibold)
+        hintChip.alignment = .center
+        hintChip.textColor = .labelColor
+        hintChip.wantsLayer = true
+        hintChip.layer?.cornerRadius = 9
+        hintChip.layer?.masksToBounds = true
+        hintChip.isHidden = true
+        content.addSubview(hintChip)
+        func attachHint(_ button: HoverIconButton, _ text: String) {
+            button.onHoverChange = { [weak hintChip, weak content, weak button] hovering in
+                guard let chip = hintChip, let host = content, let button else { return }
+                guard hovering else { chip.isHidden = true; return }
+                chip.stringValue = text
+                chip.sizeToFit()
+                let width = chip.frame.width + 18
+                var x = button.frame.midX - width / 2
+                x = max(8, min(x, host.bounds.width - width - 8))
+                chip.frame = NSRect(x: x, y: btnY - 27, width: width, height: 20)
+                let isDark = host.effectiveAppearance
+                    .bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+                chip.layer?.backgroundColor = (isDark
+                    ? NSColor(white: 0.28, alpha: 0.96)
+                    : NSColor(white: 0.94, alpha: 0.97)).cgColor
+                chip.isHidden = false
+            }
+        }
+        attachHint(refreshBtn, t("tooltip.refresh"))
+        attachHint(quranBtn, featureText("quran.tab"))
+        attachHint(adhkarBtn, t("adhkar.editor.title"))
+        attachHint(settingsBtn, t("tooltip.settings"))
+
         // ---------------- RTL pass for Arabic (and Urdu) -----------------
         // Recursive: mirrors content + every nested subtree in one call.
         if Localizer.shared.isRTL {
@@ -18341,6 +18386,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     @objc func openQuranFromPopup() {
         popover?.performClose(nil)
         openMainWindow(selecting: 2)
+    }
+    @objc func openAdhkarFromPopup() {
+        popover?.performClose(nil)
+        openMainWindow(selecting: 1)
     }
     @objc func settingsTapped() {
         // Prayer popup → Adhan settings; compact Adhkar → Adhkar settings.
