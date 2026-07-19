@@ -116,8 +116,9 @@ let kQuranTranslationKey         = "quranTranslationKey"
 let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
+let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.24.0"
+let kAppVersion          = "3.25.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1063,15 +1064,34 @@ func updateBuiltInAdhkarSchedule(_ set: AdhkarSet,
 /// Resolves an `audioRef` to a playable URL, or nil if not found.
 ///   "bundled:75.mp3"  → Resources/adhkar_audio/75.mp3
 ///   "imported:abc.mp3" → ~/Library/Application Support/SalatTime/audio/abc.mp3
+/// An audioRef may carry a non-destructive trim fragment appended by the
+/// Audio Studio: "imported:long.mp3#12.40-34.85" plays only that window of
+/// the source file. The file itself is never rewritten, so one imported
+/// recording can back any number of adhkar.
+func adhkarAudioSegment(of ref: String) -> ClosedRange<TimeInterval>? {
+    guard let hash = ref.lastIndex(of: "#") else { return nil }
+    let parts = ref[ref.index(after: hash)...].split(separator: "-")
+    guard parts.count == 2,
+          let start = TimeInterval(parts[0]), let end = TimeInterval(parts[1]),
+          end > start, start >= 0 else { return nil }
+    return start...end
+}
+
+func adhkarAudioBaseRef(_ ref: String) -> String {
+    guard let hash = ref.lastIndex(of: "#") else { return ref }
+    return String(ref[..<hash])
+}
+
 func resolveAdhkarAudio(_ ref: String) -> URL? {
-    if ref.hasPrefix("bundled:") {
-        let fname = String(ref.dropFirst("bundled:".count))
-        let base  = fname.replacingOccurrences(of: ".mp3", with: "")
-        return Bundle.main.url(forResource: base, withExtension: "mp3",
+    let base = adhkarAudioBaseRef(ref)
+    if base.hasPrefix("bundled:") {
+        let fname = String(base.dropFirst("bundled:".count))
+        let name  = fname.replacingOccurrences(of: ".mp3", with: "")
+        return Bundle.main.url(forResource: name, withExtension: "mp3",
                                 subdirectory: "adhkar_audio")
     }
-    if ref.hasPrefix("imported:") {
-        let fname = String(ref.dropFirst("imported:".count))
+    if base.hasPrefix("imported:") {
+        let fname = String(base.dropFirst("imported:".count))
         return adhkarAudioStorageDir().appendingPathComponent(fname)
     }
     return nil
@@ -1188,6 +1208,8 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     var onPlaybackStateChange: (() -> Void)?
     /// Fired when the whole set completes naturally (last item finished).
     var onFinish:              (() -> Void)?
+    /// Fired when a repeat of the current item completes: `(done, target)`.
+    var onRepeatChange:        ((Int, Int) -> Void)?
 
     private(set) var items: [AdhkarEntry] = []
     private var index   = 0
@@ -1219,6 +1241,13 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     var position: (Int, Int)? {
         guard !items.isEmpty, index < items.count else { return nil }
         return (index + 1, items.count)
+    }
+    /// Repeats of the current item: `(completed, target)`.
+    var repeatState: (Int, Int) { (playsSoFar, targetPlays) }
+    /// Live audio position of the current recitation, when one is playing.
+    var audioProgress: (current: TimeInterval, duration: TimeInterval)? {
+        guard let player else { return nil }
+        return (player.currentTime, player.duration)
     }
 
     /// Begin reciting a full collection. Replaces any in-flight session.
@@ -1405,6 +1434,9 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     }
 
     private func cleanRecitationSegments(for ref: String) -> [ClosedRange<TimeInterval>] {
+        // A studio trim fragment on the ref itself takes precedence — it IS
+        // the clean segment for that dhikr.
+        if let segment = adhkarAudioSegment(of: ref) { return [segment] }
         let ranges: [String: [ClosedRange<TimeInterval>]] = [
             "bundled:75.mp3":  [13.60...16.96, 18.36...74.80],
             "bundled:77.mp3":  [0.0...40.60],
@@ -1512,6 +1544,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
 
     private func completeCurrentPlay() {
         playsSoFar += 1
+        onRepeatChange?(playsSoFar, targetPlays)
         if playsSoFar < targetPlays {
             // Same item, repeat.
             if items.indices.contains(index) {
@@ -6187,6 +6220,15 @@ final class MainWindow: NSWindow, NSWindowDelegate, NSToolbarDelegate {
         if viewSwitcher.selectedSegment == 2 && !isShowingSettings {
             present(vc)
         }
+    }
+
+    /// Route a recitation (manual or scheduled) to the Adhkar reading
+    /// surface of this window.
+    func startAdhkarReading(_ collection: AdhkarCollection, autoPlay: Bool) {
+        viewSwitcher.selectedSegment = 1
+        isShowingSettings = false
+        showSelectedDestination()
+        editorVC?.startReading(collection: collection, autoPlay: autoPlay)
     }
 }
 
@@ -15510,6 +15552,556 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 /// delete). Right pane: items in the selected collection (add from library,
 /// add custom, reorder, remove, pick audio per item). All edits persist to
 /// UserDefaults immediately via AdhkarLibrary.save().
+// ============================================================================
+// MARK: Adhkar reading mode + Audio Studio — strings, waveform, trim sheet
+// ============================================================================
+
+private let adhkarModeEnglish: [String: String] = [
+    "mode.reading": "Reading", "mode.editing": "Editing",
+    "reading.empty": "Choose a collection and press play",
+    "reading.repeat": "Recitation", "reading.tap.hint": "Tap to count",
+    "studio.open": "Audio Studio",
+    "studio.hint": "Isolate one dhikr with the handles, preview it, then add it — the selection then jumps ahead so you can walk through the whole recording.",
+    "studio.source": "Recording", "studio.import": "Import audio…",
+    "studio.preview": "Preview selection", "studio.stop": "Stop",
+    "studio.set.start": "Start = playhead", "studio.set.end": "End = playhead",
+    "studio.selection": "Selection", "studio.text.placeholder": "Dhikr text (Arabic)",
+    "studio.count": "Repetitions", "studio.add": "Add as new dhikr",
+    "studio.assign": "Replace audio of", "studio.apply": "Apply",
+    "studio.done": "Done", "studio.empty": "Import or choose a recording to begin",
+]
+
+private let adhkarModeArabic: [String: String] = [
+    "mode.reading": "القراءة", "mode.editing": "التحرير",
+    "reading.empty": "اختر مجموعة ثم اضغط تشغيل",
+    "reading.repeat": "التلاوة", "reading.tap.hint": "انقر للعدّ",
+    "studio.open": "استوديو الصوت",
+    "studio.hint": "حدّد ذكرًا واحدًا بالمقبضين ثم استمع إليه وأضِفه — ينتقل التحديد تلقائيًا بعدها لتتابع تقسيم التسجيل كاملًا.",
+    "studio.source": "التسجيل", "studio.import": "استيراد ملف صوتي…",
+    "studio.preview": "استماع للمقطع", "studio.stop": "إيقاف",
+    "studio.set.start": "البداية عند المؤشر", "studio.set.end": "النهاية عند المؤشر",
+    "studio.selection": "المقطع", "studio.text.placeholder": "نص الذكر",
+    "studio.count": "عدد المرات", "studio.add": "إضافة كذكر جديد",
+    "studio.assign": "تعيين كصوت لـ", "studio.apply": "تطبيق",
+    "studio.done": "تم", "studio.empty": "اختر تسجيلًا أو استورد ملفًا للبدء",
+]
+
+private extension NSLayoutConstraint {
+    func withPriority(_ value: NSLayoutConstraint.Priority) -> NSLayoutConstraint {
+        priority = value
+        return self
+    }
+}
+
+private func adhkarModeText(_ key: String) -> String {
+    let code = Localizer.shared.current.code
+    let localized: [String: [String: String]] = [
+        "fr": ["mode.reading": "Lecture", "mode.editing": "Édition",
+               "reading.empty": "Choisissez une collection puis lancez la lecture",
+               "studio.open": "Studio audio", "studio.import": "Importer un audio…",
+               "studio.add": "Ajouter comme dhikr", "studio.done": "Terminé"],
+        "es": ["mode.reading": "Lectura", "mode.editing": "Edición",
+               "reading.empty": "Elige una colección y pulsa reproducir",
+               "studio.open": "Estudio de audio", "studio.import": "Importar audio…",
+               "studio.add": "Añadir como dhikr", "studio.done": "Hecho"],
+    ]
+    let raw = (code == "ar" ? adhkarModeArabic[key] : localized[code]?[key])
+        ?? adhkarModeEnglish[key] ?? key
+    return applyingArabicDigitPreference(raw, languageCode: code)
+}
+
+/// Streams an audio file once and reduces it to peak buckets for drawing.
+/// Never loads the decoded PCM of a long recording into memory at once.
+private func loadAdhkarWaveform(url: URL, buckets: Int = 640,
+                                completion: @escaping ([Float], TimeInterval) -> Void) {
+    DispatchQueue.global(qos: .userInitiated).async {
+        guard let file = try? AVAudioFile(forReading: url), file.length > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat,
+                                            frameCapacity: 1 << 16) else {
+            DispatchQueue.main.async { completion([], 0) }
+            return
+        }
+        let totalFrames = Int(file.length)
+        let duration = Double(totalFrames) / file.processingFormat.sampleRate
+        let bucketSize = max(1, totalFrames / buckets)
+        var peaks: [Float] = []
+        peaks.reserveCapacity(buckets + 2)
+        var currentPeak: Float = 0
+        var framesInBucket = 0
+        while file.framePosition < file.length {
+            buffer.frameLength = 0
+            guard (try? file.read(into: buffer)) != nil, buffer.frameLength > 0,
+                  let data = buffer.floatChannelData?[0] else { break }
+            for frame in 0..<Int(buffer.frameLength) {
+                currentPeak = max(currentPeak, abs(data[frame]))
+                framesInBucket += 1
+                if framesInBucket >= bucketSize {
+                    peaks.append(currentPeak)
+                    currentPeak = 0
+                    framesInBucket = 0
+                }
+            }
+        }
+        if framesInBucket > 0 { peaks.append(currentPeak) }
+        DispatchQueue.main.async { completion(peaks, duration) }
+    }
+}
+
+/// Interactive waveform strip: draggable start/end handles select the window
+/// of the recording that belongs to one dhikr; clicking anywhere scrubs the
+/// preview playhead. Timeline runs left→right in every UI language, like
+/// every audio editor.
+final class AdhkarWaveformView: NSView {
+    var samples: [Float] = [] { didSet { needsDisplay = true } }
+    var duration: TimeInterval = 0 { didSet { needsDisplay = true } }
+    var selectionStart: TimeInterval = 0 {
+        didSet { needsDisplay = true; onSelectionChange?() }
+    }
+    var selectionEnd: TimeInterval = 0 {
+        didSet { needsDisplay = true; onSelectionChange?() }
+    }
+    var playhead: TimeInterval? { didSet { needsDisplay = true } }
+    var onSelectionChange: (() -> Void)?
+    var onSeek: ((TimeInterval) -> Void)?
+
+    private enum DragTarget { case none, start, end }
+    private var dragging = DragTarget.none
+
+    private var plotRect: NSRect { bounds.insetBy(dx: 10, dy: 8) }
+
+    private func xFor(_ time: TimeInterval) -> CGFloat {
+        guard duration > 0 else { return plotRect.minX }
+        return plotRect.minX + plotRect.width * CGFloat(time / duration)
+    }
+
+    private func timeFor(_ x: CGFloat) -> TimeInterval {
+        guard duration > 0, plotRect.width > 0 else { return 0 }
+        let fraction = max(0, min(1, (x - plotRect.minX) / plotRect.width))
+        return TimeInterval(fraction) * duration
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let backdrop = NSBezierPath(roundedRect: bounds, xRadius: 8, yRadius: 8)
+        (isDark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.94, alpha: 1)).setFill()
+        backdrop.fill()
+        guard !samples.isEmpty, duration > 0 else {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = .center
+            NSAttributedString(string: adhkarModeText("studio.empty"), attributes: [
+                .font: Localizer.shared.font(size: 12),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: paragraph,
+            ]).draw(in: NSRect(x: 0, y: bounds.midY - 9, width: bounds.width, height: 18))
+            return
+        }
+        let plot = plotRect
+        let midY = plot.midY
+        let barWidth = plot.width / CGFloat(samples.count)
+        let peak = max(0.05, CGFloat(samples.max() ?? 1))
+
+        // Selection band first, then bars over it.
+        let selX0 = xFor(selectionStart)
+        let selX1 = xFor(selectionEnd)
+        NSColor.appGreenAccent.withAlphaComponent(isDark ? 0.22 : 0.16).setFill()
+        NSRect(x: selX0, y: bounds.minY + 2, width: max(0, selX1 - selX0),
+               height: bounds.height - 4).fill()
+
+        for (index, sample) in samples.enumerated() {
+            let x = plot.minX + CGFloat(index) * barWidth
+            let inSelection = x >= selX0 && x <= selX1
+            let height = max(1.2, plot.height * 0.48 * CGFloat(sample) / peak)
+            (inSelection ? NSColor.appGreenAccent
+                         : NSColor.secondaryLabelColor.withAlphaComponent(0.55)).setFill()
+            NSRect(x: x, y: midY - height, width: max(0.8, barWidth - 0.6),
+                   height: height * 2).fill()
+        }
+
+        // Handles.
+        for (time, isStart) in [(selectionStart, true), (selectionEnd, false)] {
+            let x = xFor(time)
+            NSColor.appGreenAccent.setFill()
+            NSRect(x: x - 1, y: bounds.minY + 2, width: 2, height: bounds.height - 4).fill()
+            let grip = NSBezierPath(ovalIn: NSRect(x: x - 5,
+                                                   y: isStart ? bounds.maxY - 14 : bounds.minY + 4,
+                                                   width: 10, height: 10))
+            grip.fill()
+            NSColor.white.withAlphaComponent(0.85).setStroke()
+            grip.lineWidth = 1
+            grip.stroke()
+        }
+
+        // Playhead.
+        if let playhead {
+            NSColor.systemRed.withAlphaComponent(0.9).setFill()
+            NSRect(x: xFor(playhead) - 0.75, y: bounds.minY + 2,
+                   width: 1.5, height: bounds.height - 4).fill()
+        }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let startX = xFor(selectionStart)
+        let endX = xFor(selectionEnd)
+        if abs(point.x - startX) < 7 { dragging = .start }
+        else if abs(point.x - endX) < 7 { dragging = .end }
+        else {
+            dragging = .none
+            let time = timeFor(point.x)
+            playhead = time
+            onSeek?(time)
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let time = timeFor(point.x)
+        switch dragging {
+        case .start: selectionStart = min(time, selectionEnd - 0.15)
+        case .end:   selectionEnd = max(time, selectionStart + 0.15)
+        case .none:
+            playhead = time
+            onSeek?(time)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) { dragging = .none }
+}
+
+/// The Audio Studio: split one long recording into per-dhikr segments, or
+/// re-trim an existing item's audio. Trims are non-destructive — a segment
+/// is stored as `audioRef#start-end` and playback honours the window — so a
+/// single imported file can back an entire collection.
+final class AdhkarAudioStudioController: NSViewController {
+    /// Called when "Add as new dhikr" creates an entry for the collection.
+    var onCreateEntry: ((AdhkarEntry) -> Void)?
+    /// Called when a segment is applied to an existing item.
+    var onAssignAudio: ((UUID, String) -> Void)?
+    /// Items of the target collection (for the assign popup).
+    var collectionItems: [(id: UUID, title: String)] = []
+    /// Preselect this audio (e.g. re-trim an existing item's source).
+    var initialRef: String?
+
+    private var sourcePopup: NSPopUpButton!
+    private var waveform: AdhkarWaveformView!
+    private var selectionLabel: NSTextField!
+    private var playheadLabel: NSTextField!
+    private var previewButton: NSButton!
+    private var arabicField: NSTextField!
+    private var countField: NSTextField!
+    private var countStepper: NSStepper!
+    private var assignPopup: NSPopUpButton!
+    private var addButton: NSButton!
+
+    private var options: [AdhkarAudioOption] = []
+    private var currentBaseRef: String?
+    private var previewPlayer: AVAudioPlayer?
+    private var previewTimer: Timer?
+
+    deinit {
+        previewTimer?.invalidate()
+        previewPlayer?.stop()
+    }
+
+    override func loadView() {
+        let isRTL = Localizer.shared.isRTL
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 740, height: 540))
+        root.userInterfaceLayoutDirection = isRTL ? .rightToLeft : .leftToRight
+
+        let title = NSTextField(labelWithString: adhkarModeText("studio.open"))
+        title.font = Localizer.shared.font(size: 17, weight: .bold)
+        let hint = NSTextField(wrappingLabelWithString: adhkarModeText("studio.hint"))
+        hint.font = Localizer.shared.font(size: 11.5)
+        hint.textColor = .secondaryLabelColor
+        hint.maximumNumberOfLines = 2
+
+        sourcePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        sourcePopup.target = self
+        sourcePopup.action = #selector(sourceChanged(_:))
+        let importButton = NSButton(title: adhkarModeText("studio.import"),
+                                    target: self, action: #selector(importTapped))
+        importButton.bezelStyle = .rounded
+        let sourceLabel = NSTextField(labelWithString: adhkarModeText("studio.source"))
+        sourceLabel.font = Localizer.shared.font(size: 12, weight: .medium)
+        sourceLabel.textColor = .secondaryLabelColor
+        let sourceRow = NSStackView(views: [sourceLabel, sourcePopup, importButton])
+        sourceRow.orientation = .horizontal
+        sourceRow.spacing = 8
+        sourcePopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+
+        waveform = AdhkarWaveformView()
+        waveform.translatesAutoresizingMaskIntoConstraints = false
+        waveform.onSelectionChange = { [weak self] in self?.refreshTimeLabels() }
+        waveform.onSeek = { [weak self] time in self?.seekPreview(to: time) }
+
+        selectionLabel = NSTextField(labelWithString: "")
+        selectionLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        playheadLabel = NSTextField(labelWithString: "")
+        playheadLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        playheadLabel.textColor = .secondaryLabelColor
+
+        previewButton = NSButton(title: adhkarModeText("studio.preview"),
+                                 target: self, action: #selector(previewTapped))
+        previewButton.bezelStyle = .rounded
+        previewButton.keyEquivalent = " "
+        let setStart = NSButton(title: adhkarModeText("studio.set.start"),
+                                target: self, action: #selector(setStartTapped))
+        setStart.bezelStyle = .rounded
+        setStart.controlSize = .small
+        let setEnd = NSButton(title: adhkarModeText("studio.set.end"),
+                              target: self, action: #selector(setEndTapped))
+        setEnd.bezelStyle = .rounded
+        setEnd.controlSize = .small
+        let transportRow = NSStackView(views: [previewButton, setStart, setEnd,
+                                               selectionLabel, playheadLabel])
+        transportRow.orientation = .horizontal
+        transportRow.spacing = 10
+
+        let divider = NSBox()
+        divider.boxType = .separator
+
+        arabicField = NSTextField(string: "")
+        arabicField.placeholderString = adhkarModeText("studio.text.placeholder")
+        arabicField.font = Localizer.shared.font(size: 15)
+        arabicField.alignment = .right
+        arabicField.baseWritingDirection = .rightToLeft
+        countField = NSTextField(string: "1")
+        countField.alignment = .center
+        countField.widthAnchor.constraint(equalToConstant: 44).isActive = true
+        countStepper = NSStepper()
+        countStepper.minValue = 1
+        countStepper.maxValue = 500
+        countStepper.integerValue = 1
+        countStepper.target = self
+        countStepper.action = #selector(stepperChanged(_:))
+        let countLabel = NSTextField(labelWithString: adhkarModeText("studio.count"))
+        countLabel.font = Localizer.shared.font(size: 12, weight: .medium)
+        countLabel.textColor = .secondaryLabelColor
+        addButton = NSButton(title: adhkarModeText("studio.add"),
+                             target: self, action: #selector(addTapped))
+        addButton.bezelStyle = .rounded
+        addButton.keyEquivalent = "\r"
+        let createRow = NSStackView(views: [arabicField, countLabel, countField,
+                                            countStepper, addButton])
+        createRow.orientation = .horizontal
+        createRow.spacing = 8
+        arabicField.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        arabicField.widthAnchor.constraint(greaterThanOrEqualToConstant: 260).isActive = true
+
+        assignPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for item in collectionItems {
+            assignPopup.addItem(withTitle: item.title)
+        }
+        let assignLabel = NSTextField(labelWithString: adhkarModeText("studio.assign"))
+        assignLabel.font = Localizer.shared.font(size: 12, weight: .medium)
+        assignLabel.textColor = .secondaryLabelColor
+        let applyButton = NSButton(title: adhkarModeText("studio.apply"),
+                                   target: self, action: #selector(applyTapped))
+        applyButton.bezelStyle = .rounded
+        applyButton.controlSize = .small
+        let assignRow = NSStackView(views: [assignLabel, assignPopup, applyButton])
+        assignRow.orientation = .horizontal
+        assignRow.spacing = 8
+        assignPopup.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        assignRow.isHidden = collectionItems.isEmpty
+
+        let doneButton = NSButton(title: adhkarModeText("studio.done"),
+                                  target: self, action: #selector(doneTapped))
+        doneButton.bezelStyle = .rounded
+        let footerRow = NSStackView(views: [NSView(), doneButton])
+        footerRow.orientation = .horizontal
+
+        let stack = NSStackView(views: [title, hint, sourceRow, waveform,
+                                        transportRow, divider, createRow,
+                                        assignRow, footerRow])
+        stack.orientation = .vertical
+        stack.alignment = isRTL ? .trailing : .leading
+        stack.spacing = 12
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -18),
+            waveform.heightAnchor.constraint(equalToConstant: 150),
+            waveform.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            sourceRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            createRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            assignRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            footerRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            divider.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            hint.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+        self.view = root
+        preferredContentSize = NSSize(width: 740, height: 540)
+
+        reloadOptions(selecting: initialRef.map(adhkarAudioBaseRef))
+        refreshTimeLabels()
+    }
+
+    // MARK: - source loading
+
+    private func reloadOptions(selecting ref: String?) {
+        options = adhkarAudioOptions()
+        sourcePopup.removeAllItems()
+        for option in options { sourcePopup.addItem(withTitle: option.displayName) }
+        let target = ref ?? options.first?.id
+        if let target, let index = options.firstIndex(where: { $0.id == target }) {
+            sourcePopup.selectItem(at: index)
+            loadSource(options[index].id)
+        } else if let first = options.first {
+            loadSource(first.id)
+        }
+    }
+
+    private func loadSource(_ ref: String) {
+        stopPreview()
+        currentBaseRef = adhkarAudioBaseRef(ref)
+        waveform.samples = []
+        waveform.duration = 0
+        waveform.playhead = nil
+        guard let url = resolveAdhkarAudio(ref) else { return }
+        loadAdhkarWaveform(url: url) { [weak self] samples, duration in
+            guard let self, self.currentBaseRef == adhkarAudioBaseRef(ref) else { return }
+            self.waveform.samples = samples
+            self.waveform.duration = duration
+            if let segment = self.initialRef.flatMap(adhkarAudioSegment(of:)),
+               segment.upperBound <= duration {
+                self.waveform.selectionStart = segment.lowerBound
+                self.waveform.selectionEnd = segment.upperBound
+            } else {
+                self.waveform.selectionStart = 0
+                self.waveform.selectionEnd = min(10, max(1, duration))
+            }
+            self.refreshTimeLabels()
+        }
+    }
+
+    @objc private func sourceChanged(_ sender: NSPopUpButton) {
+        guard options.indices.contains(sender.indexOfSelectedItem) else { return }
+        initialRef = nil
+        loadSource(options[sender.indexOfSelectedItem].id)
+    }
+
+    @objc private func importTapped() {
+        guard let ref = presentAudioImportPanel() else { return }
+        reloadOptions(selecting: adhkarAudioBaseRef(ref))
+    }
+
+    // MARK: - preview
+
+    private func formatTime(_ time: TimeInterval) -> String {
+        let minutes = Int(time) / 60
+        let seconds = time - Double(minutes * 60)
+        return String(format: "%d:%05.2f", minutes, seconds)
+    }
+
+    private func refreshTimeLabels() {
+        selectionLabel.stringValue = "\(adhkarModeText("studio.selection"))  "
+            + "\(formatTime(waveform.selectionStart)) — \(formatTime(waveform.selectionEnd))"
+        playheadLabel.stringValue = waveform.playhead.map { "▸ \(formatTime($0))" } ?? ""
+    }
+
+    private func ensurePlayer() -> AVAudioPlayer? {
+        if let previewPlayer { return previewPlayer }
+        guard let base = currentBaseRef, let url = resolveAdhkarAudio(base),
+              let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        player.prepareToPlay()
+        previewPlayer = player
+        return player
+    }
+
+    private func seekPreview(to time: TimeInterval) {
+        guard let player = ensurePlayer() else { return }
+        player.currentTime = time
+        refreshTimeLabels()
+    }
+
+    @objc private func previewTapped() {
+        if previewPlayer?.isPlaying == true {
+            stopPreview()
+            return
+        }
+        guard let player = ensurePlayer() else { return }
+        player.currentTime = waveform.selectionStart
+        player.play()
+        previewButton.title = adhkarModeText("studio.stop")
+        previewTimer?.invalidate()
+        previewTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) {
+            [weak self] _ in
+            guard let self, let player = self.previewPlayer else { return }
+            self.waveform.playhead = player.currentTime
+            self.refreshTimeLabels()
+            if !player.isPlaying || player.currentTime >= self.waveform.selectionEnd {
+                self.stopPreview()
+            }
+        }
+    }
+
+    private func stopPreview() {
+        previewTimer?.invalidate()
+        previewTimer = nil
+        previewPlayer?.pause()
+        previewButton?.title = adhkarModeText("studio.preview")
+    }
+
+    @objc private func setStartTapped() {
+        guard let playhead = waveform.playhead else { return }
+        waveform.selectionStart = min(playhead, waveform.selectionEnd - 0.15)
+    }
+
+    @objc private func setEndTapped() {
+        guard let playhead = waveform.playhead else { return }
+        waveform.selectionEnd = max(playhead, waveform.selectionStart + 0.15)
+    }
+
+    @objc private func stepperChanged(_ sender: NSStepper) {
+        countField.stringValue = String(sender.integerValue)
+    }
+
+    // MARK: - producing segments
+
+    private func segmentRef() -> String? {
+        guard let base = currentBaseRef, waveform.duration > 0,
+              waveform.selectionEnd > waveform.selectionStart else { return nil }
+        return base + String(format: "#%.2f-%.2f",
+                             waveform.selectionStart,
+                             min(waveform.selectionEnd, waveform.duration))
+    }
+
+    @objc private func addTapped() {
+        let text = arabicField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let ref = segmentRef() else { NSSound.beep(); return }
+        let count = max(1, min(500, Int(countField.stringValue) ?? countStepper.integerValue))
+        onCreateEntry?(AdhkarEntry(arabic: text, count: count, audioRef: ref))
+        // Walk forward through the recording: next selection starts where
+        // this dhikr ended.
+        let length = waveform.selectionEnd - waveform.selectionStart
+        let nextStart = waveform.selectionEnd
+        waveform.selectionStart = min(nextStart, max(0, waveform.duration - 0.2))
+        waveform.selectionEnd = min(waveform.duration, nextStart + max(2, length))
+        arabicField.stringValue = ""
+        countStepper.integerValue = 1
+        countField.stringValue = "1"
+        stopPreview()
+    }
+
+    @objc private func applyTapped() {
+        let index = assignPopup.indexOfSelectedItem
+        guard collectionItems.indices.contains(index), let ref = segmentRef() else {
+            NSSound.beep()
+            return
+        }
+        onAssignAudio?(collectionItems[index].id, ref)
+    }
+
+    @objc private func doneTapped() {
+        stopPreview()
+        dismiss(nil)
+    }
+}
+
 final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
     weak var appDelegate: AppDelegate?
@@ -15543,6 +16135,28 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     /// Index of the currently-highlighted card (-1 = none).
     private var highlightedCardIndex = -1
 
+    // Reading / editing mode
+    private var modeControl: NSSegmentedControl!
+    private var editorRoot: NSView!
+    private var readingRoot: NSView!
+    private var readingCollectionPopup: NSPopUpButton!
+    private var readingCard: AdaptiveCardView!
+    private var readingArabic: NSTextView!
+    private var readingVirtueLabel: NSTextField!
+    private var readingSourceLabel: NSTextField!
+    private var readingItemLabel: NSTextField!
+    private var readingRepeatLabel: NSTextField!
+    private var readingProgress: NSProgressIndicator!
+    private var readingTimeLabel: NSTextField!
+    private var readingPlayButton: HoverIconButton!
+    private var readingEmptyLabel: NSTextField!
+    private var tasbihButton: NSButton!
+    private var tasbihRemaining = 0
+    private var readingTimer: Timer?
+    private var isReadingMode: Bool {
+        (UserDefaults.standard.string(forKey: kAdhkarViewMode) ?? "editing") == "reading"
+    }
+
     // Preview uses the same clean-segment/exact-wording pipeline as the
     // reader so Settings never auditions the unwanted spoken instructions.
     private let previewSession = AdhkarSession()
@@ -15555,13 +16169,87 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
 
     override func loadView() {
         let v = NSView()
-        buildTwoPaneLayout(into: v)
+        v.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+
+        modeControl = NSSegmentedControl(labels: [adhkarModeText("mode.reading"),
+                                                  adhkarModeText("mode.editing")],
+                                         trackingMode: .selectOne,
+                                         target: self, action: #selector(modeChanged(_:)))
+        modeControl.segmentStyle = .texturedRounded
+        modeControl.selectedSegment = isReadingMode ? 0 : 1
+        modeControl.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(modeControl)
+
+        editorRoot = NSView()
+        editorRoot.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(editorRoot)
+        readingRoot = NSView()
+        readingRoot.translatesAutoresizingMaskIntoConstraints = false
+        v.addSubview(readingRoot)
+        NSLayoutConstraint.activate([
+            modeControl.topAnchor.constraint(equalTo: v.topAnchor, constant: 12),
+            modeControl.centerXAnchor.constraint(equalTo: v.centerXAnchor),
+            editorRoot.topAnchor.constraint(equalTo: modeControl.bottomAnchor, constant: 10),
+            editorRoot.leadingAnchor.constraint(equalTo: v.leadingAnchor),
+            editorRoot.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+            editorRoot.bottomAnchor.constraint(equalTo: v.bottomAnchor),
+            readingRoot.topAnchor.constraint(equalTo: modeControl.bottomAnchor, constant: 10),
+            readingRoot.leadingAnchor.constraint(equalTo: v.leadingAnchor),
+            readingRoot.trailingAnchor.constraint(equalTo: v.trailingAnchor),
+            readingRoot.bottomAnchor.constraint(equalTo: v.bottomAnchor),
+        ])
+        buildTwoPaneLayout(into: editorRoot)
+        buildReadingSurface(into: readingRoot)
         self.view = v
         wireSession()
+        applyAdhkarMode()
     }
 
     func tabDidActivate() {
         reloadFromStorage()
+        rebuildReadingCollectionPopup()
+        applyAdhkarMode()
+    }
+
+    // MARK: - reading / editing modes
+
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        UserDefaults.standard.set(sender.selectedSegment == 0 ? "reading" : "editing",
+                                  forKey: kAdhkarViewMode)
+        applyAdhkarMode()
+    }
+
+    private func applyAdhkarMode() {
+        guard editorRoot != nil else { return }
+        let reading = isReadingMode
+        modeControl.selectedSegment = reading ? 0 : 1
+        editorRoot.isHidden = reading
+        readingRoot.isHidden = !reading
+        if reading {
+            rebuildReadingCollectionPopup()
+            syncReadingSurface()
+            startReadingTimer()
+        } else {
+            readingTimer?.invalidate()
+            readingTimer = nil
+        }
+    }
+
+    /// Entry point used by collection play buttons and by scheduled adhkar
+    /// when the main window is open: switch to the reading surface and
+    /// (optionally) begin the recitation.
+    func startReading(collection: AdhkarCollection, autoPlay: Bool) {
+        selectedCollectionID = collection.id
+        UserDefaults.standard.set("reading", forKey: kAdhkarViewMode)
+        if editorRoot != nil {
+            rebuildCollectionList()
+            rebuildItemsPane()
+            applyAdhkarMode()
+            if let index = collections.firstIndex(where: { $0.id == collection.id }) {
+                readingCollectionPopup.selectItem(at: index)
+            }
+        }
+        if autoPlay { session.start(collection: collection) }
     }
 
     // MARK: - inline playback session
@@ -15570,13 +16258,23 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         session.onItemChange = { [weak self] item, idx, total in
             DispatchQueue.main.async {
                 self?.updatePlayerForItem(item, idx: idx, total: total)
+                self?.updateReadingForItem(item, idx: idx, total: total)
             }
         }
         session.onPlaybackStateChange = { [weak self] in
-            DispatchQueue.main.async { self?.refreshPlayerButton() }
+            DispatchQueue.main.async {
+                self?.refreshPlayerButton()
+                self?.refreshReadingControls()
+            }
         }
         session.onFinish = { [weak self] in
-            DispatchQueue.main.async { self?.resetPlayer() }
+            DispatchQueue.main.async {
+                self?.resetPlayer()
+                self?.syncReadingSurface()
+            }
+        }
+        session.onRepeatChange = { [weak self] done, target in
+            DispatchQueue.main.async { self?.updateReadingRepeat(done, target) }
         }
     }
 
@@ -15656,6 +16354,294 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         showAdhkarSettingsMenu(from: sender)
     }
 
+
+    // MARK: - reading surface
+
+    private func buildReadingSurface(into root: NSView) {
+        let isRTL = Localizer.shared.isRTL
+        let backdrop = MoroccanPatternView()
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(backdrop)
+
+        readingCollectionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        readingCollectionPopup.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(readingCollectionPopup)
+
+        readingCard = AdaptiveCardView(frame: .zero)
+        readingCard.cornerRadius = 18
+        readingCard.addsDepth = true
+        readingCard.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(readingCard)
+
+        readingArabic = NSTextView(frame: .zero)
+        readingArabic.isEditable = false
+        readingArabic.isSelectable = true
+        readingArabic.drawsBackground = false
+        readingArabic.textContainerInset = NSSize(width: 12, height: 10)
+        readingArabic.textContainer?.lineFragmentPadding = 0
+        let arabicScroll = NSScrollView()
+        arabicScroll.documentView = readingArabic
+        arabicScroll.drawsBackground = false
+        arabicScroll.hasVerticalScroller = true
+        arabicScroll.autohidesScrollers = true
+        arabicScroll.translatesAutoresizingMaskIntoConstraints = false
+        readingArabic.minSize = .zero
+        readingArabic.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                       height: CGFloat.greatestFiniteMagnitude)
+        readingArabic.isVerticallyResizable = true
+        readingArabic.isHorizontallyResizable = false
+        readingArabic.autoresizingMask = [.width]
+        readingArabic.textContainer?.widthTracksTextView = true
+        readingCard.addSubview(arabicScroll)
+
+        readingVirtueLabel = NSTextField(wrappingLabelWithString: "")
+        readingVirtueLabel.font = Localizer.shared.font(size: 13)
+        readingVirtueLabel.textColor = .secondaryLabelColor
+        readingVirtueLabel.alignment = .center
+        readingVirtueLabel.maximumNumberOfLines = 3
+        readingSourceLabel = NSTextField(labelWithString: "")
+        readingSourceLabel.font = Localizer.shared.font(size: 11)
+        readingSourceLabel.textColor = .tertiaryLabelColor
+        readingSourceLabel.alignment = .center
+        readingSourceLabel.lineBreakMode = .byTruncatingTail
+        for label in [readingVirtueLabel!, readingSourceLabel!] {
+            label.translatesAutoresizingMaskIntoConstraints = false
+            readingCard.addSubview(label)
+        }
+
+        tasbihButton = NSButton(title: "", target: self, action: #selector(tasbihTapped))
+        tasbihButton.isBordered = false
+        tasbihButton.wantsLayer = true
+        tasbihButton.layer?.cornerRadius = 34
+        tasbihButton.font = NSFont.monospacedDigitSystemFont(ofSize: 22, weight: .bold)
+        tasbihButton.toolTip = adhkarModeText("reading.tap.hint")
+        tasbihButton.setAccessibilityLabel(adhkarModeText("reading.tap.hint"))
+        tasbihButton.translatesAutoresizingMaskIntoConstraints = false
+        readingCard.addSubview(tasbihButton)
+
+        readingRepeatLabel = NSTextField(labelWithString: "")
+        readingRepeatLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        readingRepeatLabel.textColor = .secondaryLabelColor
+        readingRepeatLabel.alignment = .center
+        readingRepeatLabel.translatesAutoresizingMaskIntoConstraints = false
+        readingCard.addSubview(readingRepeatLabel)
+
+        readingItemLabel = NSTextField(labelWithString: "")
+        readingItemLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        readingItemLabel.textColor = .secondaryLabelColor
+        readingProgress = NSProgressIndicator()
+        readingProgress.isIndeterminate = false
+        readingProgress.minValue = 0
+        readingProgress.maxValue = 1
+        readingProgress.controlSize = .small
+        readingTimeLabel = NSTextField(labelWithString: "")
+        readingTimeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+        readingTimeLabel.textColor = .tertiaryLabelColor
+
+        let controlSize = NSSize(width: 44, height: 40)
+        let previousButton = HoverIconButton(
+            symbol: isRTL ? "forward.fill" : "backward.fill",
+            toolTip: t("adhkar.previous"), target: self,
+            action: #selector(playerPrev(_:)), pointSize: 15, size: controlSize)
+        readingPlayButton = HoverIconButton(
+            symbol: "play.fill", toolTip: t("adhkar.play"), target: self,
+            action: #selector(readingTogglePlay(_:)), pointSize: 20,
+            size: NSSize(width: 56, height: 48))
+        let nextButton = HoverIconButton(
+            symbol: isRTL ? "backward.fill" : "forward.fill",
+            toolTip: t("adhkar.next"), target: self,
+            action: #selector(playerNext(_:)), pointSize: 15, size: controlSize)
+        let stopButton = HoverIconButton(
+            symbol: "stop.fill", toolTip: t("adhkar.stop"), target: self,
+            action: #selector(readingStop(_:)), pointSize: 14, size: controlSize)
+
+        let controls = NSStackView(views: [previousButton, readingPlayButton,
+                                           nextButton, stopButton, readingTimeLabel])
+        controls.orientation = .horizontal
+        controls.alignment = .centerY
+        controls.spacing = 10
+        controls.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
+        controls.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(controls)
+
+        let progressRow = NSStackView(views: [readingItemLabel, readingProgress])
+        progressRow.orientation = .horizontal
+        progressRow.spacing = 10
+        progressRow.translatesAutoresizingMaskIntoConstraints = false
+        readingProgress.widthAnchor.constraint(greaterThanOrEqualToConstant: 160).isActive = true
+        root.addSubview(progressRow)
+
+        readingEmptyLabel = NSTextField(labelWithString: adhkarModeText("reading.empty"))
+        readingEmptyLabel.font = Localizer.shared.font(size: 15, weight: .medium)
+        readingEmptyLabel.textColor = .secondaryLabelColor
+        readingEmptyLabel.alignment = .center
+        readingEmptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(readingEmptyLabel)
+
+        NSLayoutConstraint.activate([
+            backdrop.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            backdrop.topAnchor.constraint(equalTo: root.topAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            readingCollectionPopup.topAnchor.constraint(equalTo: root.topAnchor, constant: 8),
+            readingCollectionPopup.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            readingCollectionPopup.widthAnchor.constraint(lessThanOrEqualToConstant: 340),
+            readingCollectionPopup.widthAnchor.constraint(greaterThanOrEqualToConstant: 220),
+            readingCard.topAnchor.constraint(equalTo: readingCollectionPopup.bottomAnchor,
+                                             constant: 14),
+            readingCard.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            readingCard.widthAnchor.constraint(lessThanOrEqualToConstant: 660),
+            readingCard.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -120)
+                .withPriority(.defaultHigh),
+            arabicScroll.topAnchor.constraint(equalTo: readingCard.topAnchor, constant: 22),
+            arabicScroll.leadingAnchor.constraint(equalTo: readingCard.leadingAnchor, constant: 24),
+            arabicScroll.trailingAnchor.constraint(equalTo: readingCard.trailingAnchor, constant: -24),
+            arabicScroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 130),
+            readingVirtueLabel.topAnchor.constraint(equalTo: arabicScroll.bottomAnchor, constant: 12),
+            readingVirtueLabel.leadingAnchor.constraint(equalTo: readingCard.leadingAnchor, constant: 28),
+            readingVirtueLabel.trailingAnchor.constraint(equalTo: readingCard.trailingAnchor, constant: -28),
+            readingSourceLabel.topAnchor.constraint(equalTo: readingVirtueLabel.bottomAnchor, constant: 4),
+            readingSourceLabel.leadingAnchor.constraint(equalTo: readingCard.leadingAnchor, constant: 28),
+            readingSourceLabel.trailingAnchor.constraint(equalTo: readingCard.trailingAnchor, constant: -28),
+            tasbihButton.topAnchor.constraint(equalTo: readingSourceLabel.bottomAnchor, constant: 14),
+            tasbihButton.centerXAnchor.constraint(equalTo: readingCard.centerXAnchor),
+            tasbihButton.widthAnchor.constraint(equalToConstant: 68),
+            tasbihButton.heightAnchor.constraint(equalToConstant: 68),
+            readingRepeatLabel.topAnchor.constraint(equalTo: tasbihButton.bottomAnchor, constant: 6),
+            readingRepeatLabel.centerXAnchor.constraint(equalTo: readingCard.centerXAnchor),
+            readingRepeatLabel.bottomAnchor.constraint(equalTo: readingCard.bottomAnchor, constant: -18),
+            progressRow.topAnchor.constraint(equalTo: readingCard.bottomAnchor, constant: 14),
+            progressRow.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            controls.topAnchor.constraint(equalTo: progressRow.bottomAnchor, constant: 8),
+            controls.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            controls.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -14),
+            readingEmptyLabel.centerXAnchor.constraint(equalTo: root.centerXAnchor),
+            readingEmptyLabel.centerYAnchor.constraint(equalTo: readingCard.centerYAnchor),
+        ])
+    }
+
+    private func rebuildReadingCollectionPopup() {
+        guard readingCollectionPopup != nil else { return }
+        readingCollectionPopup.removeAllItems()
+        for collection in collections {
+            readingCollectionPopup.addItem(withTitle: collection.displayName)
+        }
+        if let id = selectedCollectionID,
+           let index = collections.firstIndex(where: { $0.id == id }) {
+            readingCollectionPopup.selectItem(at: index)
+        }
+    }
+
+    /// Reflect the session's live state onto the reading surface (also used
+    /// when entering the mode with no active recitation).
+    private func syncReadingSurface() {
+        guard readingCard != nil else { return }
+        if let item = session.currentItem, let position = session.position {
+            updateReadingForItem(item, idx: position.0 - 1, total: position.1)
+        } else {
+            readingCard.isHidden = true
+            readingEmptyLabel.isHidden = false
+            readingItemLabel.stringValue = ""
+            readingRepeatLabel.stringValue = ""
+            readingTimeLabel.stringValue = ""
+            readingProgress.doubleValue = 0
+            refreshReadingControls()
+        }
+    }
+
+    private func updateReadingForItem(_ item: AdhkarEntry, idx: Int, total: Int) {
+        guard readingCard != nil, isReadingMode else { return }
+        readingCard.isHidden = false
+        readingEmptyLabel.isHidden = true
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.baseWritingDirection = .rightToLeft
+        paragraph.lineSpacing = 10
+        readingArabic.textStorage?.setAttributedString(NSAttributedString(
+            string: item.arabic,
+            attributes: [.font: Localizer.shared.font(size: 26, weight: .semibold),
+                         .foregroundColor: NSColor.labelColor,
+                         .paragraphStyle: paragraph]))
+        readingArabic.scroll(.zero)
+        readingVirtueLabel.stringValue = item.virtue
+        readingSourceLabel.stringValue = item.source
+        readingItemLabel.stringValue = "\(localizedInterfaceDigits(String(idx + 1))) / \(localizedInterfaceDigits(String(total)))"
+        readingProgress.doubleValue = total > 0 ? Double(idx + 1) / Double(total) : 0
+        tasbihRemaining = max(1, item.count)
+        updateTasbihButton()
+        updateReadingRepeat(session.repeatState.0, session.repeatState.1)
+        refreshReadingControls()
+    }
+
+    private func updateReadingRepeat(_ done: Int, _ target: Int) {
+        guard readingRepeatLabel != nil else { return }
+        readingRepeatLabel.stringValue =
+            "\(adhkarModeText("reading.repeat"))  \(localizedInterfaceDigits(String(min(done + 1, target)))) / \(localizedInterfaceDigits(String(target)))"
+    }
+
+    private func updateTasbihButton() {
+        let pair = currentAccentPair()
+        tasbihButton.layer?.backgroundColor = pair.light.withAlphaComponent(0.22).cgColor
+        let title = NSMutableAttributedString(
+            string: localizedInterfaceDigits(String(tasbihRemaining)),
+            attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 24, weight: .bold),
+                         .foregroundColor: NSColor.appGreenAccent])
+        tasbihButton.attributedTitle = title
+    }
+
+    @objc private func tasbihTapped() {
+        guard tasbihRemaining > 0 else { return }
+        tasbihRemaining -= 1
+        if tasbihRemaining <= 0 {
+            // Count completed — move to the next dhikr.
+            if session.currentItem != nil { session.next() }
+            else { tasbihRemaining = 0 }
+        }
+        updateTasbihButton()
+    }
+
+    private func refreshReadingControls() {
+        guard readingPlayButton != nil else { return }
+        let symbol = session.isPlaying ? "pause.fill" : "play.fill"
+        if let image = templateSymbol(symbol, pointSize: 20) {
+            readingPlayButton.image = image
+        }
+        readingPlayButton.toolTip = session.isPlaying ? t("adhkar.pause") : t("adhkar.play")
+    }
+
+    @objc private func readingTogglePlay(_ sender: Any?) {
+        if session.isPlaying { session.pause() }
+        else if session.isPaused { session.resume() }
+        else {
+            let index = readingCollectionPopup.indexOfSelectedItem
+            guard collections.indices.contains(index) else { return }
+            selectedCollectionID = collections[index].id
+            session.start(collection: collections[index])
+        }
+    }
+
+    @objc private func readingStop(_ sender: Any?) {
+        session.stop()
+        syncReadingSurface()
+    }
+
+    private func startReadingTimer() {
+        readingTimer?.invalidate()
+        readingTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) {
+            [weak self] _ in
+            guard let self, self.isReadingMode, !self.readingRoot.isHidden else { return }
+            if let progress = self.session.audioProgress, progress.duration > 0 {
+                func format(_ time: TimeInterval) -> String {
+                    "\(Int(time) / 60):" + String(format: "%02d", Int(time) % 60)
+                }
+                self.readingTimeLabel.stringValue =
+                    "\(format(progress.current)) / \(format(progress.duration))"
+            } else if !self.session.isPlaying && !self.session.isPaused {
+                self.readingTimeLabel.stringValue = ""
+            }
+        }
+        readingTimer?.tolerance = 0.2
+    }
 
     // MARK: - load / save
 
@@ -15772,6 +16758,17 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         addCustomBtn.controlSize = .small
         addCustomBtn.translatesAutoresizingMaskIntoConstraints = false
         itemsContainer.addSubview(addCustomBtn)
+
+        let studioBtn = NSButton(title: "〜 \(adhkarModeText("studio.open"))",
+                                 target: self, action: #selector(openAudioStudio))
+        studioBtn.bezelStyle = .rounded
+        studioBtn.controlSize = .small
+        studioBtn.toolTip = adhkarModeText("studio.hint")
+        studioBtn.translatesAutoresizingMaskIntoConstraints = false
+        itemsContainer.addSubview(studioBtn)
+        studioBtn.topAnchor.constraint(equalTo: addCustomBtn.topAnchor).isActive = true
+        studioBtn.leadingAnchor.constraint(equalTo: addCustomBtn.trailingAnchor,
+                                           constant: 8).isActive = true
 
         itemsStack = NSStackView()
         itemsStack.orientation = .vertical
@@ -16185,17 +17182,13 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
         }
     }
 
-    /// Play button on a collection row — opens the floating panel and starts
-    /// reciting the collection. Replaces the removed right-click menu entries.
+    /// Play button on a collection row — switches to the reading surface and
+    /// starts reciting the collection there.
     @objc private func playCollection(_ sender: HoverIconButton) {
         guard let idStr = sender.identifier?.rawValue,
               let id = UUID(uuidString: idStr),
               let idx = collections.firstIndex(where: { $0.id == id }) else { return }
-        // Select this collection and start the inline session.
-        selectedCollectionID = id
-        rebuildCollectionList()
-        rebuildItemsPane()
-        session.start(collection: collections[idx])
+        startReading(collection: collections[idx], autoPlay: true)
     }
 
     /// Rename a collection via alert, triggered from the right-click menu.
@@ -16477,13 +17470,44 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent {
     }
 
     private func audioDisplayName(_ ref: String) -> String {
-        if ref.hasPrefix("bundled:") {
-            return "Bundled · " + String(ref.dropFirst("bundled:".count))
+        let base = adhkarAudioBaseRef(ref)
+        var suffix = ""
+        if let segment = adhkarAudioSegment(of: ref) {
+            suffix = String(format: " · %.1fs–%.1fs", segment.lowerBound, segment.upperBound)
         }
-        if ref.hasPrefix("imported:") {
-            return "Imported · " + String(ref.dropFirst("imported:".count))
+        if base.hasPrefix("bundled:") {
+            return "Bundled · " + String(base.dropFirst("bundled:".count)) + suffix
+        }
+        if base.hasPrefix("imported:") {
+            return "Imported · " + String(base.dropFirst("imported:".count)) + suffix
         }
         return t("adhkar.editor.audio.none")
+    }
+
+    /// Present the Audio Studio for the selected collection: split a long
+    /// recording into per-dhikr segments or re-trim an existing item.
+    @objc private func openAudioStudio() {
+        guard let idx = selectedCollectionIndex() else { NSSound.beep(); return }
+        let studio = AdhkarAudioStudioController()
+        studio.collectionItems = collections[idx].items.map { item in
+            (id: item.id, title: String(item.arabic.prefix(42)))
+        }
+        studio.onCreateEntry = { [weak self] entry in
+            guard let self, let idx = self.selectedCollectionIndex() else { return }
+            self.collections[idx].items.append(entry)
+            self.persist()
+            self.rebuildItemsPane()
+        }
+        studio.onAssignAudio = { [weak self] itemID, ref in
+            guard let self, let idx = self.selectedCollectionIndex(),
+                  let itemIdx = self.collections[idx].items.firstIndex(where: {
+                      $0.id == itemID
+                  }) else { return }
+            self.collections[idx].items[itemIdx].audioRef = ref
+            self.persist()
+            self.rebuildItemsPane()
+        }
+        presentAsSheet(studio)
     }
 
     // MARK: - item actions
@@ -17558,6 +18582,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                     self?.togglePopover()
                 }
+            } else if destination == "adhkar-play" {
+                openMainWindow(selecting: 1)
+                if let collection = AdhkarLibrary.load().first(where: { !$0.items.isEmpty }) {
+                    mainWindow?.startAdhkarReading(collection, autoPlay: true)
+                }
             } else if let index = Int(destination) {
                 openMainWindow(selecting: index)
             }
@@ -18412,6 +19441,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     private func showCompactAdhkar(_ collection: AdhkarCollection, autoPlay: Bool) {
+        // When the full window is already open, present the recitation on
+        // its beautiful reading surface instead of the cramped popup.
+        if let window = mainWindow, window.isVisible {
+            window.startAdhkarReading(collection, autoPlay: autoPlay)
+            return
+        }
         pickerView?.isHidden = true
         settingsView?.isHidden = true
         mainContent.isHidden = false
