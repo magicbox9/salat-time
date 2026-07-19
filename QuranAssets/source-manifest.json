@@ -30,7 +30,8 @@
     "Muyassar Ghareeb v0.1 contains Arabic word meanings for the Hafs reference and is not a full tafsir.",
     "Full Tafsir Muyassar v3 is intentionally excluded because the obtained file did not match the publisher's published integrity checksum.",
     "QuranEnc translations are verbatim, versioned SQLite snapshots for the Hafs verse-numbering reference only; they are translations of meanings and never replace the KFGQPC Arabic text.",
-    "Warsh translations remain excluded because its 6,214 edition-local verse boundaries cannot be joined safely to the 6,236-row Hafs translation key space."
+    "Warsh translations remain excluded because its 6,214 edition-local verse boundaries cannot be joined safely to the 6,236-row Hafs translation key space.",
+    "Reader typography: the KFGQPC publisher fonts render the corpora exactly as printed (embedded ayah-mark symbols); Amiri Quran and Harmattan are optional reviewed faces for which the renderer strips publisher marker symbols and draws standard U+06DD ayah signs instead. Qur'an letters and diacritics are never altered."
   ],
   "assets": [
     {
@@ -259,5 +260,45 @@
       "bytes": 3407872,
       "sha256": "9f5208ae22da5b6af4a9be95438cf5f35e0e195a91f217aa26b336f58efed31b"
     }
-  ]
+  ],
+  "fontsProvenance": {
+    "reviewedOn": "2026-07-19",
+    "policy": "Fonts are reviewed, hash-pinned bundled assets. KFGQPC publisher fonts must match the bundled corpus versions; open-license faces come from their publishers' official releases.",
+    "entries": [
+      {
+        "path": "Fonts/KFGQPC-Hafs/UthmanicHafs_V20.ttf",
+        "family": "KFGQPC HAFS Uthmanic Script",
+        "publisher": "King Fahd Glorious Qur'an Printing Complex",
+        "matchesData": "Hafs/hafsData_v2-0.json",
+        "obtainedFrom": "github.com/nuqayah/qpc-fonts (mirror of publisher package; fonts.qurancomplex.gov.sa unreachable at review time)",
+        "verification": "name table, full-corpus glyph coverage incl. ayah-mark symbols, page render compared to bundled canonical PDF",
+        "sha256": "27a0727ef2f644da13b5b254befb85a7f3539d095a94caaceea2079cf5d7be5a"
+      },
+      {
+        "path": "Fonts/KFGQPC-Warsh/UthmanicWarsh_V21.ttf",
+        "family": "KFGQPC Warsh Uthmanic Script",
+        "publisher": "King Fahd Glorious Qur'an Printing Complex",
+        "matchesData": "Warsh/warshData_v2-1.json",
+        "obtainedFrom": "github.com/nuqayah/qpc-fonts (mirror of publisher package)",
+        "verification": "name table, full-corpus glyph coverage incl. ayah-mark symbols, page render compared to bundled canonical PDF",
+        "sha256": "57e48b5ac7bd7c17fb1f727853376dc9fd01e49d7cfad4dc851981991159cca1"
+      },
+      {
+        "path": "Fonts/AmiriQuran/AmiriQuran.ttf",
+        "family": "Amiri Quran",
+        "publisher": "Khaled Hosny / Alif Type (SIL OFL 1.1)",
+        "obtainedFrom": "github.com/aliftype/amiri release 1.003 (official)",
+        "verification": "full-corpus glyph coverage (base text; renderer supplies ayah signs via U+06DD)",
+        "sha256": "e2a47644762d16bdfb6d33e0d8db8c6ff30beae84150ef5a705316bbd829455c"
+      },
+      {
+        "path": "Fonts/Harmattan/Harmattan-Regular.ttf",
+        "family": "Harmattan",
+        "publisher": "SIL International (SIL OFL 1.1)",
+        "obtainedFrom": "github.com/silnrsi/font-harmattan release 4.400 (official)",
+        "verification": "full-corpus glyph coverage for both riwayahs; West African / Maghribi-tradition style",
+        "sha256": "5fbaafc51ad21663729b168afaff5f28d3e3087f1fc736ada32d7cd99674c0e0"
+      }
+    ]
+  }
 }

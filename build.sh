@@ -130,11 +130,37 @@ verify_quran_translation "Translations/QuranEnc/urdu_junagarhi_v1.1.3.sqlite" \
 verify_quran_translation "Translations/QuranEnc/hindi_omari_v1.1.5.sqlite" \
     "9f5208ae22da5b6af4a9be95438cf5f35e0e195a91f217aa26b336f58efed31b"
 verify_quran_asset "source-manifest.json" \
-    "44e2ee6d11af71bed1729790c78e23184dcb1891f7b60780fed2d1318488f101"
+    "20797443e9726ff79ed505110658df11a838f8c869e5351c4d22dc8ec4244ac2"
+
+# ---- Mushaf typography (reviewed pinned fonts) ----
+# KFGQPC Uthmanic Script HAFS/WARSH are the publisher's own companion fonts
+# for the exact data versions bundled above (Hafs v2.0, Warsh v2.1); the
+# corpus read.me files name them as the intended rendering fonts and their
+# embedded ayah-mark symbols only resolve with them. Obtained from the
+# nuqayah/qpc-fonts mirror of the publisher packages (official
+# fonts.qurancomplex.gov.sa unreachable at review time), name tables and
+# full-corpus glyph coverage verified, page rendering compared against the
+# bundled canonical KFGQPC PDFs. Amiri Quran (aliftype/amiri 1.003) and
+# Harmattan (silnrsi/font-harmattan 4.400) are SIL OFL faces from their
+# publishers' official releases.
+verify_quran_asset "Fonts/KFGQPC-Hafs/UthmanicHafs_V20.ttf" \
+    "27a0727ef2f644da13b5b254befb85a7f3539d095a94caaceea2079cf5d7be5a"
+verify_quran_asset "Fonts/KFGQPC-Warsh/UthmanicWarsh_V21.ttf" \
+    "57e48b5ac7bd7c17fb1f727853376dc9fd01e49d7cfad4dc851981991159cca1"
+verify_quran_asset "Fonts/AmiriQuran/AmiriQuran.ttf" \
+    "e2a47644762d16bdfb6d33e0d8db8c6ff30beae84150ef5a705316bbd829455c"
+verify_quran_asset "Fonts/Harmattan/Harmattan-Regular.ttf" \
+    "5fbaafc51ad21663729b168afaff5f28d3e3087f1fc736ada32d7cd99674c0e0"
 
 mkdir -p "$QURAN_BUNDLE_DIR/Hafs" "$QURAN_BUNDLE_DIR/Warsh" \
     "$QURAN_BUNDLE_DIR/MuyassarGhareeb" \
     "$QURAN_BUNDLE_DIR/Translations/QuranEnc"
+mkdir -p "$QURAN_BUNDLE_DIR/Fonts/KFGQPC-Hafs" "$QURAN_BUNDLE_DIR/Fonts/KFGQPC-Warsh" \
+    "$QURAN_BUNDLE_DIR/Fonts/AmiriQuran" "$QURAN_BUNDLE_DIR/Fonts/Harmattan"
+cp "$QURAN_SOURCE_DIR/Fonts/KFGQPC-Hafs/"* "$QURAN_BUNDLE_DIR/Fonts/KFGQPC-Hafs/"
+cp "$QURAN_SOURCE_DIR/Fonts/KFGQPC-Warsh/"* "$QURAN_BUNDLE_DIR/Fonts/KFGQPC-Warsh/"
+cp "$QURAN_SOURCE_DIR/Fonts/AmiriQuran/"* "$QURAN_BUNDLE_DIR/Fonts/AmiriQuran/"
+cp "$QURAN_SOURCE_DIR/Fonts/Harmattan/"* "$QURAN_BUNDLE_DIR/Fonts/Harmattan/"
 cp "$QURAN_SOURCE_DIR/Hafs/"* "$QURAN_BUNDLE_DIR/Hafs/"
 cp "$QURAN_SOURCE_DIR/Warsh/"* "$QURAN_BUNDLE_DIR/Warsh/"
 cp "$QURAN_SOURCE_DIR/MuyassarGhareeb/"* "$QURAN_BUNDLE_DIR/MuyassarGhareeb/"

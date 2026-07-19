@@ -115,8 +115,9 @@ let kQuranTranslationVisible     = "quranTranslationVisible"
 let kQuranTranslationKey         = "quranTranslationKey"
 let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
+let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 
-let kAppVersion          = "3.22.0"
+let kAppVersion          = "3.23.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -11906,6 +11907,14 @@ private enum QuranReaderPalette: Int, CaseIterable {
         }
     }
     var divider: NSColor { motif.withAlphaComponent(0.34) }
+    /// Illumination gold used by the Mushaf page frame and ornaments.
+    var gold: NSColor {
+        switch self {
+        case .ivory: return NSColor(red: 0.64, green: 0.48, blue: 0.20, alpha: 1)
+        case .sage: return NSColor(red: 0.47, green: 0.45, blue: 0.20, alpha: 1)
+        case .night: return NSColor(red: 0.80, green: 0.64, blue: 0.34, alpha: 1)
+        }
+    }
 }
 
 private enum QuranReaderLayout: Int, CaseIterable {
@@ -11935,6 +11944,11 @@ private let quranReaderEnglish: [String: String] = [
     "results": "Search results", "meccan": "Meccan", "medinan": "Medinan",
     "mode.verses": "Verses", "mode.mushaf": "Mushaf",
     "mushaf.keys": "← next page · → previous page · double-click a verse for details",
+    "script": "Qur'an script",
+    "script.kfgqpc": "Uthmanic · Madinah Mushaf (KFGQPC)",
+    "script.amiri": "Amiri Quran · classical Naskh",
+    "script.harmattan": "Harmattan · Maghribi tradition",
+    "script.system": "System · Geeza Pro",
 ]
 
 private let quranReaderArabic: [String: String] = [
@@ -11960,6 +11974,11 @@ private let quranReaderArabic: [String: String] = [
     "results": "نتائج البحث", "meccan": "مكية", "medinan": "مدنية",
     "mode.verses": "الآيات", "mode.mushaf": "المصحف",
     "mushaf.keys": "← الصفحة التالية · → الصفحة السابقة · انقر مرتين على آية للتفاصيل",
+    "script": "خط المصحف",
+    "script.kfgqpc": "الخط العثماني · مصحف المدينة (مجمع الملك فهد)",
+    "script.amiri": "أميري قرآن · نسخ تقليدي",
+    "script.harmattan": "هرمتان · الطابع المغربي",
+    "script.system": "خط النظام",
 ]
 
 private func quranReaderText(_ key: String) -> String {
@@ -12025,36 +12044,89 @@ private func quranReaderText(_ key: String) -> String {
 
 private var quranFontNames: [String: [String]] = [:]
 
-/// Registers only fonts bundled below Quran/Fonts. The PostScript name is read
-/// from the verified file instead of guessed, so publisher renames cannot make
-/// the reader silently fall back to an unrelated Arabic font.
+/// Registers only fonts bundled below Quran/Fonts (each subdirectory is one
+/// reviewed, hash-pinned face — see build.sh). The PostScript name is read
+/// from the verified file instead of guessed, so publisher renames cannot
+/// make the reader silently fall back to an unrelated Arabic font.
 private func registerVerifiedQuranFonts() {
     guard quranFontNames.isEmpty,
           let root = Bundle.main.resourceURL?.appendingPathComponent("Quran/Fonts")
     else { return }
     let manager = FileManager.default
-    guard let enumerator = manager.enumerator(at: root,
-                                               includingPropertiesForKeys: nil)
+    guard let directories = try? manager.contentsOfDirectory(
+        at: root, includingPropertiesForKeys: [.isDirectoryKey])
     else { return }
-    for case let url as URL in enumerator where ["ttf", "otf"].contains(url.pathExtension.lowercased()) {
-        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-        guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor]
-        else { continue }
-        let edition = url.path.lowercased().contains("warsh") ? "warsh" : "hafs"
-        for descriptor in descriptors {
-            if let name = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String {
-                quranFontNames[edition, default: []].append(name)
+    for directory in directories {
+        let key = directory.lastPathComponent
+        guard let files = try? manager.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: nil) else { continue }
+        for url in files where ["ttf", "otf"].contains(url.pathExtension.lowercased()) {
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            guard let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL)
+                as? [CTFontDescriptor] else { continue }
+            for descriptor in descriptors {
+                if let name = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute)
+                    as? String {
+                    quranFontNames[key, default: []].append(name)
+                }
             }
         }
     }
 }
 
-private func verifiedQuranFont(edition: String, size: CGFloat) -> NSFont? {
+private func quranFontFromDirectory(_ key: String, size: CGFloat) -> NSFont? {
     registerVerifiedQuranFonts()
-    for name in quranFontNames[edition] ?? [] {
+    for name in quranFontNames[key] ?? [] {
         if let font = NSFont(name: name, size: size) { return font }
     }
     return nil
+}
+
+/// Publisher companion font for the loaded riwayah — renders the corpus
+/// exactly as printed, including the embedded ayah-mark symbols.
+private func verifiedQuranFont(edition: String, size: CGFloat) -> NSFont? {
+    quranFontFromDirectory(edition == "warsh" ? "KFGQPC-Warsh" : "KFGQPC-Hafs",
+                           size: size)
+}
+
+/// How the ayah number is closed at the end of each verse for a given face.
+private enum QuranMarkerStyle {
+    case publisher   // corpus's embedded KFGQPC ayah-mark symbols
+    case ayahSign    // U+06DD END OF AYAH with Arabic-Indic digits inside
+    case plain       // stripped text; ornate bracket markers drawn separately
+}
+
+/// A reviewed Qur'an typeface the reader can typeset pages with. The page
+/// engine re-fits every page to the selected face while preserving the
+/// printed structure.
+private struct QuranScriptOption {
+    let key: String
+    let directory: String?   // Quran/Fonts subdirectory; nil = per-edition publisher font
+    let marker: QuranMarkerStyle
+
+    static let all: [QuranScriptOption] = [
+        .init(key: "kfgqpc", directory: nil, marker: .publisher),
+        .init(key: "amiri", directory: "AmiriQuran", marker: .ayahSign),
+        .init(key: "harmattan", directory: "Harmattan", marker: .ayahSign),
+        .init(key: "system", directory: "system", marker: .plain),
+    ]
+
+    var title: String { quranReaderText("script.\(key)") }
+
+    static var selected: QuranScriptOption {
+        let saved = UserDefaults.standard.string(forKey: kQuranReaderScript)
+        return all.first(where: { $0.key == saved }) ?? all[0]
+    }
+}
+
+/// Arabic-Indic digits regardless of the interface numeral preference — used
+/// only inside U+06DD ayah signs, whose fonts substitute Arabic-Indic digit
+/// sequences into the medallion exactly like the printed Mushaf.
+private func quranAyahSignDigits(_ value: Int) -> String {
+    let map: [Character: Character] = ["0": "٠", "1": "١", "2": "٢", "3": "٣",
+                                       "4": "٤", "5": "٥", "6": "٦", "7": "٧",
+                                       "8": "٨", "9": "٩"]
+    return String(String(value).map { map[$0] ?? $0 })
 }
 
 private func quranTranslationURL(_ descriptor: QuranTranslationDescriptor) -> URL? {
@@ -12211,34 +12283,107 @@ private final class QuranReaderFooterView: NSView {
     }
 }
 
-/// The Mushaf "paper": a palette-tinted sheet with the double ornamental
-/// border of a printed page. Purely decorative chrome — the interactive
-/// text view sits on top of it.
+/// The Mushaf "paper": a palette-tinted sheet framed by an illuminated
+/// border in the manner of a printed Mushaf — layered gold rules, a chained
+/// middle band, corner rosettes, a header cartouche for the running head,
+/// and a bottom medallion for the page number. Purely decorative chrome —
+/// the interactive text view sits on top of it.
 private final class QuranMushafCardView: NSView {
     var palette: QuranReaderPalette = .ivory { didSet { needsDisplay = true } }
     override var isFlipped: Bool { true }
+
+    static func headerFrame(in bounds: NSRect) -> NSRect {
+        let width = min(360, bounds.width * 0.62)
+        return NSRect(x: bounds.midX - width / 2, y: 16, width: width, height: 30)
+    }
+
+    static func pageBadgeFrame(in bounds: NSRect) -> NSRect {
+        NSRect(x: bounds.midX - 46, y: bounds.height - 44, width: 92, height: 26)
+    }
+
+    static let textInset: CGFloat = 40
+
     override func draw(_ dirtyRect: NSRect) {
+        let gold = palette.gold
+        let increaseContrast = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast
+
+        // Paper with a whisper of top light.
         let sheet = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
-                                 xRadius: 14, yRadius: 14)
-        palette.surface.withAlphaComponent(palette == .night ? 0.92 : 0.97).setFill()
+                                 xRadius: 10, yRadius: 10)
+        palette.surface.withAlphaComponent(palette == .night ? 0.95 : 1).setFill()
         sheet.fill()
-        palette.motif.withAlphaComponent(0.9).setStroke()
-        sheet.lineWidth = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 1.6 : 1.1
-        sheet.stroke()
-        let inner = NSBezierPath(roundedRect: bounds.insetBy(dx: 9, dy: 9),
-                                 xRadius: 8, yRadius: 8)
-        palette.divider.setStroke()
-        inner.lineWidth = 0.7
+        NSGradient(starting: NSColor.white.withAlphaComponent(palette == .night ? 0.035 : 0.30),
+                   ending: .clear)?.draw(in: sheet, angle: -90)
+
+        // Illuminated border: heavy outer rule, chained middle band, fine
+        // inner rule around the text block.
+        let outer = NSBezierPath(roundedRect: bounds.insetBy(dx: 9, dy: 9),
+                                 xRadius: 7, yRadius: 7)
+        gold.withAlphaComponent(0.95).setStroke()
+        outer.lineWidth = increaseContrast ? 2.6 : 2.2
+        outer.stroke()
+        let chain = NSBezierPath(roundedRect: bounds.insetBy(dx: 14.5, dy: 14.5),
+                                 xRadius: 5, yRadius: 5)
+        chain.setLineDash([1.2, 3.4], count: 2, phase: 0)
+        gold.withAlphaComponent(0.8).setStroke()
+        chain.lineWidth = 1.4
+        chain.stroke()
+        let inner = NSBezierPath(roundedRect: bounds.insetBy(dx: 21, dy: 21),
+                                 xRadius: 3, yRadius: 3)
+        gold.withAlphaComponent(0.9).setStroke()
+        inner.lineWidth = 1
         inner.stroke()
-        palette.motif.setStroke()
-        for corner in [NSPoint(x: bounds.minX + 20, y: bounds.minY + 20),
-                       NSPoint(x: bounds.maxX - 20, y: bounds.minY + 20),
-                       NSPoint(x: bounds.minX + 20, y: bounds.maxY - 20),
-                       NSPoint(x: bounds.maxX - 20, y: bounds.maxY - 20)] {
-            let star = zelligeStarPath(center: corner, outer: 8, inner: 3.5)
-            star.lineWidth = 0.8
-            star.stroke()
+        let hairline = NSBezierPath(roundedRect: bounds.insetBy(dx: 24, dy: 24),
+                                    xRadius: 2, yRadius: 2)
+        gold.withAlphaComponent(0.45).setStroke()
+        hairline.lineWidth = 0.6
+        hairline.stroke()
+
+        // Corner rosettes on the middle band.
+        for corner in [NSPoint(x: bounds.minX + 15, y: bounds.minY + 15),
+                       NSPoint(x: bounds.maxX - 15, y: bounds.minY + 15),
+                       NSPoint(x: bounds.minX + 15, y: bounds.maxY - 15),
+                       NSPoint(x: bounds.maxX - 15, y: bounds.maxY - 15)] {
+            let rosette = zelligeStarPath(center: corner, outer: 8.5, inner: 3.6)
+            palette.surface.setFill()
+            rosette.fill()
+            gold.setStroke()
+            rosette.lineWidth = 1
+            rosette.stroke()
+            let dot = NSBezierPath(ovalIn: NSRect(x: corner.x - 1.6, y: corner.y - 1.6,
+                                                  width: 3.2, height: 3.2))
+            gold.setFill()
+            dot.fill()
         }
+
+        // Header cartouche for the running head (surah · juz).
+        let header = Self.headerFrame(in: bounds)
+        let cartouche = NSBezierPath(roundedRect: header,
+                                     xRadius: header.height / 2,
+                                     yRadius: header.height / 2)
+        gold.withAlphaComponent(palette == .night ? 0.16 : 0.10).setFill()
+        cartouche.fill()
+        gold.withAlphaComponent(0.85).setStroke()
+        cartouche.lineWidth = 1
+        cartouche.stroke()
+        for x in [header.minX - 14, header.maxX + 14] {
+            let finial = zelligeStarPath(center: NSPoint(x: x, y: header.midY),
+                                         outer: 5.5, inner: 2.4)
+            gold.withAlphaComponent(0.9).setStroke()
+            finial.lineWidth = 0.9
+            finial.stroke()
+        }
+
+        // Page-number medallion at the foot of the page.
+        let badge = Self.pageBadgeFrame(in: bounds)
+        let medallion = NSBezierPath(roundedRect: badge,
+                                     xRadius: badge.height / 2,
+                                     yRadius: badge.height / 2)
+        gold.withAlphaComponent(palette == .night ? 0.16 : 0.10).setFill()
+        medallion.fill()
+        gold.withAlphaComponent(0.85).setStroke()
+        medallion.lineWidth = 1
+        medallion.stroke()
     }
 }
 
@@ -12727,11 +12872,13 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var meaningsButton: HoverIconButton!
     private var readerSettingsButton: HoverIconButton!
     private var modeControl: NSSegmentedControl!
+    private var mushafPageScroll: NSScrollView!
+    private var mushafDocument: FlippedView!
     private var mushafCard: QuranMushafCardView!
     private var mushafText: QuranMushafTextView!
     private var mushafHeaderLabel: NSTextField!
     private var mushafPageLabel: NSTextField!
-    private var mushafWidthConstraint: NSLayoutConstraint!
+    private var lastMushafViewport = NSSize.zero
 
     private var settingsPopover: NSPopover?
     private weak var editionSegment: NSSegmentedControl?
@@ -12940,21 +13087,29 @@ final class QuranViewController: NSViewController, MainTabContent,
         backdrop.addSubview(footer)
 
         // --- Mushaf page surface (hidden in verse mode) ---
+        // The Mushaf page lives inside its own scroll surface so zooming
+        // scales the entire illuminated page (frame included) like a real
+        // book page, with the viewport scrolling around it when enlarged.
+        mushafPageScroll = NSScrollView()
+        mushafPageScroll.drawsBackground = false
+        mushafPageScroll.hasVerticalScroller = true
+        mushafPageScroll.hasHorizontalScroller = true
+        mushafPageScroll.autohidesScrollers = true
+        mushafPageScroll.translatesAutoresizingMaskIntoConstraints = false
+        backdrop.addSubview(mushafPageScroll)
+        mushafDocument = FlippedView()
+        mushafPageScroll.documentView = mushafDocument
+
         mushafCard = QuranMushafCardView()
-        mushafCard.translatesAutoresizingMaskIntoConstraints = false
-        backdrop.addSubview(mushafCard)
+        mushafDocument.addSubview(mushafCard)
 
         mushafHeaderLabel = NSTextField(labelWithString: "")
-        mushafHeaderLabel.font = Localizer.shared.font(size: 12.5, weight: .semibold)
         mushafHeaderLabel.alignment = .center
         mushafHeaderLabel.lineBreakMode = .byTruncatingMiddle
-        mushafHeaderLabel.translatesAutoresizingMaskIntoConstraints = false
         mushafCard.addSubview(mushafHeaderLabel)
 
         mushafPageLabel = NSTextField(labelWithString: "")
-        mushafPageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
         mushafPageLabel.alignment = .center
-        mushafPageLabel.translatesAutoresizingMaskIntoConstraints = false
         mushafCard.addSubview(mushafPageLabel)
 
         mushafText = QuranMushafTextView(frame: .zero)
@@ -12963,42 +13118,18 @@ final class QuranViewController: NSViewController, MainTabContent,
         mushafText.isSelectable = true
         mushafText.isRichText = false
         mushafText.drawsBackground = false
-        mushafText.textContainerInset = NSSize(width: 20, height: 10)
-        mushafText.minSize = .zero
-        mushafText.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
-                                    height: CGFloat.greatestFiniteMagnitude)
-        mushafText.isVerticallyResizable = true
+        mushafText.textContainerInset = NSSize(width: 4, height: 4)
+        mushafText.textContainer?.lineFragmentPadding = 0
+        mushafText.isVerticallyResizable = false
         mushafText.isHorizontallyResizable = false
-        mushafText.autoresizingMask = [.width]
-        mushafText.textContainer?.widthTracksTextView = true
         mushafText.setAccessibilityLabel(quranReaderText("mode.mushaf"))
-        let mushafScroll = NSScrollView()
-        mushafScroll.documentView = mushafText
-        mushafScroll.hasVerticalScroller = true
-        mushafScroll.autohidesScrollers = true
-        mushafScroll.drawsBackground = false
-        mushafScroll.translatesAutoresizingMaskIntoConstraints = false
-        mushafCard.addSubview(mushafScroll)
+        mushafCard.addSubview(mushafText)
 
-        mushafWidthConstraint = mushafCard.widthAnchor.constraint(equalToConstant: 680)
-        mushafWidthConstraint.priority = .defaultHigh
-        let mushafWidth = mushafWidthConstraint!
         NSLayoutConstraint.activate([
-            mushafCard.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
-            mushafCard.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 14),
-            mushafCard.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -14),
-            mushafWidth,
-            mushafCard.widthAnchor.constraint(lessThanOrEqualTo: backdrop.widthAnchor,
-                                              constant: -64),
-            mushafHeaderLabel.topAnchor.constraint(equalTo: mushafCard.topAnchor, constant: 16),
-            mushafHeaderLabel.leadingAnchor.constraint(equalTo: mushafCard.leadingAnchor, constant: 44),
-            mushafHeaderLabel.trailingAnchor.constraint(equalTo: mushafCard.trailingAnchor, constant: -44),
-            mushafScroll.topAnchor.constraint(equalTo: mushafHeaderLabel.bottomAnchor, constant: 8),
-            mushafScroll.leadingAnchor.constraint(equalTo: mushafCard.leadingAnchor, constant: 16),
-            mushafScroll.trailingAnchor.constraint(equalTo: mushafCard.trailingAnchor, constant: -16),
-            mushafScroll.bottomAnchor.constraint(equalTo: mushafPageLabel.topAnchor, constant: -6),
-            mushafPageLabel.bottomAnchor.constraint(equalTo: mushafCard.bottomAnchor, constant: -12),
-            mushafPageLabel.centerXAnchor.constraint(equalTo: mushafCard.centerXAnchor),
+            mushafPageScroll.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            mushafPageScroll.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            mushafPageScroll.topAnchor.constraint(equalTo: backdrop.topAnchor),
+            mushafPageScroll.bottomAnchor.constraint(equalTo: footer.topAnchor),
         ])
 
         unavailableOverlay = NSVisualEffectView()
@@ -13079,7 +13210,7 @@ final class QuranViewController: NSViewController, MainTabContent,
                                                name: NSView.boundsDidChangeNotification,
                                                object: scrollView.contentView)
         scrollView.isHidden = isMushaf
-        mushafCard.isHidden = !isMushaf
+        mushafPageScroll.isHidden = !isMushaf
         applyPalette()
         updateTranslationAvailability()
         loadEdition(restorePosition: true)
@@ -13091,6 +13222,14 @@ final class QuranViewController: NSViewController, MainTabContent,
         if abs(tableView.bounds.width - currentWidth) > 8 {
             currentWidth = tableView.bounds.width
             noteAllHeights()
+        }
+        if isMushaf, mushafPageScroll != nil {
+            let viewport = mushafPageScroll.contentSize
+            if abs(viewport.width - lastMushafViewport.width) > 8
+                || abs(viewport.height - lastMushafViewport.height) > 8 {
+                lastMushafViewport = viewport
+                renderMushafPage()
+            }
         }
     }
 
@@ -13143,12 +13282,26 @@ final class QuranViewController: NSViewController, MainTabContent,
                           self.edition == selectedEdition else { return }
                     self.verses = decoded
                     self.surahVerses = grouped
-                    // The bismillah header is the publisher's own text: the
-                    // exact first ayah of Al-Fātiḥah for the loaded riwayah,
-                    // with only its presentation-form ayah marker removed.
+                    // The bismillah header is the publisher's own text in the
+                    // riwayah's exact orthography: the basmala embedded in
+                    // 27:30 (Warsh does not number Al-Fātiḥah's basmala, so
+                    // the Fātiḥah row cannot be used there).
                     self.bismillahText = decoded
-                        .first(where: { $0.suraNumber == 1 && $0.ayahNumber == 1 })
-                        .map { strippedAyahMarkers($0.uthmanicText) } ?? ""
+                        .first(where: { $0.suraNumber == 27 && $0.ayahNumber == 30 })
+                        .map { verse -> String in
+                            // Scalar-level search: grapheme matching cannot
+                            // find the bare بِس prefix inside بِسْمِ because
+                            // the sukun joins its cluster.
+                            let scalars = Array(strippedAyahMarkers(verse.uthmanicText)
+                                .unicodeScalars)
+                            for index in 0..<max(0, scalars.count - 2)
+                                where scalars[index].value == 0x628
+                                    && scalars[index + 1].value == 0x650
+                                    && scalars[index + 2].value == 0x633 {
+                                return String(String.UnicodeScalarView(scalars[index...]))
+                            }
+                            return ""
+                        } ?? ""
                     self.migrateLegacyPageBookmarks(using: decoded,
                                                      edition: selectedEdition)
                     self.totalPages = decoded.map(\.pageStart).max() ?? 604
@@ -13190,14 +13343,39 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     // MARK: - fonts and per-verse text
 
-    private func officialFont() -> NSFont? {
-        verifiedQuranFont(edition: edition, size: 30 * textScale)
+    private var scriptOption: QuranScriptOption { QuranScriptOption.selected }
+
+    /// The marker style the selected face can actually deliver — falls back
+    /// to plain markers when a bundled font is missing from the build.
+    private var effectiveMarkerStyle: QuranMarkerStyle {
+        let option = scriptOption
+        switch option.marker {
+        case .publisher:
+            return verifiedQuranFont(edition: edition, size: 12) != nil ? .publisher : .plain
+        case .ayahSign:
+            if let directory = option.directory,
+               quranFontFromDirectory(directory, size: 12) != nil { return .ayahSign }
+            return .plain
+        case .plain:
+            return .plain
+        }
+    }
+
+    /// Resolve the selected Qur'an face at a given size, falling back to the
+    /// system Arabic font when the bundled file is unavailable.
+    private func quranScriptFont(size: CGFloat) -> NSFont {
+        let option = scriptOption
+        if option.directory == nil {
+            if let font = verifiedQuranFont(edition: edition, size: size) { return font }
+        } else if let directory = option.directory, directory != "system",
+                  let font = quranFontFromDirectory(directory, size: size) {
+            return font
+        }
+        return NSFont(name: "Geeza Pro", size: size) ?? Localizer.shared.font(size: size)
     }
 
     private func currentArabicFont() -> NSFont {
-        officialFont()
-            ?? NSFont(name: "Geeza Pro", size: 30 * textScale)
-            ?? Localizer.shared.font(size: 30 * textScale)
+        quranScriptFont(size: 30 * textScale)
     }
 
     private func currentTranslationFont() -> NSFont {
@@ -13205,16 +13383,24 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     private func currentBismillahFont() -> NSFont {
-        verifiedQuranFont(edition: edition, size: 22 * textScale)
-            ?? NSFont(name: "Geeza Pro", size: 22 * textScale)
-            ?? Localizer.shared.font(size: 22 * textScale)
+        quranScriptFont(size: 22 * textScale)
     }
 
-    /// With the publisher font present the terminal KFG ayah marker renders
-    /// exactly; without it, only the presentation marker is removed and the
-    /// separate source-provided medallion carries the ayah number.
+    /// Verse-list text for the selected face. Publisher faces render the
+    /// corpus untouched (their embedded ayah-mark symbols are exact);
+    /// U+06DD-capable faces draw a standard ayah sign with Arabic-Indic
+    /// digits inside, as printed; otherwise markers are stripped and the
+    /// separate medallion carries the number.
     private func renderedArabic(for verse: OfflineQuranVerse) -> String {
-        officialFont() != nil ? verse.uthmanicText : strippedAyahMarkers(verse.uthmanicText)
+        switch effectiveMarkerStyle {
+        case .publisher:
+            return verse.uthmanicText
+        case .ayahSign:
+            return strippedAyahMarkers(verse.uthmanicText)
+                + "\u{00A0}\u{06DD}\(quranAyahSignDigits(verse.ayahNumber))"
+        case .plain:
+            return strippedAyahMarkers(verse.uthmanicText)
+        }
     }
 
     private func rowIsSurahStart(_ row: Int) -> Bool {
@@ -13459,7 +13645,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         guard scrollView != nil else { return }
         let mushaf = isMushaf
         scrollView.isHidden = mushaf
-        mushafCard.isHidden = !mushaf
+        mushafPageScroll.isHidden = !mushaf
         previousButton.toolTip = mushaf ? offlineQuranText("previous")
                                         : quranReaderText("previous")
         nextButton.toolTip = mushaf ? offlineQuranText("next") : quranReaderText("next")
@@ -13506,27 +13692,34 @@ final class QuranViewController: NSViewController, MainTabContent,
         let verse: OfflineQuranVerse?
     }
 
-    /// The full page text for one ayah: exact publisher text, plus an ornate
-    /// inline number (in the user's numeral style) when the official page
-    /// font is not present to draw the marker itself.
-    private func mushafBody(for verse: OfflineQuranVerse, official: Bool) -> String {
-        let body = official ? verse.uthmanicText : strippedAyahMarkers(verse.uthmanicText)
-        let marker = official ? ""
-            : " ﴿\(localizedInterfaceDigits(String(verse.ayahNumber)))﴾"
-        return body + marker
+    /// The full page text for one ayah in the selected face: publisher faces
+    /// keep the corpus's own ayah-mark symbols; U+06DD-capable faces close
+    /// the verse with a genuine ayah sign whose Arabic-Indic number sits
+    /// inside the medallion; plain faces get ornate bracket markers in the
+    /// interface numeral style.
+    private func mushafBody(for verse: OfflineQuranVerse) -> String {
+        switch effectiveMarkerStyle {
+        case .publisher, .ayahSign:
+            return renderedArabic(for: verse)
+        case .plain:
+            return strippedAyahMarkers(verse.uthmanicText)
+                + " ﴿\(localizedInterfaceDigits(String(verse.ayahNumber)))﴾"
+        }
     }
 
-    /// Rebuild the page as a line-for-line replica of the printed Mushaf.
+    /// Rebuild the page as a line-for-line replica of the printed Mushaf,
+    /// typeset in the selected Qur'an face.
     ///
     /// Structure is exact: every ayah begins and ends on its printed line
     /// (line_start / line_end from the KFGQPC metadata), surah banners and
     /// the bismillah occupy the same lines as in print, blank print lines
     /// are preserved, and every line is justified to the full measure.
-    /// Within a multi-line ayah the aya-level data does not record which
-    /// word sits on which printed line, so word placement is solved by a
-    /// least-squares fit that mimics the print's uniform justified measure.
-    /// The page is sized so scale 1.0 shows the whole page; the text-size
-    /// control zooms the entire page uniformly.
+    /// Within a multi-line ayah word placement is solved by a least-squares
+    /// fit measured in the selected face — so the page re-typesets itself
+    /// per font (with the publisher face, word widths are the print's own).
+    /// The page carries a printed-Mushaf aspect and an illuminated frame;
+    /// scale 1.0 fits the whole page and the size control zooms the entire
+    /// page uniformly inside its scroll surface.
     private func renderMushafPage() {
         guard mushafText != nil, !verses.isEmpty else { return }
         let pageVerses = verses.filter { $0.pageStart == currentPage }
@@ -13538,18 +13731,16 @@ final class QuranViewController: NSViewController, MainTabContent,
             mushafRanges = []
             return
         }
-        let hasOfficial = officialFont() != nil
+        let markerStyle = effectiveMarkerStyle
         let referenceSize: CGFloat = 24
-        let referenceFont = verifiedQuranFont(edition: edition, size: referenceSize)
-            ?? NSFont(name: "Geeza Pro", size: referenceSize)
-            ?? Localizer.shared.font(size: referenceSize)
+        let referenceFont = quranScriptFont(size: referenceSize)
         func naturalWidth(_ text: String) -> CGFloat {
             (text as NSString).size(withAttributes: [.font: referenceFont]).width
         }
-        // The KFGQPC computer-naskh sets words much farther apart than the
-        // fallback font's natural space; widening the modelled space keeps
-        // the estimated words-per-line close to the printed column.
-        let spaceWidth = naturalWidth(" ") * 1.7
+        // The publisher faces carry the print's own metrics; substitute
+        // faces need a wider modelled space to keep estimated words-per-line
+        // close to the widely-spaced printed column.
+        let spaceWidth = naturalWidth(" ") * (markerStyle == .publisher ? 1.0 : 1.7)
 
         // -- structural pass: word tokens carrying their printed line window
         struct Token {
@@ -13576,11 +13767,13 @@ final class QuranViewController: NSViewController, MainTabContent,
                 if gap >= 1 { bannerLines[start - gap] = verse.suraNameArabic }
                 if gap >= 2 { bismillahLines.insert(start - 1) }
             }
-            let full = mushafBody(for: verse, official: hasOfficial)
+            let full = mushafBody(for: verse)
             var words = full.split(separator: " ").map(String.init)
-            if !hasOfficial, words.count >= 2, words.last?.hasPrefix("﴿") == true {
-                // Keep the ayah medallion glued to the final word so it can
-                // never be orphaned on its own line.
+            if markerStyle == .plain, words.count >= 2,
+               words.last?.hasPrefix("﴿") == true {
+                // Keep the bracket marker glued to the final word so it can
+                // never be orphaned on its own line. (Publisher and U+06DD
+                // signs are already attached with non-breaking spaces.)
                 let marker = words.removeLast()
                 words[words.count - 1] += " " + marker
             }
@@ -13702,48 +13895,55 @@ final class QuranViewController: NSViewController, MainTabContent,
             tokenIndex = cut + 1
         }
 
-        // -- size the page: scale 1.0 fits the whole page in the window;
-        // the text-size control then zooms the page as a unit.
+        // -- page geometry: scale 1.0 fits the whole illuminated page in
+        // the viewport; the size control zooms the page as one unit.
         var widestLine: CGFloat = 1
         for line in 1...maxLine {
             guard let segments = bodyLines[line] else { continue }
             widestLine = max(widestLine,
                              naturalWidth(segments.map(\.text).joined(separator: " ")))
         }
-        let refLineHeight = referenceFont.ascender - referenceFont.descender
-            + referenceFont.leading
-        let rowFactor = (refLineHeight + referenceSize * 0.52) / referenceSize
-        let rows = CGFloat(maxLine) + CGFloat(bannerLines.count) * 0.7 + 1.4
-        let scrollHeight = max(220, backdrop.bounds.height - 106)
+        let sidePad = QuranMushafCardView.textInset
+        let headerBand: CGFloat = 54
+        let footerBand: CGFloat = 52
+        // The Qur'an faces carry very tall intrinsic metrics (room for
+        // stacked marks and medallions); print pages sit much tighter. The
+        // paragraph style pins this exact line height below, so the fit
+        // model and the rendered page always agree.
+        let lineHeightFactor: CGFloat = 1.95
+        let rowFactor = lineHeightFactor
+        let rows = CGFloat(maxLine) + CGFloat(bannerLines.count) * 0.7 + 0.8
+        let viewport = mushafPageScroll.contentSize
+        let viewportHeight = viewport.height > 100 ? viewport.height
+            : max(320, backdrop.bounds.height - 34)
+        let viewportWidth = viewport.width > 100 ? viewport.width
+            : max(360, backdrop.bounds.width)
+        let textBudget = viewportHeight - headerBand - footerBand - 30
         let sizePerWidthPoint = referenceSize * 0.985 / widestLine
-        let fitWidth = scrollHeight / (rows * rowFactor * sizePerWidthPoint) + 54
-        let baseWidth = max(340, min(720, fitWidth))
-        mushafWidthConstraint?.constant = baseWidth * textScale
-        view.layoutSubtreeIfNeeded()
+        var fitWidth = textBudget / (rows * rowFactor * sizePerWidthPoint)
+            + sidePad * 2
+        fitWidth = min(fitWidth, viewportWidth - 44, 760)
+        let pageWidth = max(330, fitWidth * textScale)
+        let textWidth = pageWidth - sidePad * 2
+        let bodySize = max(10, referenceSize * (textWidth - 18) / widestLine * 0.98)
 
-        let viewWidth = mushafText.bounds.width > 60
-            ? mushafText.bounds.width : baseWidth * textScale - 32
-        let available = max(160, viewWidth - mushafText.textContainerInset.width * 2 - 14)
-        let bodySize = max(10, referenceSize * available / widestLine * 0.985)
-
-        let bodyFont = verifiedQuranFont(edition: edition, size: bodySize)
-            ?? NSFont(name: "Geeza Pro", size: bodySize)
-            ?? Localizer.shared.font(size: bodySize)
-        let bannerFont = Localizer.shared.font(size: bodySize * 0.7, weight: .bold)
-        let bismillahFont = verifiedQuranFont(edition: edition, size: bodySize * 0.82)
-            ?? NSFont(name: "Geeza Pro", size: bodySize * 0.82)
-            ?? Localizer.shared.font(size: bodySize * 0.82)
+        let bodyFont = quranScriptFont(size: bodySize)
+        let bannerFont = quranScriptFont(size: bodySize * 0.95)
+        let bismillahFont = quranScriptFont(size: bodySize * 0.9)
 
         let bodyParagraph = NSMutableParagraphStyle()
         bodyParagraph.alignment = .justified
         bodyParagraph.baseWritingDirection = .rightToLeft
         bodyParagraph.lineBreakMode = .byWordWrapping
-        bodyParagraph.lineSpacing = bodySize * 0.52
+        bodyParagraph.minimumLineHeight = bodySize * lineHeightFactor
+        bodyParagraph.maximumLineHeight = bodySize * lineHeightFactor
         let centered = NSMutableParagraphStyle()
         centered.alignment = .center
         centered.baseWritingDirection = .rightToLeft
-        centered.paragraphSpacingBefore = bodySize * 0.28
-        centered.paragraphSpacing = bodySize * 0.28
+        centered.minimumLineHeight = bodySize * lineHeightFactor
+        centered.maximumLineHeight = bodySize * lineHeightFactor
+        centered.paragraphSpacingBefore = bodySize * 0.1
+        centered.paragraphSpacing = bodySize * 0.1
 
         // -- compose. Body lines are joined with U+2028 so every line except
         // a block's last is stretched by justification, exactly like the
@@ -13763,7 +13963,7 @@ final class QuranViewController: NSViewController, MainTabContent,
                 result.append(NSAttributedString(
                     string: "۞ سُورَةُ \(banner) ۞\n",
                     attributes: [.font: bannerFont,
-                                 .foregroundColor: NSColor.appGreenAccent,
+                                 .foregroundColor: palette.gold,
                                  .paragraphStyle: centered]))
                 continue
             }
@@ -13805,7 +14005,38 @@ final class QuranViewController: NSViewController, MainTabContent,
         mushafText.textStorage?.setAttributedString(result)
         mushafRanges = ranges
         applyMushafSelectionHighlight()
-        mushafText.scroll(.zero)
+
+        // -- lay the illuminated page out: measure the typeset block, give
+        // the sheet printed-Mushaf proportions, and center it in the
+        // scrollable surface.
+        mushafText.textContainer?.containerSize = NSSize(
+            width: textWidth - 8, height: CGFloat.greatestFiniteMagnitude)
+        var textHeight: CGFloat = 200
+        if let layoutManager = mushafText.layoutManager,
+           let container = mushafText.textContainer {
+            layoutManager.ensureLayout(for: container)
+            textHeight = ceil(layoutManager.usedRect(for: container).height) + 10
+        }
+        let contentHeight = headerBand + textHeight + footerBand
+        let pageTargetHeight = pageWidth * 1.46
+        let pageHeight = max(contentHeight, min(pageTargetHeight, contentHeight + 260))
+        let slack = (pageHeight - contentHeight) / 2
+        let documentWidth = max(viewportWidth, pageWidth + 36)
+        let documentHeight = max(viewportHeight, pageHeight + 32)
+        mushafDocument.frame = NSRect(x: 0, y: 0, width: documentWidth,
+                                      height: documentHeight)
+        let cardX = (documentWidth - pageWidth) / 2
+        let cardY = max(16, (documentHeight - pageHeight) / 2)
+        mushafCard.frame = NSRect(x: cardX, y: cardY,
+                                  width: pageWidth, height: pageHeight)
+        mushafText.frame = NSRect(x: sidePad, y: headerBand + slack,
+                                  width: textWidth, height: textHeight)
+        mushafHeaderLabel.frame = QuranMushafCardView
+            .headerFrame(in: mushafCard.bounds).insetBy(dx: 12, dy: 4)
+        mushafPageLabel.frame = QuranMushafCardView
+            .pageBadgeFrame(in: mushafCard.bounds).insetBy(dx: 6, dy: 3)
+        mushafPageScroll.contentView.scroll(to: .zero)
+        mushafPageScroll.reflectScrolledClipView(mushafPageScroll.contentView)
 
         let suraNames = pageVerses.reduce(into: [String]()) { list, verse in
             if list.last != verse.suraNameArabic { list.append(verse.suraNameArabic) }
@@ -13814,11 +14045,15 @@ final class QuranViewController: NSViewController, MainTabContent,
         let juzText = juzList.map { localizedInterfaceDigits(String($0)) }
             .joined(separator: "، ")
         mushafHeaderLabel.stringValue = suraNames.joined(separator: " · ")
-            + "   ·   \(quranReaderText("juz")) \(juzText)"
-        mushafHeaderLabel.textColor = palette.secondary
+            + "  ·  \(quranReaderText("juz")) \(juzText)"
+        // Interface font: Qur'an-only faces (Amiri Quran) lack glyphs for
+        // plain UI text, so the running head must not use the script face.
+        mushafHeaderLabel.font = Localizer.shared.font(size: 13, weight: .semibold)
+        mushafHeaderLabel.textColor = palette.gold
         mushafPageLabel.stringValue =
             "\(localizedInterfaceDigits(String(currentPage))) / \(localizedInterfaceDigits(String(totalPages)))"
-        mushafPageLabel.textColor = palette.secondary
+        mushafPageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
+        mushafPageLabel.textColor = palette.gold
         mushafText.toolTip = quranReaderText("mushaf.keys")
     }
 
@@ -13844,6 +14079,14 @@ final class QuranViewController: NSViewController, MainTabContent,
         case 116: movePage(by: -1)                // page-up
         case 115: goToPage(1)                     // home
         case 119: goToPage(totalPages)            // end
+        case 125, 126:                            // ↑ / ↓ scroll a zoomed page
+            let clipView = mushafPageScroll.contentView
+            var origin = clipView.bounds.origin
+            origin.y += event.keyCode == 125 ? 72 : -72
+            origin.y = max(0, min(origin.y,
+                (mushafDocument.frame.height) - clipView.bounds.height))
+            clipView.scroll(to: origin)
+            mushafPageScroll.reflectScrolledClipView(clipView)
         default: return false
         }
         return true
@@ -14001,8 +14244,20 @@ final class QuranViewController: NSViewController, MainTabContent,
         translationPopup.setAccessibilityLabel(quranReaderText("translation"))
         translationPopupControl = translationPopup
 
+        let scriptPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for option in QuranScriptOption.all {
+            scriptPopup.addItem(withTitle: option.title)
+        }
+        scriptPopup.selectItem(at: QuranScriptOption.all.firstIndex(where: {
+            $0.key == scriptOption.key
+        }) ?? 0)
+        scriptPopup.target = self
+        scriptPopup.action = #selector(scriptChanged(_:))
+        scriptPopup.setAccessibilityLabel(quranReaderText("script"))
+
         let grid = NSGridView(views: [
             [rowLabel(quranReaderText("riwaya")), editionControl],
+            [rowLabel(quranReaderText("script")), scriptPopup],
             [rowLabel(quranReaderText("theme")), swatchRow],
             [rowLabel(quranReaderText("reading.style")), layoutControl],
             [rowLabel(quranReaderText("text.size")), sliderRow],
@@ -14094,6 +14349,15 @@ final class QuranViewController: NSViewController, MainTabContent,
     @objc private func textScaleChanged(_ sender: NSSlider) {
         let value = max(0.78, min(1.55, sender.doubleValue))
         UserDefaults.standard.set(value, forKey: kQuranReaderTextScale)
+        tableView.reloadData()
+        noteAllHeights()
+        if isMushaf { renderMushafPage() }
+    }
+
+    @objc private func scriptChanged(_ sender: NSPopUpButton) {
+        let index = max(0, min(QuranScriptOption.all.count - 1, sender.indexOfSelectedItem))
+        UserDefaults.standard.set(QuranScriptOption.all[index].key,
+                                  forKey: kQuranReaderScript)
         tableView.reloadData()
         noteAllHeights()
         if isMushaf { renderMushafPage() }
@@ -14193,7 +14457,7 @@ final class QuranViewController: NSViewController, MainTabContent,
             UserDefaults.standard.set(readerModeValue, forKey: kQuranReaderMode)
             modeControl.selectedSegment = 0
             scrollView.isHidden = false
-            mushafCard.isHidden = true
+            mushafPageScroll.isHidden = true
         }
         let normalized = normalizedQuranSearch(query)
         let generation = UUID()
