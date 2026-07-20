@@ -26,6 +26,7 @@ swiftc main.swift \
     -framework CoreLocation \
     -framework UserNotifications \
     -framework ServiceManagement \
+    -framework WidgetKit \
     -lsqlite3
 
 # ---------- multi-res icns --------------------------------------------------
@@ -2110,11 +2111,83 @@ JSON_EOF
 # ---------- Info.plist ------------------------------------------------------
 cp Info.plist "$CONTENTS/Info.plist"
 
+# ---------- WidgetKit extension ---------------------------------------------
+# Four prayer-time widgets (Overview / List / Timeline / Clock) built from
+# widgets.swift into an embedded appex. The main app writes a snapshot JSON
+# into the shared group container; the sandboxed widget only reads that file.
+echo "Building widgets extension..."
+WIDGET_APPEX="$CONTENTS/PlugIns/SalatWidgets.appex"
+mkdir -p "$WIDGET_APPEX/Contents/MacOS"
+swiftc widgets.swift \
+    -o "$WIDGET_APPEX/Contents/MacOS/SalatWidgets" \
+    -parse-as-library \
+    -framework WidgetKit \
+    -framework SwiftUI
+
+cat > "$WIDGET_APPEX/Contents/Info.plist" <<'WIDGET_PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key><string>en</string>
+    <key>CFBundleDisplayName</key><string>Salat Time Widgets</string>
+    <key>CFBundleExecutable</key><string>SalatWidgets</string>
+    <key>CFBundleIdentifier</key><string>com.salattime.app.widgets</string>
+    <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+    <key>CFBundleName</key><string>Salat Time Widgets</string>
+    <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleVersion</key><string>1.0</string>
+    <key>LSMinimumSystemVersion</key><string>14.0</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.widgetkit-extension</string>
+    </dict>
+</dict>
+</plist>
+WIDGET_PLIST
+
+cat > /tmp/salat-widget-entitlements.plist <<'WIDGET_ENTITLEMENTS'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.app-sandbox</key><true/>
+    <key>com.apple.security.application-groups</key>
+    <array><string>group.com.salattime.app</string></array>
+</dict>
+</plist>
+WIDGET_ENTITLEMENTS
+
+codesign --force --sign - --timestamp=none \
+    --identifier com.salattime.app.widgets \
+    --entitlements /tmp/salat-widget-entitlements.plist \
+    "$WIDGET_APPEX" \
+    || echo "  (widget sign failed)"
+
 # ---------- Code signing ---------------------------------------------------
 # Ad-hoc signature so Gatekeeper / LaunchServices are happy with the bundle.
+# The app itself is not sandboxed; the group entitlement lets it share the
+# widget snapshot container cleanly.
+cat > /tmp/salat-app-entitlements.plist <<'APP_ENTITLEMENTS'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>com.apple.security.application-groups</key>
+    <array><string>group.com.salattime.app</string></array>
+</dict>
+</plist>
+APP_ENTITLEMENTS
+
 echo "Signing app (ad-hoc)..."
 codesign --force --sign - --timestamp=none \
     --identifier com.salattime.app \
+    --entitlements /tmp/salat-app-entitlements.plist \
     "$APP_DIR" \
     || echo "  (app sign failed — try: codesign --force --sign - \"$APP_DIR\")"
 

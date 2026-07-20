@@ -9,6 +9,7 @@ import UserNotifications
 import ServiceManagement
 import UniformTypeIdentifiers
 import SQLite3
+import WidgetKit
 
 // ============================================================================
 // MARK: Constants
@@ -119,7 +120,7 @@ let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harm
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 
-let kAppVersion          = "3.27.0"
+let kAppVersion          = "3.28.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -19860,7 +19861,51 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     // ---------------------------------------------------- rendering
+    private var lastWidgetSnapshotJSON = ""
+
+    /// Publish today's times to the shared group container for the WidgetKit
+    /// extension, and reload widget timelines when the content changed. The
+    /// snapshot carries only prayer scheduling data — no personal content.
+    func refreshWidgetSnapshot() {
+        guard info.times.count >= 5 else { return }
+        let accent = (currentAccentPair().light.usingColorSpace(.sRGB)
+                      ?? currentAccentPair().light)
+        let payload: [String: Any] = [
+            "dateKey": todayString(),
+            "writtenAt": Date().timeIntervalSince1970,
+            "mosque": info.name.isEmpty ? t("mosque.default") : info.name,
+            "names": (0..<5).map { localizedPrayerName(at: $0) },
+            "times": Array(info.times.prefix(5)),
+            "iqama": (0..<5).map { iqamaTimeAt($0) ?? "" },
+            "shuruqLabel": Localizer.shared.isArabic ? "الشروق" : "Shuruq",
+            "shuruq": info.shuruq,
+            "nextLabel": featureText("full.next_prayer"),
+            "iqamaLabel": t("col.iqama"),
+            "use24h": (UserDefaults.standard.string(forKey: kTimeFormat) ?? "24h") != "12h",
+            "rtl": Localizer.shared.isRTL,
+            "accent": [Double(accent.redComponent), Double(accent.greenComponent),
+                       Double(accent.blueComponent)],
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: payload,
+                                                     options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8) else { return }
+        // `writtenAt` changes every call; compare content without it.
+        let comparable = json.replacingOccurrences(
+            of: #""writtenAt":[0-9.]+"#, with: "", options: .regularExpression)
+        guard comparable != lastWidgetSnapshotJSON else { return }
+        lastWidgetSnapshotJSON = comparable
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Group Containers/group.com.salattime.app",
+                                    isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory,
+                                                 withIntermediateDirectories: true)
+        try? data.write(to: directory.appendingPathComponent("widget-snapshot.json"),
+                        options: [.atomic])
+        WidgetCenter.shared.reloadAllTimelines()
+    }
+
     func updateUI() {
+        defer { refreshWidgetSnapshot() }
         guard nameLabel != nil else { return }
         nameLabel.stringValue = isCompactAdhkarMode
             ? t("settings.section.adhkar")
