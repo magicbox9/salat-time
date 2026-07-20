@@ -2116,7 +2116,7 @@ cp Info.plist "$CONTENTS/Info.plist"
 # widgets.swift into an embedded appex. The main app writes a snapshot JSON
 # into the shared group container; the sandboxed widget only reads that file.
 echo "Building widgets extension..."
-WIDGET_APPEX="$CONTENTS/Extensions/SalatWidgets.appex"
+WIDGET_APPEX="$CONTENTS/PlugIns/SalatWidgets.appex"
 mkdir -p "$WIDGET_APPEX/Contents/MacOS"
 swiftc widgets.swift \
     -o "$WIDGET_APPEX/Contents/MacOS/SalatWidgets" \
@@ -2125,7 +2125,8 @@ swiftc widgets.swift \
     -framework WidgetKit \
     -framework SwiftUI
 
-cat > "$WIDGET_APPEX/Contents/Info.plist" <<'WIDGET_PLIST'
+APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info.plist 2>/dev/null || echo 1.0)
+cat > "$WIDGET_APPEX/Contents/Info.plist" <<WIDGET_PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -2138,12 +2139,16 @@ cat > "$WIDGET_APPEX/Contents/Info.plist" <<'WIDGET_PLIST'
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>Salat Time Widgets</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
-    <key>CFBundleVersion</key><string>1.0</string>
+    <key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
+    <key>CFBundleVersion</key><string>$APP_VERSION</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>EXAppExtensionAttributes</key>
+    <key>CFBundleSupportedPlatforms</key>
+    <array><string>MacOSX</string></array>
+    <key>DTPlatformName</key><string>macosx</string>
+    <key>DTSDKName</key><string>macosx</string>
+    <key>NSExtension</key>
     <dict>
-        <key>EXExtensionPointIdentifier</key>
+        <key>NSExtensionPointIdentifier</key>
         <string>com.apple.widgetkit-extension</string>
     </dict>
 </dict>
@@ -2163,7 +2168,14 @@ cat > /tmp/salat-widget-entitlements.plist <<'WIDGET_ENTITLEMENTS'
 </plist>
 WIDGET_ENTITLEMENTS
 
-codesign --force --sign - --timestamp=none \
+# Prefer the local signing certificate (widget gallery ignores ad-hoc
+# extensions); fall back to ad-hoc when it is absent on this machine.
+SIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+    | grep "Salat Time Local Signing" | head -1 | awk '{print $2}')
+[ -z "$SIGN_IDENTITY" ] && SIGN_IDENTITY="-"
+echo "  signing identity: $SIGN_IDENTITY"
+codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
+    --options runtime \
     --identifier com.salattime.app.widgets \
     --entitlements /tmp/salat-widget-entitlements.plist \
     "$WIDGET_APPEX" \
@@ -2186,7 +2198,8 @@ cat > /tmp/salat-app-entitlements.plist <<'APP_ENTITLEMENTS'
 APP_ENTITLEMENTS
 
 echo "Signing app (ad-hoc)..."
-codesign --force --sign - --timestamp=none \
+codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
+    --options runtime \
     --identifier com.salattime.app \
     --entitlements /tmp/salat-app-entitlements.plist \
     "$APP_DIR" \
