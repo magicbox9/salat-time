@@ -2122,8 +2122,11 @@ swiftc widgets.swift \
     -o "$WIDGET_APPEX/Contents/MacOS/SalatWidgets" \
     -parse-as-library \
     -application-extension \
+    -target "$(uname -m)-apple-macos14.0" \
     -framework WidgetKit \
-    -framework SwiftUI
+    -framework SwiftUI \
+    -framework Foundation \
+    -Xlinker -e -Xlinker _NSExtensionMain
 
 APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Info.plist 2>/dev/null || echo 1.0)
 cat > "$WIDGET_APPEX/Contents/Info.plist" <<WIDGET_PLIST
