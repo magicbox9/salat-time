@@ -2116,11 +2116,12 @@ cp Info.plist "$CONTENTS/Info.plist"
 # widgets.swift into an embedded appex. The main app writes a snapshot JSON
 # into the shared group container; the sandboxed widget only reads that file.
 echo "Building widgets extension..."
-WIDGET_APPEX="$CONTENTS/PlugIns/SalatWidgets.appex"
+WIDGET_APPEX="$CONTENTS/Extensions/SalatWidgets.appex"
 mkdir -p "$WIDGET_APPEX/Contents/MacOS"
 swiftc widgets.swift \
     -o "$WIDGET_APPEX/Contents/MacOS/SalatWidgets" \
     -parse-as-library \
+    -application-extension \
     -framework WidgetKit \
     -framework SwiftUI
 
@@ -2140,9 +2141,9 @@ cat > "$WIDGET_APPEX/Contents/Info.plist" <<'WIDGET_PLIST'
     <key>CFBundleShortVersionString</key><string>1.0</string>
     <key>CFBundleVersion</key><string>1.0</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>NSExtension</key>
+    <key>EXAppExtensionAttributes</key>
     <dict>
-        <key>NSExtensionPointIdentifier</key>
+        <key>EXExtensionPointIdentifier</key>
         <string>com.apple.widgetkit-extension</string>
     </dict>
 </dict>

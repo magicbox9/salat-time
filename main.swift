@@ -120,7 +120,7 @@ let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harm
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 
-let kAppVersion          = "3.28.0"
+let kAppVersion          = "3.28.1"
 
 // ============================================================================
 // MARK: Theme palette
