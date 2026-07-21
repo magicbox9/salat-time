@@ -124,7 +124,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.32.1"
+let kAppVersion          = "3.32.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -8985,6 +8985,7 @@ final class PrayerDisplayModeButton: NSButton {
     private let displayStyle: DockDisplayStyle
     private let buttonRole: DockButtonRole
     private var localizedLabel: String
+    private let circleShape = CAShapeLayer()
     private var trackingAreaRef: NSTrackingArea?
     private var isHovering = false
     var onVisualArrow: ((Int) -> Void)?
@@ -9032,6 +9033,10 @@ final class PrayerDisplayModeButton: NSButton {
         self.wantsLayer = true
         self.layer?.cornerRadius = displayStyle == .icons ? 24 : 10
         self.layer?.masksToBounds = true
+        if displayStyle == .icons {
+            circleShape.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            self.layer?.insertSublayer(circleShape, at: 0)
+        }
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.radioButton)
         self.setAccessibilityLabel(label)
@@ -9087,9 +9092,15 @@ final class PrayerDisplayModeButton: NSButton {
     override func layout() {
         super.layout()
         if displayStyle == .icons {
-            // Derive the radius from the rendered square so Auto Layout can
-            // never produce an oval during window or localization changes.
-            layer?.cornerRadius = min(bounds.width, bounds.height) / 2
+            // Render a real ellipse path inside a required square. This does
+            // not rely on CALayer corner-radius rasterisation, which can look
+            // slightly oval while AppKit is animating or rescaling a toolbar.
+            let diameter = min(bounds.width, bounds.height)
+            let rect = NSRect(x: (bounds.width - diameter) / 2 + 1,
+                              y: (bounds.height - diameter) / 2 + 1,
+                              width: diameter - 2, height: diameter - 2)
+            circleShape.frame = bounds
+            circleShape.path = CGPath(ellipseIn: rect, transform: nil)
         }
     }
 
@@ -9134,10 +9145,6 @@ final class PrayerDisplayModeButton: NSButton {
                     .foregroundColor: foreground,
                 ])
         }
-        layer?.borderWidth = displayStyle == .iconsText ? 0 : (isModeSelected ? 2 : 1)
-        layer?.borderColor = (isModeSelected
-            ? roleColor
-            : NSColor.separatorColor.withAlphaComponent(dark ? 0.58 : 0.42)).cgColor
         let background: NSColor
         if isModeSelected {
             background = roleColor.withAlphaComponent(dark ? 0.18 : 0.09)
@@ -9148,7 +9155,20 @@ final class PrayerDisplayModeButton: NSButton {
         } else {
             background = .clear
         }
-        layer?.backgroundColor = background.cgColor
+        let border = isModeSelected
+            ? roleColor
+            : NSColor.separatorColor.withAlphaComponent(dark ? 0.58 : 0.42)
+        if displayStyle == .icons {
+            layer?.borderWidth = 0
+            layer?.backgroundColor = NSColor.clear.cgColor
+            circleShape.fillColor = background.cgColor
+            circleShape.strokeColor = border.cgColor
+            circleShape.lineWidth = isModeSelected ? 2 : 1
+        } else {
+            layer?.borderWidth = displayStyle == .iconsText ? 0 : (isModeSelected ? 2 : 1)
+            layer?.borderColor = border.cgColor
+            layer?.backgroundColor = background.cgColor
+        }
     }
 
     private func circularLabelSymbol(foreground: NSColor, selected: Bool,
@@ -9196,17 +9216,15 @@ final class MainDockView: NSView {
     ]
 
     let vertical: Bool
-    private let position: String
     private let displayStyle: DockDisplayStyle
     private let outerStack = NSStackView()
     private let primaryCapsule = NSView()
-    private let drawerCapsule = NSView()
     private let utilityCapsule = NSView()
-    private let settingsCapsule = NSView()
     private let primaryStack = NSStackView()
+    private let drawerHost = NSView()
     private let drawerStack = NSStackView()
     private let utilityStack = NSStackView()
-    private let settingsStack = NSStackView()
+    private var drawerAxisConstraint: NSLayoutConstraint!
     private var navButtons: [PrayerDisplayModeButton] = []
     private var modeButtons: [PrayerDisplayModeButton] = []
     private var isDrawerOpen = false
@@ -9227,7 +9245,6 @@ final class MainDockView: NSView {
     }
 
     init(position: String, displayStyle: DockDisplayStyle) {
-        self.position = position
         self.vertical = position == "left" || position == "right"
         self.displayStyle = displayStyle
         super.init(frame: .zero)
@@ -9254,22 +9271,18 @@ final class MainDockView: NSView {
             outerStack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        for capsule in [primaryCapsule, drawerCapsule,
-                        utilityCapsule, settingsCapsule] {
+        for capsule in [primaryCapsule, utilityCapsule] {
             capsule.translatesAutoresizingMaskIntoConstraints = false
             capsule.wantsLayer = true
             capsule.layer?.cornerRadius = 32
             capsule.layer?.masksToBounds = true
         }
         outerStack.addArrangedSubview(primaryCapsule)
-        outerStack.addArrangedSubview(drawerCapsule)
         outerStack.addArrangedSubview(utilityCapsule)
-        outerStack.addArrangedSubview(settingsCapsule)
 
         configure(primaryStack, in: primaryCapsule)
-        configure(drawerStack, in: drawerCapsule)
         configure(utilityStack, in: utilityCapsule)
-        configure(settingsStack, in: settingsCapsule)
+        configureDrawerHost()
 
         for (index, definition) in Self.navDefinitions.enumerated() {
             let button = PrayerDisplayModeButton(
@@ -9299,10 +9312,10 @@ final class MainDockView: NSView {
             contextLabel: featureText("main.destinations"),
             displayStyle: displayStyle, role: .settings)
         constrainButton(settingsButton)
-        settingsStack.addArrangedSubview(settingsButton)
+        utilityStack.addArrangedSubview(settingsButton)
 
-        drawerCapsule.isHidden = true
-        drawerCapsule.alphaValue = 0
+        drawerHost.isHidden = true
+        drawerHost.alphaValue = 0
         updateCapsuleAppearance()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -9321,6 +9334,41 @@ final class MainDockView: NSView {
             stack.topAnchor.constraint(equalTo: capsule.topAnchor, constant: 8),
             stack.bottomAnchor.constraint(equalTo: capsule.bottomAnchor, constant: -8),
         ])
+    }
+
+    /// A clipped inline host lives inside the primary capsule. Its axis
+    /// dimension grows from zero, making the controls look as if they were
+    /// concealed behind the selected destination rather than mounted in a
+    /// second toolbar.
+    private func configureDrawerHost() {
+        drawerHost.translatesAutoresizingMaskIntoConstraints = false
+        drawerHost.wantsLayer = true
+        drawerHost.layer?.masksToBounds = true
+        drawerStack.orientation = vertical ? .vertical : .horizontal
+        drawerStack.alignment = vertical ? .centerX : .centerY
+        drawerStack.spacing = 7
+        drawerStack.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        drawerStack.translatesAutoresizingMaskIntoConstraints = false
+        drawerHost.addSubview(drawerStack)
+
+        if vertical {
+            drawerAxisConstraint = drawerHost.heightAnchor.constraint(equalToConstant: 0)
+            NSLayoutConstraint.activate([
+                drawerHost.widthAnchor.constraint(equalToConstant:
+                    Self.primaryCrossAxisSize(for: displayStyle) - 16),
+                drawerStack.topAnchor.constraint(equalTo: drawerHost.topAnchor),
+                drawerStack.centerXAnchor.constraint(equalTo: drawerHost.centerXAnchor),
+            ])
+        } else {
+            drawerAxisConstraint = drawerHost.widthAnchor.constraint(equalToConstant: 0)
+            NSLayoutConstraint.activate([
+                drawerHost.heightAnchor.constraint(equalToConstant: 48),
+                drawerStack.leadingAnchor.constraint(equalTo: drawerHost.leadingAnchor),
+                drawerStack.centerYAnchor.constraint(equalTo: drawerHost.centerYAnchor),
+            ])
+        }
+        drawerAxisConstraint.isActive = true
     }
 
     private func constrainButton(_ button: PrayerDisplayModeButton) {
@@ -9342,6 +9390,7 @@ final class MainDockView: NSView {
             button.removeFromSuperview()
         }
         modeButtons = []
+        positionDrawerBesideSelectedDestination()
         for (index, item) in items.enumerated() {
             let button = PrayerDisplayModeButton(
                 modeIndex: index, symbol: item.symbol, label: item.label,
@@ -9357,6 +9406,7 @@ final class MainDockView: NSView {
             drawerStack.addArrangedSubview(button)
         }
         if items.isEmpty { setDrawerOpen(false, animated: true) }
+        else if isDrawerOpen { updateOpenDrawerSize(animated: true) }
     }
 
     func setModeSelected(_ index: Int) {
@@ -9367,6 +9417,7 @@ final class MainDockView: NSView {
     func setNavSelected(_ index: Int?) {
         selectedNavIndex = index
         for button in navButtons { button.isModeSelected = button.modeIndex == index }
+        positionDrawerBesideSelectedDestination()
     }
 
     func setSettingsActive(_ active: Bool) {
@@ -9375,6 +9426,7 @@ final class MainDockView: NSView {
 
     @objc private func navPressed(_ sender: PrayerDisplayModeButton) {
         let wasCurrent = selectedNavIndex == sender.modeIndex
+        if !wasCurrent { setDrawerOpen(false, animated: false) }
         setNavSelected(sender.modeIndex)
         onSelectNav?(sender.modeIndex)
         setDrawerOpen(wasCurrent ? !isDrawerOpen : true, animated: true)
@@ -9400,26 +9452,16 @@ final class MainDockView: NSView {
 
     private func updateCapsuleAppearance() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let capsules: [(NSView, Bool, Bool)] = [
-            (primaryCapsule, false, false),
-            (drawerCapsule, true, false),
-            (utilityCapsule, false, false),
-            (settingsCapsule, false, true),
-        ]
-        for (capsule, isDrawer, isSettings) in capsules {
+        for capsule in [primaryCapsule, utilityCapsule] {
             capsule.layer?.backgroundColor = (dark
-                ? (isSettings
-                    ? NSColor.systemOrange.withAlphaComponent(0.075)
-                    : NSColor.white.withAlphaComponent(isDrawer ? 0.075 : 0.055))
-                : (isSettings
-                    ? NSColor.systemOrange.withAlphaComponent(0.055)
-                    : NSColor.white.withAlphaComponent(isDrawer ? 0.82 : 0.68))).cgColor
+                ? NSColor.white.withAlphaComponent(0.055)
+                : NSColor.white.withAlphaComponent(0.68)).cgColor
             capsule.layer?.borderWidth = 1
             capsule.layer?.borderColor = NSColor.separatorColor
                 .withAlphaComponent(dark ? 0.55 : 0.32).cgColor
             capsule.layer?.shadowColor = NSColor.black.cgColor
             capsule.layer?.shadowOpacity = dark ? 0.16 : 0.09
-            capsule.layer?.shadowRadius = isDrawer ? 14 : 10
+            capsule.layer?.shadowRadius = 10
             capsule.layer?.shadowOffset = NSSize(width: 0, height: -2)
         }
     }
@@ -9430,28 +9472,64 @@ final class MainDockView: NSView {
             Localizer.shared.isRTL ? 12 : -12, 0, 0)
     }
 
+    private func positionDrawerBesideSelectedDestination() {
+        guard let selectedNavIndex,
+              navButtons.indices.contains(selectedNavIndex),
+              let buttonPosition = primaryStack.arrangedSubviews.firstIndex(
+                of: navButtons[selectedNavIndex]) else { return }
+        if primaryStack.arrangedSubviews.contains(drawerHost) {
+            primaryStack.removeArrangedSubview(drawerHost)
+            drawerHost.removeFromSuperview()
+        }
+        primaryStack.insertArrangedSubview(drawerHost, at: buttonPosition + 1)
+    }
+
+    private func desiredDrawerSize() -> CGFloat {
+        guard !modeButtons.isEmpty else { return 0 }
+        drawerStack.layoutSubtreeIfNeeded()
+        let fitting = drawerStack.fittingSize
+        return (vertical ? fitting.height : fitting.width) + 7
+    }
+
+    private func updateOpenDrawerSize(animated: Bool) {
+        guard isDrawerOpen else { return }
+        let size = desiredDrawerSize()
+        if animated {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0.18
+                drawerAxisConstraint.animator().constant = size
+            }
+        } else {
+            drawerAxisConstraint.constant = size
+        }
+    }
+
     private func setDrawerOpen(_ open: Bool, animated: Bool) {
         guard open != isDrawerOpen else { return }
         isDrawerOpen = open
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if open {
-            drawerCapsule.isHidden = false
-            drawerCapsule.alphaValue = animated ? 0 : 1
-            drawerCapsule.layer?.transform = (animated && !reduceMotion)
+            positionDrawerBesideSelectedDestination()
+            drawerHost.isHidden = false
+            drawerHost.alphaValue = animated ? 0 : 1
+            drawerHost.layer?.transform = (animated && !reduceMotion)
                 ? drawerStartTransform() : CATransform3DIdentity
             window?.layoutIfNeeded()
         }
+        let targetSize = open ? desiredDrawerSize() : 0
         let changes = {
-            self.drawerCapsule.animator().alphaValue = open ? 1 : 0
+            self.drawerAxisConstraint.animator().constant = targetSize
+            self.drawerHost.animator().alphaValue = open ? 1 : 0
             if !reduceMotion {
-                self.drawerCapsule.layer?.transform = open
+                self.drawerHost.layer?.transform = open
                     ? CATransform3DIdentity : self.drawerStartTransform()
             }
         }
         guard animated else {
-            drawerCapsule.alphaValue = open ? 1 : 0
-            drawerCapsule.layer?.transform = CATransform3DIdentity
-            drawerCapsule.isHidden = !open
+            drawerAxisConstraint.constant = targetSize
+            drawerHost.alphaValue = open ? 1 : 0
+            drawerHost.layer?.transform = CATransform3DIdentity
+            drawerHost.isHidden = !open
             return
         }
         NSAnimationContext.runAnimationGroup { context in
@@ -9461,8 +9539,8 @@ final class MainDockView: NSView {
         } completionHandler: { [weak self] in
             guard let self else { return }
             if !open {
-                self.drawerCapsule.isHidden = true
-                self.drawerCapsule.layer?.transform = CATransform3DIdentity
+                self.drawerHost.isHidden = true
+                self.drawerHost.layer?.transform = CATransform3DIdentity
             }
         }
     }
