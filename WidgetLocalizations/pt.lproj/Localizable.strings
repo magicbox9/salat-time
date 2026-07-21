@@ -1,0 +1,9 @@
+"widget.refresh" = "Abra a app para atualizar";
+"widget.overview.name" = "Horários de oração — Visão geral";
+"widget.overview.description" = "Próxima oração, contagem decrescente e horários de hoje.";
+"widget.list.name" = "Horários de oração — Lista";
+"widget.list.description" = "As cinco orações num relance.";
+"widget.timeline.name" = "Horários de oração — Linha temporal";
+"widget.timeline.description" = "O seu dia como linha e as orações como marcos.";
+"widget.clock.name" = "Horários de oração — Relógio";
+"widget.clock.description" = "Mostrador de 24 horas com as orações marcadas.";

@@ -29,6 +29,7 @@ The app has **two UI surfaces** (v3):
 
 ```
 main.swift        All app source — has // MARK: banners per section
+widgets.swift     WidgetKit extension — Overview, List, Timeline, and Clock
 build.sh          Compile + fetch assets + codesign (~60s cold, ~5s warm)
 Info.plist        Bundle metadata (keep CFBundleVersion in sync with kAppVersion)
 adhkar.json       Morning/evening adhkar text + audio mapping (Hisn al-Muslim)
@@ -46,7 +47,7 @@ Update.command    Double-clickable wrapper for update.sh (gitignored)
 ## 3. Local dev / deploy loop
 
 We develop in `/Volumes/ExSSD/prayer times/` and deploy to the installed app at
-`~/Documents/Claude/Projects/main desktop/AwqatSalat/Salat Time.app`.
+`/Applications/Salat Time.app`.
 
 ```bash
 ./update.sh          # build + swap installed app + relaunch

@@ -1,0 +1,9 @@
+"widget.refresh" = "افتح التطبيق لتحديث المواقيت";
+"widget.overview.name" = "مواقيت الصلاة — نظرة عامة";
+"widget.overview.description" = "الصلاة القادمة مع عدّ تنازلي مباشر ومواقيت اليوم.";
+"widget.list.name" = "مواقيت الصلاة — قائمة";
+"widget.list.description" = "الصلوات الخمس بنظرة واحدة.";
+"widget.timeline.name" = "مواقيت الصلاة — الخط الزمني";
+"widget.timeline.description" = "يومك كخط والصلوات كمعالم.";
+"widget.clock.name" = "مواقيت الصلاة — الساعة";
+"widget.clock.description" = "قرص ٢٤ ساعة تظهر عليه الصلوات.";

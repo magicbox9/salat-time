@@ -174,7 +174,7 @@ struct StaleView: View {
             Text("Salat Time")
                 .font(.system(.headline, design: .rounded))
                 .foregroundStyle(inkPrimary)
-            Text("Open the app to refresh")
+            Text("widget.refresh")
                 .font(.caption2)
                 .foregroundStyle(inkTertiary)
         }
@@ -661,8 +661,8 @@ struct SalatOverviewWidget: Widget {
         StaticConfiguration(kind: "SalatOverview", provider: SalatProvider()) { entry in
             salatWidgetView(entry) { OverviewView(entry: entry) }
         }
-        .configurationDisplayName("Prayer Times — Overview")
-        .description("Next prayer with a live countdown and today's times.")
+        .configurationDisplayName("widget.overview.name")
+        .description("widget.overview.description")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -672,8 +672,8 @@ struct SalatListWidget: Widget {
         StaticConfiguration(kind: "SalatList", provider: SalatProvider()) { entry in
             salatWidgetView(entry) { ListView(entry: entry) }
         }
-        .configurationDisplayName("Prayer Times — List")
-        .description("All five prayers at a glance.")
+        .configurationDisplayName("widget.list.name")
+        .description("widget.list.description")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
@@ -683,8 +683,8 @@ struct SalatTimelineWidget: Widget {
         StaticConfiguration(kind: "SalatTimeline", provider: SalatProvider()) { entry in
             salatWidgetView(entry) { DayTimelineView(entry: entry) }
         }
-        .configurationDisplayName("Prayer Times — Timeline")
-        .description("Your day as a line, prayers as landmarks.")
+        .configurationDisplayName("widget.timeline.name")
+        .description("widget.timeline.description")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
@@ -694,8 +694,8 @@ struct SalatClockWidget: Widget {
         StaticConfiguration(kind: "SalatClock", provider: SalatProvider()) { entry in
             salatWidgetView(entry) { ClockDialView(entry: entry) }
         }
-        .configurationDisplayName("Prayer Times — Clock")
-        .description("A 24-hour dial with the prayers marked.")
+        .configurationDisplayName("widget.clock.name")
+        .description("widget.clock.description")
         .supportedFamilies([.systemSmall, .systemLarge])
     }
 }

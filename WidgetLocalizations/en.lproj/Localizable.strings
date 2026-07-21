@@ -1,0 +1,9 @@
+"widget.refresh" = "Open the app to refresh";
+"widget.overview.name" = "Prayer Times — Overview";
+"widget.overview.description" = "Next prayer with a live countdown and today’s times.";
+"widget.list.name" = "Prayer Times — List";
+"widget.list.description" = "All five prayers at a glance.";
+"widget.timeline.name" = "Prayer Times — Timeline";
+"widget.timeline.description" = "Your day as a line, prayers as landmarks.";
+"widget.clock.name" = "Prayer Times — Clock";
+"widget.clock.description" = "A 24-hour dial with the prayers marked.";

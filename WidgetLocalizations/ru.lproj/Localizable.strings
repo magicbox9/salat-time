@@ -1,0 +1,9 @@
+"widget.refresh" = "Откройте приложение для обновления";
+"widget.overview.name" = "Время намаза — Обзор";
+"widget.overview.description" = "Следующий намаз, обратный отсчёт и расписание на сегодня.";
+"widget.list.name" = "Время намаза — Список";
+"widget.list.description" = "Все пять молитв одним взглядом.";
+"widget.timeline.name" = "Время намаза — Шкала дня";
+"widget.timeline.description" = "День как линия, молитвы как ориентиры.";
+"widget.clock.name" = "Время намаза — Часы";
+"widget.clock.description" = "24-часовой циферблат с отметками молитв.";

@@ -1,0 +1,9 @@
+"widget.refresh" = "ताज़ा करने के लिए ऐप खोलें";
+"widget.overview.name" = "नमाज़ समय — अवलोकन";
+"widget.overview.description" = "अगली नमाज़, लाइव उलटी गिनती और आज के समय।";
+"widget.list.name" = "नमाज़ समय — सूची";
+"widget.list.description" = "पाँचों नमाज़ एक नज़र में।";
+"widget.timeline.name" = "नमाज़ समय — समयरेखा";
+"widget.timeline.description" = "दिन की रेखा पर नमाज़ के पड़ाव।";
+"widget.clock.name" = "नमाज़ समय — घड़ी";
+"widget.clock.description" = "नमाज़ के निशानों वाला 24 घंटे का डायल।";

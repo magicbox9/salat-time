@@ -1,0 +1,9 @@
+"widget.refresh" = "Ouvrez l’app pour actualiser";
+"widget.overview.name" = "Horaires de prière — Aperçu";
+"widget.overview.description" = "Prochaine prière, compte à rebours et horaires du jour.";
+"widget.list.name" = "Horaires de prière — Liste";
+"widget.list.description" = "Les cinq prières en un coup d’œil.";
+"widget.timeline.name" = "Horaires de prière — Chronologie";
+"widget.timeline.description" = "Votre journée et ses prières comme repères.";
+"widget.clock.name" = "Horaires de prière — Horloge";
+"widget.clock.description" = "Un cadran de 24 heures indiquant les prières.";

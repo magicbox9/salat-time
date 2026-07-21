@@ -1,0 +1,9 @@
+"widget.refresh" = "打开应用以刷新";
+"widget.overview.name" = "礼拜时间 — 概览";
+"widget.overview.description" = "下一次礼拜、实时倒计时和今日时间。";
+"widget.list.name" = "礼拜时间 — 列表";
+"widget.list.description" = "一览五次礼拜。";
+"widget.timeline.name" = "礼拜时间 — 时间线";
+"widget.timeline.description" = "以时间线呈现一天中的礼拜节点。";
+"widget.clock.name" = "礼拜时间 — 时钟";
+"widget.clock.description" = "标出礼拜时间的 24 小时表盘。";

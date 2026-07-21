@@ -2117,7 +2117,8 @@ cp Info.plist "$CONTENTS/Info.plist"
 # into the shared group container; the sandboxed widget only reads that file.
 echo "Building widgets extension..."
 WIDGET_APPEX="$CONTENTS/PlugIns/SalatWidgets.appex"
-mkdir -p "$WIDGET_APPEX/Contents/MacOS"
+mkdir -p "$WIDGET_APPEX/Contents/MacOS" "$WIDGET_APPEX/Contents/Resources"
+cp -R WidgetLocalizations/. "$WIDGET_APPEX/Contents/Resources/"
 swiftc widgets.swift \
     -o "$WIDGET_APPEX/Contents/MacOS/SalatWidgets" \
     -parse-as-library \
@@ -2183,12 +2184,16 @@ else
     [ -z "$SIGN_IDENTITY" ] && SIGN_IDENTITY="-"
 fi
 echo "  signing identity: $SIGN_IDENTITY"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+    echo "  warning: ad-hoc signing is for compile checks only;"
+    echo "           widgets require a trusted signing identity"
+fi
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
     --options runtime \
     --identifier com.salattime.app.widgets \
     --entitlements /tmp/salat-widget-entitlements.plist \
-    "$WIDGET_APPEX" \
-    || echo "  (widget sign failed)"
+    "$WIDGET_APPEX"
+codesign --verify --strict "$WIDGET_APPEX"
 
 # ---------- Code signing ---------------------------------------------------
 # Ad-hoc signature so Gatekeeper / LaunchServices are happy with the bundle.
@@ -2206,13 +2211,13 @@ cat > /tmp/salat-app-entitlements.plist <<'APP_ENTITLEMENTS'
 </plist>
 APP_ENTITLEMENTS
 
-echo "Signing app (ad-hoc)..."
+echo "Signing app..."
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
     --options runtime \
     --identifier com.salattime.app \
     --entitlements /tmp/salat-app-entitlements.plist \
-    "$APP_DIR" \
-    || echo "  (app sign failed — try: codesign --force --sign - \"$APP_DIR\")"
+    "$APP_DIR"
+codesign --verify --deep --strict "$APP_DIR"
 
 # Nudge Finder's icon cache
 touch "$APP_DIR"

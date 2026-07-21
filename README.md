@@ -122,18 +122,18 @@ Developer ID, and ship it on mawaqit.net as an official download.
 
 ## Known limitations
 
-- Ad-hoc signed only. To distribute to end users without the Gatekeeper
-  warning on first launch, the app needs to be signed with an Apple
-  Developer ID certificate and notarized. Mawaqit presumably already has
-  a Developer ID for the iOS / Android builds.
+- Local builds prefer the `Salat Time Local Signing` identity so the bundled
+  WidgetKit extension appears in the macOS widget gallery. Set
+  `SALAT_SIGN_IDENTITY=-` only for compile checks. Public distribution still
+  requires an Apple Developer ID certificate and notarization.
 - Some mosques return incomplete addresses from the API; the app
   regex-extracts the city when the `city` field comes back empty
   (works for Morocco, France, Algeria; may miss edge cases elsewhere).
 - The 14 adhans are downloaded at build time from Assabile's public CDN
   using a Referer header. If Assabile changes their CDN or hotlink
   policy, the download list in `build.sh` may need to be updated.
-- Widget extension was removed from the codebase to keep things simple.
-  Adding one back would be straightforward.
+- The bundled WidgetKit extension provides Overview, List, Timeline, and Clock
+  widgets. Its gallery metadata is localized in all ten app languages.
 
 ## Feedback / questions
 
