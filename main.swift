@@ -124,7 +124,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.32.0"
+let kAppVersion          = "3.32.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -8981,6 +8981,7 @@ enum DockButtonRole {
 /// so translated text is never squeezed into an oval.
 final class PrayerDisplayModeButton: NSButton {
     let modeIndex: Int
+    private let symbolName: String
     private let displayStyle: DockDisplayStyle
     private let buttonRole: DockButtonRole
     private var localizedLabel: String
@@ -9002,6 +9003,7 @@ final class PrayerDisplayModeButton: NSButton {
          displayStyle: DockDisplayStyle = .icons,
          role: DockButtonRole = .standard) {
         self.modeIndex = modeIndex
+        self.symbolName = symbol
         self.displayStyle = displayStyle
         self.buttonRole = role
         self.localizedLabel = label
@@ -9028,7 +9030,7 @@ final class PrayerDisplayModeButton: NSButton {
         self.image = templateSymbol(symbol, pointSize: 17, weight: .semibold)
         self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.cornerRadius = displayStyle == .icons ? 24 : 14
+        self.layer?.cornerRadius = displayStyle == .icons ? 24 : 10
         self.layer?.masksToBounds = true
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.radioButton)
@@ -9082,6 +9084,15 @@ final class PrayerDisplayModeButton: NSButton {
         updateModeAppearance()
     }
 
+    override func layout() {
+        super.layout()
+        if displayStyle == .icons {
+            // Derive the radius from the rendered square so Auto Layout can
+            // never produce an oval during window or localization changes.
+            layer?.cornerRadius = min(bounds.width, bounds.height) / 2
+        }
+    }
+
     func preferredWidth(vertical: Bool) -> CGFloat {
         switch displayStyle {
         case .icons:
@@ -9110,6 +9121,11 @@ final class PrayerDisplayModeButton: NSButton {
                 ? NSColor.systemOrange.withAlphaComponent(0.88)
                 : NSColor.secondaryLabelColor)
         contentTintColor = foreground
+        if displayStyle == .iconsText {
+            image = circularLabelSymbol(foreground: foreground,
+                                        selected: isModeSelected,
+                                        dark: dark)
+        }
         if displayStyle != .icons {
             attributedTitle = NSAttributedString(
                 string: localizedLabel,
@@ -9118,7 +9134,7 @@ final class PrayerDisplayModeButton: NSButton {
                     .foregroundColor: foreground,
                 ])
         }
-        layer?.borderWidth = isModeSelected ? 2 : 1
+        layer?.borderWidth = displayStyle == .iconsText ? 0 : (isModeSelected ? 2 : 1)
         layer?.borderColor = (isModeSelected
             ? roleColor
             : NSColor.separatorColor.withAlphaComponent(dark ? 0.58 : 0.42)).cgColor
@@ -9133,6 +9149,39 @@ final class PrayerDisplayModeButton: NSButton {
             background = .clear
         }
         layer?.backgroundColor = background.cgColor
+    }
+
+    private func circularLabelSymbol(foreground: NSColor, selected: Bool,
+                                     dark: Bool) -> NSImage? {
+        guard let base = templateSymbol(symbolName, pointSize: 15,
+                                        weight: .semibold) else { return nil }
+        let size = NSSize(width: 32, height: 32)
+        let result = NSImage(size: size, flipped: false) { rect in
+            let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
+            (selected
+                ? foreground.withAlphaComponent(dark ? 0.20 : 0.11)
+                : NSColor.labelColor.withAlphaComponent(dark ? 0.08 : 0.045)).setFill()
+            circle.fill()
+            (selected ? foreground : NSColor.separatorColor).withAlphaComponent(
+                selected ? 0.82 : (dark ? 0.65 : 0.48)).setStroke()
+            circle.lineWidth = selected ? 1.5 : 1
+            circle.stroke()
+
+            let symbol = base.copy() as! NSImage
+            symbol.isTemplate = false
+            symbol.lockFocus()
+            foreground.set()
+            NSRect(origin: .zero, size: symbol.size).fill(using: .sourceIn)
+            symbol.unlockFocus()
+            let target = NSRect(x: (rect.width - 17) / 2,
+                                y: (rect.height - 17) / 2,
+                                width: 17, height: 17)
+            symbol.draw(in: target, from: .zero, operation: .sourceOver,
+                        fraction: 1, respectFlipped: true, hints: nil)
+            return true
+        }
+        result.isTemplate = false
+        return result
     }
 }
 
@@ -9152,8 +9201,12 @@ final class MainDockView: NSView {
     private let outerStack = NSStackView()
     private let primaryCapsule = NSView()
     private let drawerCapsule = NSView()
+    private let utilityCapsule = NSView()
+    private let settingsCapsule = NSView()
     private let primaryStack = NSStackView()
     private let drawerStack = NSStackView()
+    private let utilityStack = NSStackView()
+    private let settingsStack = NSStackView()
     private var navButtons: [PrayerDisplayModeButton] = []
     private var modeButtons: [PrayerDisplayModeButton] = []
     private var isDrawerOpen = false
@@ -9185,9 +9238,13 @@ final class MainDockView: NSView {
         setAccessibilityRole(.toolbar)
         setAccessibilityLabel(featureText("main.destinations"))
 
-        outerStack.orientation = vertical ? .horizontal : .vertical
-        outerStack.alignment = vertical ? .centerY : .centerX
+        // Every group follows the edge axis. On a top/bottom dock they sit
+        // side by side; on a side dock they form adjacent vertical groups.
+        outerStack.orientation = vertical ? .vertical : .horizontal
+        outerStack.alignment = vertical ? .centerX : .centerY
         outerStack.spacing = 10
+        outerStack.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
         outerStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(outerStack)
         NSLayoutConstraint.activate([
@@ -9197,18 +9254,22 @@ final class MainDockView: NSView {
             outerStack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
 
-        for capsule in [primaryCapsule, drawerCapsule] {
+        for capsule in [primaryCapsule, drawerCapsule,
+                        utilityCapsule, settingsCapsule] {
             capsule.translatesAutoresizingMaskIntoConstraints = false
             capsule.wantsLayer = true
             capsule.layer?.cornerRadius = 32
             capsule.layer?.masksToBounds = true
         }
-        let primaryFirst = position == "left" || position == "top"
-        outerStack.addArrangedSubview(primaryFirst ? primaryCapsule : drawerCapsule)
-        outerStack.addArrangedSubview(primaryFirst ? drawerCapsule : primaryCapsule)
+        outerStack.addArrangedSubview(primaryCapsule)
+        outerStack.addArrangedSubview(drawerCapsule)
+        outerStack.addArrangedSubview(utilityCapsule)
+        outerStack.addArrangedSubview(settingsCapsule)
 
         configure(primaryStack, in: primaryCapsule)
         configure(drawerStack, in: drawerCapsule)
+        configure(utilityStack, in: utilityCapsule)
+        configure(settingsStack, in: settingsCapsule)
 
         for (index, definition) in Self.navDefinitions.enumerated() {
             let button = PrayerDisplayModeButton(
@@ -9222,8 +9283,6 @@ final class MainDockView: NSView {
             primaryStack.addArrangedSubview(button)
         }
 
-        primaryStack.addArrangedSubview(makeSeparator())
-
         themeButton = PrayerDisplayModeButton(
             modeIndex: 0, symbol: "circle.lefthalf.filled",
             label: adhkarModeText("dock.theme"), target: self,
@@ -9231,7 +9290,7 @@ final class MainDockView: NSView {
             contextLabel: featureText("main.destinations"),
             displayStyle: displayStyle, role: .theme)
         constrainButton(themeButton)
-        primaryStack.addArrangedSubview(themeButton)
+        utilityStack.addArrangedSubview(themeButton)
 
         settingsButton = PrayerDisplayModeButton(
             modeIndex: 0, symbol: "gearshape.fill",
@@ -9240,8 +9299,7 @@ final class MainDockView: NSView {
             contextLabel: featureText("main.destinations"),
             displayStyle: displayStyle, role: .settings)
         constrainButton(settingsButton)
-        primaryStack.addArrangedSubview(settingsButton)
-        primaryStack.setCustomSpacing(13, after: themeButton)
+        settingsStack.addArrangedSubview(settingsButton)
 
         drawerCapsule.isHidden = true
         drawerCapsule.alphaValue = 0
@@ -9253,7 +9311,8 @@ final class MainDockView: NSView {
         stack.orientation = vertical ? .vertical : .horizontal
         stack.alignment = vertical ? .centerX : .centerY
         stack.spacing = 7
-        stack.userInterfaceLayoutDirection = .leftToRight
+        stack.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
         stack.translatesAutoresizingMaskIntoConstraints = false
         capsule.addSubview(stack)
         NSLayoutConstraint.activate([
@@ -9265,22 +9324,15 @@ final class MainDockView: NSView {
     }
 
     private func constrainButton(_ button: PrayerDisplayModeButton) {
-        NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: button.preferredWidth(vertical: vertical)),
-            button.heightAnchor.constraint(equalToConstant: 48),
-        ])
-    }
-
-    private func makeSeparator() -> NSBox {
-        let separator = NSBox()
-        separator.boxType = .separator
-        separator.translatesAutoresizingMaskIntoConstraints = false
-        if vertical {
-            separator.widthAnchor.constraint(equalToConstant: 30).isActive = true
+        let height = button.heightAnchor.constraint(equalToConstant: 48)
+        let width: NSLayoutConstraint
+        if displayStyle == .icons {
+            width = button.widthAnchor.constraint(equalTo: button.heightAnchor)
         } else {
-            separator.heightAnchor.constraint(equalToConstant: 30).isActive = true
+            width = button.widthAnchor.constraint(
+                equalToConstant: button.preferredWidth(vertical: vertical))
         }
-        return separator
+        NSLayoutConstraint.activate([width, height])
     }
 
     /// Replace the contextual mode group with the active tab's modes.
@@ -9348,10 +9400,20 @@ final class MainDockView: NSView {
 
     private func updateCapsuleAppearance() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        for (capsule, isDrawer) in [(primaryCapsule, false), (drawerCapsule, true)] {
+        let capsules: [(NSView, Bool, Bool)] = [
+            (primaryCapsule, false, false),
+            (drawerCapsule, true, false),
+            (utilityCapsule, false, false),
+            (settingsCapsule, false, true),
+        ]
+        for (capsule, isDrawer, isSettings) in capsules {
             capsule.layer?.backgroundColor = (dark
-                ? NSColor.white.withAlphaComponent(isDrawer ? 0.075 : 0.055)
-                : NSColor.white.withAlphaComponent(isDrawer ? 0.82 : 0.68)).cgColor
+                ? (isSettings
+                    ? NSColor.systemOrange.withAlphaComponent(0.075)
+                    : NSColor.white.withAlphaComponent(isDrawer ? 0.075 : 0.055))
+                : (isSettings
+                    ? NSColor.systemOrange.withAlphaComponent(0.055)
+                    : NSColor.white.withAlphaComponent(isDrawer ? 0.82 : 0.68))).cgColor
             capsule.layer?.borderWidth = 1
             capsule.layer?.borderColor = NSColor.separatorColor
                 .withAlphaComponent(dark ? 0.55 : 0.32).cgColor
@@ -9363,12 +9425,9 @@ final class MainDockView: NSView {
     }
 
     private func drawerStartTransform() -> CATransform3D {
-        switch position {
-        case "right": return CATransform3DMakeTranslation(12, 0, 0)
-        case "top": return CATransform3DMakeTranslation(0, 12, 0)
-        case "bottom": return CATransform3DMakeTranslation(0, -12, 0)
-        default: return CATransform3DMakeTranslation(-12, 0, 0)
-        }
+        if vertical { return CATransform3DMakeTranslation(0, 10, 0) }
+        return CATransform3DMakeTranslation(
+            Localizer.shared.isRTL ? 12 : -12, 0, 0)
     }
 
     private func setDrawerOpen(_ open: Bool, animated: Bool) {
