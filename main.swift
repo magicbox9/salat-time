@@ -119,8 +119,9 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
+let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.29.0"
+let kAppVersion          = "3.30.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -6044,12 +6045,15 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
         contentView = root
 
-        // One floating capsule dock replaces the old toolbar segments and
-        // gear: destinations, the active tab's view modes, and Settings —
-        // all as round icons, on the edge the user chose in Settings.
+        // A stable primary dock carries destinations and utilities. The
+        // selected destination's controls live in a separate animated drawer
+        // so navigation hierarchy never shifts as modes change.
         let position = UserDefaults.standard.string(forKey: kDockPosition) ?? "left"
         let vertical = position == "left" || position == "right"
-        dock = MainDockView(vertical: vertical)
+        let displayStyle = DockDisplayStyle(
+            rawValue: UserDefaults.standard.string(forKey: kDockDisplayStyle) ?? "icons"
+        ) ?? .icons
+        dock = MainDockView(position: position, displayStyle: displayStyle)
         dock.onSelectNav = { [weak self] index in
             guard let self else { return }
             self.selectedDestination = index
@@ -6059,6 +6063,9 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         }
         dock.onSelectMode = { [weak self] index in
             self?.activeViewController()?.railDidSelectMode(index)
+        }
+        dock.onTheme = { [weak self] button in
+            self?.appDelegate?.themeBtnTapped(button)
         }
         dock.onSettings = { [weak self] in
             guard let self else { return }
@@ -6079,7 +6086,9 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         let host = root.contentContainer
         var constraints: [NSLayoutConstraint] = []
         let dockGap: CGFloat = 10
-        let dockLane: CGFloat = 64 + dockGap * 2
+        let dockLane: CGFloat = (vertical
+            ? MainDockView.primaryCrossAxisSize(for: displayStyle)
+            : 64) + dockGap * 2
         switch position {
         case "right":
             constraints += [
@@ -8940,13 +8949,26 @@ final class PrayerRingClockView: NSControl {
     }
 }
 
-/// Icon-led presentation picker for the four prayer-time views.  Each mode is
-/// still a native NSButton (rather than a drawn hit region), so keyboard focus,
-/// VoiceOver actions, and the 48-point targets remain first-class AppKit
-/// behavior while the surrounding capsule follows the visual language of the
-/// reference control.
+enum DockDisplayStyle: String {
+    case icons
+    case iconsText
+    case text
+}
+
+enum DockButtonRole {
+    case standard
+    case theme
+    case settings
+}
+
+/// Native, keyboard-accessible dock action. Icon-only presentation is always
+/// a true circle; labelled presentations use a restrained rounded rectangle
+/// so translated text is never squeezed into an oval.
 final class PrayerDisplayModeButton: NSButton {
     let modeIndex: Int
+    private let displayStyle: DockDisplayStyle
+    private let buttonRole: DockButtonRole
+    private var localizedLabel: String
     private var trackingAreaRef: NSTrackingArea?
     private var isHovering = false
     var onVisualArrow: ((Int) -> Void)?
@@ -8961,24 +8983,37 @@ final class PrayerDisplayModeButton: NSButton {
 
     init(modeIndex: Int, symbol: String, label: String,
          target: AnyObject?, action: Selector,
-         contextLabel: String = "") {
+         contextLabel: String = "",
+         displayStyle: DockDisplayStyle = .icons,
+         role: DockButtonRole = .standard) {
         self.modeIndex = modeIndex
+        self.displayStyle = displayStyle
+        self.buttonRole = role
+        self.localizedLabel = label
         super.init(frame: NSRect(x: 0, y: 0, width: 48, height: 48))
         self.target = target
         self.action = action
         self.tag = modeIndex
-        self.title = ""
+        self.title = displayStyle == .icons ? "" : label
         self.toolTip = label
         self.isBordered = false
         self.bezelStyle = .regularSquare
-        self.imagePosition = .imageOnly
+        switch displayStyle {
+        case .icons:
+            self.imagePosition = .imageOnly
+        case .iconsText:
+            self.imagePosition = .imageLeading
+        case .text:
+            self.imagePosition = .noImage
+        }
         self.imageScaling = .scaleProportionallyDown
+        self.alignment = .center
         self.focusRingType = .default
         self.setButtonType(.toggle)
         self.image = templateSymbol(symbol, pointSize: 17, weight: .semibold)
         self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.cornerRadius = 24
+        self.layer?.cornerRadius = displayStyle == .icons ? 24 : 14
         self.layer?.masksToBounds = true
         self.setAccessibilityElement(true)
         self.setAccessibilityRole(.radioButton)
@@ -8991,6 +9026,8 @@ final class PrayerDisplayModeButton: NSButton {
     required init?(coder: NSCoder) { fatalError() }
 
     func updateLocalization(_ label: String) {
+        localizedLabel = label
+        title = displayStyle == .icons ? "" : label
         toolTip = label
         setAccessibilityLabel(label)
         setAccessibilityHelp("\(t("main.tab.prayer_times")) · \(label)")
@@ -9030,16 +9067,51 @@ final class PrayerDisplayModeButton: NSButton {
         updateModeAppearance()
     }
 
+    func preferredWidth(vertical: Bool) -> CGFloat {
+        switch displayStyle {
+        case .icons:
+            return 48
+        case .iconsText:
+            if vertical { return 168 }
+            let labelWidth = (localizedLabel as NSString).size(
+                withAttributes: [.font: NSFont.systemFont(ofSize: 12.5,
+                                                           weight: .semibold)]).width
+            return min(184, max(96, ceil(labelWidth) + 56))
+        case .text:
+            if vertical { return 144 }
+            let labelWidth = (localizedLabel as NSString).size(
+                withAttributes: [.font: NSFont.systemFont(ofSize: 12.5,
+                                                           weight: .semibold)]).width
+            return min(170, max(76, ceil(labelWidth) + 28))
+        }
+    }
+
     private func updateModeAppearance() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        contentTintColor = isModeSelected ? .appAccent : .secondaryLabelColor
+        let roleColor: NSColor = buttonRole == .settings ? .systemOrange : .appAccent
+        let foreground = isModeSelected
+            ? roleColor
+            : (buttonRole == .settings
+                ? NSColor.systemOrange.withAlphaComponent(0.88)
+                : NSColor.secondaryLabelColor)
+        contentTintColor = foreground
+        if displayStyle != .icons {
+            attributedTitle = NSAttributedString(
+                string: localizedLabel,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
+                    .foregroundColor: foreground,
+                ])
+        }
         layer?.borderWidth = isModeSelected ? 2 : 1
         layer?.borderColor = (isModeSelected
-            ? NSColor.appAccent
+            ? roleColor
             : NSColor.separatorColor.withAlphaComponent(dark ? 0.58 : 0.42)).cgColor
         let background: NSColor
         if isModeSelected {
-            background = NSColor.appAccent.withAlphaComponent(dark ? 0.18 : 0.09)
+            background = roleColor.withAlphaComponent(dark ? 0.18 : 0.09)
+        } else if buttonRole == .settings {
+            background = NSColor.systemOrange.withAlphaComponent(dark ? 0.09 : 0.055)
         } else if isHovering {
             background = NSColor.labelColor.withAlphaComponent(dark ? 0.10 : 0.055)
         } else {
@@ -9049,12 +9121,9 @@ final class PrayerDisplayModeButton: NSButton {
     }
 }
 
-/// The app's single floating chrome: a capsule of round icon buttons that
-/// carries the destinations (Adhan · Adhkar · Qur'an), the active tab's
-/// view modes, and Settings. Vertical when docked to a side, horizontal at
-/// the top or bottom; the edge is a Settings preference. Every tab shares
-/// this one control, so navigation and mode switching look and behave the
-/// same everywhere.
+/// Stable primary navigation plus a destination-specific controls drawer.
+/// The two capsules are separate both visually and structurally: changing a
+/// prayer/Qur'an/adhkar view never reorders the three primary destinations.
 final class MainDockView: NSView {
     private static let navDefinitions: [(symbol: String, labelKey: () -> String)] = [
         ("sun.and.horizon", { t("settings.section.adhan") }),
@@ -9063,71 +9132,126 @@ final class MainDockView: NSView {
     ]
 
     let vertical: Bool
-    private let stack = NSStackView()
+    private let position: String
+    private let displayStyle: DockDisplayStyle
+    private let outerStack = NSStackView()
+    private let primaryCapsule = NSView()
+    private let drawerCapsule = NSView()
+    private let primaryStack = NSStackView()
+    private let drawerStack = NSStackView()
     private var navButtons: [PrayerDisplayModeButton] = []
     private var modeButtons: [PrayerDisplayModeButton] = []
-    private var modeSeparator: NSBox!
+    private var isDrawerOpen = false
+    private var selectedNavIndex: Int?
+    private var themeButton: PrayerDisplayModeButton!
     private var settingsButton: PrayerDisplayModeButton!
     var onSelectNav: ((Int) -> Void)?
     var onSelectMode: ((Int) -> Void)?
+    var onTheme: ((NSButton) -> Void)?
     var onSettings: (() -> Void)?
 
-    init(vertical: Bool) {
-        self.vertical = vertical
+    static func primaryCrossAxisSize(for style: DockDisplayStyle) -> CGFloat {
+        switch style {
+        case .icons: return 64
+        case .iconsText: return 184
+        case .text: return 160
+        }
+    }
+
+    init(position: String, displayStyle: DockDisplayStyle) {
+        self.position = position
+        self.vertical = position == "left" || position == "right"
+        self.displayStyle = displayStyle
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
-        layer?.cornerRadius = 32
         layer?.masksToBounds = false
         setAccessibilityElement(true)
         setAccessibilityRole(.toolbar)
         setAccessibilityLabel(featureText("main.destinations"))
 
-        stack.orientation = vertical ? .vertical : .horizontal
-        stack.alignment = vertical ? .centerX : .centerY
-        stack.spacing = 7
-        stack.userInterfaceLayoutDirection = .leftToRight
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        outerStack.orientation = vertical ? .horizontal : .vertical
+        outerStack.alignment = vertical ? .centerY : .centerX
+        outerStack.spacing = 10
+        outerStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(outerStack)
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            outerStack.leadingAnchor.constraint(equalTo: leadingAnchor),
+            outerStack.trailingAnchor.constraint(equalTo: trailingAnchor),
+            outerStack.topAnchor.constraint(equalTo: topAnchor),
+            outerStack.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+
+        for capsule in [primaryCapsule, drawerCapsule] {
+            capsule.translatesAutoresizingMaskIntoConstraints = false
+            capsule.wantsLayer = true
+            capsule.layer?.cornerRadius = 32
+            capsule.layer?.masksToBounds = true
+        }
+        let primaryFirst = position == "left" || position == "top"
+        outerStack.addArrangedSubview(primaryFirst ? primaryCapsule : drawerCapsule)
+        outerStack.addArrangedSubview(primaryFirst ? drawerCapsule : primaryCapsule)
+
+        configure(primaryStack, in: primaryCapsule)
+        configure(drawerStack, in: drawerCapsule)
 
         for (index, definition) in Self.navDefinitions.enumerated() {
             let button = PrayerDisplayModeButton(
                 modeIndex: index, symbol: definition.symbol,
                 label: definition.labelKey(), target: self,
                 action: #selector(navPressed(_:)),
-                contextLabel: featureText("main.destinations"))
+                contextLabel: featureText("main.destinations"),
+                displayStyle: displayStyle)
             constrainButton(button)
             navButtons.append(button)
-            stack.addArrangedSubview(button)
+            primaryStack.addArrangedSubview(button)
         }
 
-        modeSeparator = makeSeparator()
-        stack.addArrangedSubview(modeSeparator)
+        primaryStack.addArrangedSubview(makeSeparator())
 
-        let settingsSeparator = makeSeparator()
+        themeButton = PrayerDisplayModeButton(
+            modeIndex: 0, symbol: "circle.lefthalf.filled",
+            label: adhkarModeText("dock.theme"), target: self,
+            action: #selector(themePressed(_:)),
+            contextLabel: featureText("main.destinations"),
+            displayStyle: displayStyle, role: .theme)
+        constrainButton(themeButton)
+        primaryStack.addArrangedSubview(themeButton)
 
         settingsButton = PrayerDisplayModeButton(
             modeIndex: 0, symbol: "gearshape.fill",
             label: t("settings.title"), target: self,
             action: #selector(settingsPressed(_:)),
-            contextLabel: featureText("main.destinations"))
+            contextLabel: featureText("main.destinations"),
+            displayStyle: displayStyle, role: .settings)
         constrainButton(settingsButton)
-        stack.addArrangedSubview(settingsSeparator)
-        stack.addArrangedSubview(settingsButton)
+        primaryStack.addArrangedSubview(settingsButton)
+        primaryStack.setCustomSpacing(13, after: themeButton)
 
+        drawerCapsule.isHidden = true
+        drawerCapsule.alphaValue = 0
         updateCapsuleAppearance()
     }
     required init?(coder: NSCoder) { fatalError() }
 
+    private func configure(_ stack: NSStackView, in capsule: NSView) {
+        stack.orientation = vertical ? .vertical : .horizontal
+        stack.alignment = vertical ? .centerX : .centerY
+        stack.spacing = 7
+        stack.userInterfaceLayoutDirection = .leftToRight
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        capsule.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 8),
+            stack.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -8),
+            stack.topAnchor.constraint(equalTo: capsule.topAnchor, constant: 8),
+            stack.bottomAnchor.constraint(equalTo: capsule.bottomAnchor, constant: -8),
+        ])
+    }
+
     private func constrainButton(_ button: PrayerDisplayModeButton) {
         NSLayoutConstraint.activate([
-            button.widthAnchor.constraint(equalToConstant: 48),
+            button.widthAnchor.constraint(equalToConstant: button.preferredWidth(vertical: vertical)),
             button.heightAnchor.constraint(equalToConstant: 48),
         ])
     }
@@ -9146,21 +9270,26 @@ final class MainDockView: NSView {
 
     /// Replace the contextual mode group with the active tab's modes.
     func setModes(_ items: [(symbol: String, label: String)], selected: Int) {
-        for button in modeButtons { stack.removeArrangedSubview(button); button.removeFromSuperview() }
+        for button in modeButtons {
+            drawerStack.removeArrangedSubview(button)
+            button.removeFromSuperview()
+        }
         modeButtons = []
-        modeSeparator.isHidden = items.isEmpty
-        guard let separatorIndex = stack.arrangedSubviews.firstIndex(of: modeSeparator)
-        else { return }
         for (index, item) in items.enumerated() {
             let button = PrayerDisplayModeButton(
                 modeIndex: index, symbol: item.symbol, label: item.label,
                 target: self, action: #selector(modePressed(_:)),
-                contextLabel: featureText("main.destinations"))
+                contextLabel: selectedNavIndex.flatMap {
+                    Self.navDefinitions.indices.contains($0)
+                        ? Self.navDefinitions[$0].labelKey() : nil
+                } ?? featureText("main.destinations"),
+                displayStyle: displayStyle)
             constrainButton(button)
             button.isModeSelected = index == selected
             modeButtons.append(button)
-            stack.insertArrangedSubview(button, at: separatorIndex + 1 + index)
+            drawerStack.addArrangedSubview(button)
         }
+        if items.isEmpty { setDrawerOpen(false, animated: true) }
     }
 
     func setModeSelected(_ index: Int) {
@@ -9169,6 +9298,7 @@ final class MainDockView: NSView {
 
     /// nil deselects every destination (Settings active).
     func setNavSelected(_ index: Int?) {
+        selectedNavIndex = index
         for button in navButtons { button.isModeSelected = button.modeIndex == index }
     }
 
@@ -9177,13 +9307,19 @@ final class MainDockView: NSView {
     }
 
     @objc private func navPressed(_ sender: PrayerDisplayModeButton) {
+        let wasCurrent = selectedNavIndex == sender.modeIndex
         setNavSelected(sender.modeIndex)
         onSelectNav?(sender.modeIndex)
+        setDrawerOpen(wasCurrent ? !isDrawerOpen : true, animated: true)
     }
 
     @objc private func modePressed(_ sender: PrayerDisplayModeButton) {
         setModeSelected(sender.modeIndex)
         onSelectMode?(sender.modeIndex)
+    }
+
+    @objc private func themePressed(_ sender: PrayerDisplayModeButton) {
+        onTheme?(sender)
     }
 
     @objc private func settingsPressed(_ sender: PrayerDisplayModeButton) {
@@ -9197,16 +9333,64 @@ final class MainDockView: NSView {
 
     private func updateCapsuleAppearance() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        layer?.backgroundColor = (dark
-            ? NSColor.white.withAlphaComponent(0.055)
-            : NSColor.white.withAlphaComponent(0.68)).cgColor
-        layer?.borderWidth = 1
-        layer?.borderColor = NSColor.separatorColor
-            .withAlphaComponent(dark ? 0.55 : 0.32).cgColor
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = dark ? 0.16 : 0.09
-        layer?.shadowRadius = 10
-        layer?.shadowOffset = NSSize(width: 0, height: -2)
+        for (capsule, isDrawer) in [(primaryCapsule, false), (drawerCapsule, true)] {
+            capsule.layer?.backgroundColor = (dark
+                ? NSColor.white.withAlphaComponent(isDrawer ? 0.075 : 0.055)
+                : NSColor.white.withAlphaComponent(isDrawer ? 0.82 : 0.68)).cgColor
+            capsule.layer?.borderWidth = 1
+            capsule.layer?.borderColor = NSColor.separatorColor
+                .withAlphaComponent(dark ? 0.55 : 0.32).cgColor
+            capsule.layer?.shadowColor = NSColor.black.cgColor
+            capsule.layer?.shadowOpacity = dark ? 0.16 : 0.09
+            capsule.layer?.shadowRadius = isDrawer ? 14 : 10
+            capsule.layer?.shadowOffset = NSSize(width: 0, height: -2)
+        }
+    }
+
+    private func drawerStartTransform() -> CATransform3D {
+        switch position {
+        case "right": return CATransform3DMakeTranslation(12, 0, 0)
+        case "top": return CATransform3DMakeTranslation(0, 12, 0)
+        case "bottom": return CATransform3DMakeTranslation(0, -12, 0)
+        default: return CATransform3DMakeTranslation(-12, 0, 0)
+        }
+    }
+
+    private func setDrawerOpen(_ open: Bool, animated: Bool) {
+        guard open != isDrawerOpen else { return }
+        isDrawerOpen = open
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if open {
+            drawerCapsule.isHidden = false
+            drawerCapsule.alphaValue = animated ? 0 : 1
+            drawerCapsule.layer?.transform = (animated && !reduceMotion)
+                ? drawerStartTransform() : CATransform3DIdentity
+            window?.layoutIfNeeded()
+        }
+        let changes = {
+            self.drawerCapsule.animator().alphaValue = open ? 1 : 0
+            if !reduceMotion {
+                self.drawerCapsule.layer?.transform = open
+                    ? CATransform3DIdentity : self.drawerStartTransform()
+            }
+        }
+        guard animated else {
+            drawerCapsule.alphaValue = open ? 1 : 0
+            drawerCapsule.layer?.transform = CATransform3DIdentity
+            drawerCapsule.isHidden = !open
+            return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = reduceMotion ? 0.10 : 0.23
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            changes()
+        } completionHandler: { [weak self] in
+            guard let self else { return }
+            if !open {
+                self.drawerCapsule.isHidden = true
+                self.drawerCapsule.layer?.transform = CATransform3DIdentity
+            }
+        }
     }
 }
 
@@ -15111,6 +15295,21 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         addRow(generalCard, label: adhkarModeText("dock.position"),
                control: dockPositionPopup)
 
+        let dockStylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        dockStylePopup.addItems(withTitles: [
+            adhkarModeText("dock.style.icons"),
+            adhkarModeText("dock.style.iconsText"),
+            adhkarModeText("dock.style.text"),
+        ])
+        let dockStyleOrder = ["icons", "iconsText", "text"]
+        dockStylePopup.selectItem(at: dockStyleOrder.firstIndex(of:
+            UserDefaults.standard.string(forKey: kDockDisplayStyle) ?? "icons") ?? 0)
+        dockStylePopup.target = self
+        dockStylePopup.action = #selector(dockStyleChanged(_:))
+        dockStylePopup.setAccessibilityLabel(adhkarModeText("dock.style"))
+        addRow(generalCard, label: adhkarModeText("dock.style"),
+               control: dockStylePopup)
+
         let nawafilPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         nawafilPopup.addItems(withTitles: [
             featureText("adhan.mode.off"),
@@ -15397,6 +15596,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         appDelegate?.applyThemeChange()
         appDelegate?.mainWindow?.showSettingsWindow(section: .general)
     }
+    @objc private func dockStyleChanged(_ sender: NSPopUpButton) {
+        let order = ["icons", "iconsText", "text"]
+        guard order.indices.contains(sender.indexOfSelectedItem) else { return }
+        UserDefaults.standard.set(order[sender.indexOfSelectedItem],
+                                  forKey: kDockDisplayStyle)
+        appDelegate?.applyThemeChange()
+        appDelegate?.mainWindow?.showSettingsWindow(section: .general)
+    }
     @objc private func nawafilSettingChanged(_ sender: NSPopUpButton) {
         let mode = max(0, min(2, sender.indexOfSelectedItem))
         UserDefaults.standard.set(mode, forKey: kPrayerNawafilMode)
@@ -15531,6 +15738,9 @@ private let adhkarModeEnglish: [String: String] = [
     "studio.done": "Done", "studio.empty": "Import or choose a recording to begin",
     "dock.position": "Controls position", "dock.left": "Left", "dock.right": "Right",
     "dock.top": "Top", "dock.bottom": "Bottom",
+    "dock.style": "Control labels", "dock.style.icons": "Icons only",
+    "dock.style.iconsText": "Icons and text", "dock.style.text": "Text only",
+    "dock.theme": "Theme",
     "nawafil.setting": "Nawafil guidance",
 ]
 
@@ -15550,6 +15760,9 @@ private let adhkarModeArabic: [String: String] = [
     "studio.done": "تم", "studio.empty": "اختر تسجيلًا أو استورد ملفًا للبدء",
     "dock.position": "موضع أزرار التحكم", "dock.left": "يسار", "dock.right": "يمين",
     "dock.top": "أعلى", "dock.bottom": "أسفل",
+    "dock.style": "تسميات عناصر التحكم", "dock.style.icons": "أيقونات فقط",
+    "dock.style.iconsText": "أيقونات ونص", "dock.style.text": "نص فقط",
+    "dock.theme": "المظهر",
     "nawafil.setting": "إرشاد النوافل",
 ]
 
@@ -15566,11 +15779,47 @@ private func adhkarModeText(_ key: String) -> String {
         "fr": ["mode.reading": "Lecture", "mode.editing": "Édition",
                "reading.empty": "Choisissez une collection puis lancez la lecture",
                "studio.open": "Studio audio", "studio.import": "Importer un audio…",
-               "studio.add": "Ajouter comme dhikr", "studio.done": "Terminé"],
+               "studio.add": "Ajouter comme dhikr", "studio.done": "Terminé",
+               "dock.position": "Position des commandes", "dock.left": "Gauche",
+               "dock.right": "Droite", "dock.top": "Haut", "dock.bottom": "Bas",
+               "dock.style": "Libellés des commandes", "dock.style.icons": "Icônes seules",
+               "dock.style.iconsText": "Icônes et texte", "dock.style.text": "Texte seul",
+               "dock.theme": "Thème"],
         "es": ["mode.reading": "Lectura", "mode.editing": "Edición",
                "reading.empty": "Elige una colección y pulsa reproducir",
                "studio.open": "Estudio de audio", "studio.import": "Importar audio…",
-               "studio.add": "Añadir como dhikr", "studio.done": "Hecho"],
+               "studio.add": "Añadir como dhikr", "studio.done": "Hecho",
+               "dock.position": "Posición de controles", "dock.left": "Izquierda",
+               "dock.right": "Derecha", "dock.top": "Arriba", "dock.bottom": "Abajo",
+               "dock.style": "Etiquetas de controles", "dock.style.icons": "Solo iconos",
+               "dock.style.iconsText": "Iconos y texto", "dock.style.text": "Solo texto",
+               "dock.theme": "Tema"],
+        "zh": ["dock.position": "控件位置", "dock.left": "左侧", "dock.right": "右侧",
+               "dock.top": "顶部", "dock.bottom": "底部", "dock.style": "控件标签",
+               "dock.style.icons": "仅图标", "dock.style.iconsText": "图标和文字",
+               "dock.style.text": "仅文字", "dock.theme": "主题"],
+        "hi": ["dock.position": "नियंत्रण स्थान", "dock.left": "बाएँ", "dock.right": "दाएँ",
+               "dock.top": "ऊपर", "dock.bottom": "नीचे", "dock.style": "नियंत्रण लेबल",
+               "dock.style.icons": "केवल आइकन", "dock.style.iconsText": "आइकन और पाठ",
+               "dock.style.text": "केवल पाठ", "dock.theme": "थीम"],
+        "bn": ["dock.position": "নিয়ন্ত্রণের অবস্থান", "dock.left": "বামে", "dock.right": "ডানে",
+               "dock.top": "উপরে", "dock.bottom": "নিচে", "dock.style": "নিয়ন্ত্রণের লেবেল",
+               "dock.style.icons": "শুধু আইকন", "dock.style.iconsText": "আইকন ও লেখা",
+               "dock.style.text": "শুধু লেখা", "dock.theme": "থিম"],
+        "ru": ["dock.position": "Положение элементов", "dock.left": "Слева",
+               "dock.right": "Справа", "dock.top": "Сверху", "dock.bottom": "Снизу",
+               "dock.style": "Подписи элементов", "dock.style.icons": "Только значки",
+               "dock.style.iconsText": "Значки и текст", "dock.style.text": "Только текст",
+               "dock.theme": "Тема"],
+        "pt": ["dock.position": "Posição dos controlos", "dock.left": "Esquerda",
+               "dock.right": "Direita", "dock.top": "Topo", "dock.bottom": "Fundo",
+               "dock.style": "Rótulos dos controlos", "dock.style.icons": "Só ícones",
+               "dock.style.iconsText": "Ícones e texto", "dock.style.text": "Só texto",
+               "dock.theme": "Tema"],
+        "ur": ["dock.position": "کنٹرول کی جگہ", "dock.left": "بائیں", "dock.right": "دائیں",
+               "dock.top": "اوپر", "dock.bottom": "نیچے", "dock.style": "کنٹرول لیبل",
+               "dock.style.icons": "صرف آئیکن", "dock.style.iconsText": "آئیکن اور متن",
+               "dock.style.text": "صرف متن", "dock.theme": "تھیم"],
     ]
     let raw = (code == "ar" ? adhkarModeArabic[key] : localized[code]?[key])
         ?? adhkarModeEnglish[key] ?? key
