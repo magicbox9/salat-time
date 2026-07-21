@@ -2172,10 +2172,16 @@ cat > /tmp/salat-widget-entitlements.plist <<'WIDGET_ENTITLEMENTS'
 WIDGET_ENTITLEMENTS
 
 # Prefer the local signing certificate (widget gallery ignores ad-hoc
-# extensions); fall back to ad-hoc when it is absent on this machine.
-SIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
-    | grep "Salat Time Local Signing" | head -1 | awk '{print $2}')
-[ -z "$SIGN_IDENTITY" ] && SIGN_IDENTITY="-"
+# extensions); fall back to ad-hoc when it is absent on this machine. CI and
+# compile-only verification can explicitly request ad-hoc signing with
+# SALAT_SIGN_IDENTITY=-, without mutating the developer keychain.
+if [ "${SALAT_SIGN_IDENTITY+x}" = "x" ]; then
+    SIGN_IDENTITY="$SALAT_SIGN_IDENTITY"
+else
+    SIGN_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null \
+        | grep "Salat Time Local Signing" | head -1 | awk '{print $2}')
+    [ -z "$SIGN_IDENTITY" ] && SIGN_IDENTITY="-"
+fi
 echo "  signing identity: $SIGN_IDENTITY"
 codesign --force --sign "$SIGN_IDENTITY" --timestamp=none \
     --options runtime \
