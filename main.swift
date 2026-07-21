@@ -73,6 +73,9 @@ let kAdhkarVolume        = "adhkarVolume"
 /// CoreAudio device UID for adhkar audio output ("" = system default).
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
+/// "exact" reads only the displayed Arabic with the best installed system
+/// voice; "recordings" uses the bundled, hand-trimmed Hisn recordings.
+let kAdhkarRecitationStyle = "adhkarRecitationStyle"
 /// Extra wait after an Adhan finishes before a queued Adhkar collection
 /// begins. This is applied only when both were scheduled for the same time.
 let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
@@ -121,7 +124,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.30.2"
+let kAppVersion          = "3.31.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1384,6 +1387,18 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
             activeUtterance = nil
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
+        // Exact Text is the safe default: it can never introduce a title,
+        // count instruction, or morning/evening substitution that is absent
+        // from the displayed dhikr. The highest-quality installed Arabic
+        // system voice is selected below. Users who prefer the original Hisn
+        // recordings can opt into the hand-trimmed recording path.
+        let recitationStyle = UserDefaults.standard.string(
+            forKey: kAdhkarRecitationStyle) ?? "exact"
+        if recitationStyle == "exact", !text.isEmpty {
+            playSpokenText(text)
+            return
+        }
+
         // If the entry has no audio at all, just advance after a beat.
         guard !ref.isEmpty else {
             scheduleAutoAdvance()
@@ -15454,12 +15469,26 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
             sectionHeader(t("settings.section.adhkar"))
-            let (adhkarCard, adhkarH) = beginCard(rows: 7)
+            let (adhkarCard, adhkarH) = beginCard(rows: 8)
         adhkarAutoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                       target: self,
                                       action: #selector(adhkarAutoPlayChanged(_:)))
         adhkarAutoPlayCheck.state = UserDefaults.standard.bool(forKey: kAdhkarEnabled) ? .on : .off
         addRow(adhkarCard, label: "", control: adhkarAutoPlayCheck)
+
+        let recitationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        recitationPopup.addItems(withTitles: [
+            adhkarModeText("recitation.exact"),
+            adhkarModeText("recitation.recordings"),
+        ])
+        recitationPopup.selectItem(at:
+            (UserDefaults.standard.string(forKey: kAdhkarRecitationStyle) ?? "exact")
+                == "recordings" ? 1 : 0)
+        recitationPopup.target = self
+        recitationPopup.action = #selector(adhkarRecitationChanged(_:))
+        recitationPopup.setAccessibilityLabel(adhkarModeText("recitation.style"))
+        addRow(adhkarCard, label: adhkarModeText("recitation.style"),
+               control: recitationPopup)
 
         let volume = UserDefaults.standard.object(forKey: kAdhkarVolume) == nil
             ? 1.0 : Double(UserDefaults.standard.float(forKey: kAdhkarVolume))
@@ -15680,6 +15709,11 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     @objc private func adhkarVolumeChanged(_ sender: NSSlider) {
         UserDefaults.standard.set(Float(sender.floatValue), forKey: kAdhkarVolume)
     }
+    @objc private func adhkarRecitationChanged(_ sender: NSPopUpButton) {
+        UserDefaults.standard.set(sender.indexOfSelectedItem == 1
+            ? "recordings" : "exact", forKey: kAdhkarRecitationStyle)
+        adhkarTestSession.stop()
+    }
     @objc private func adhkarOutputChanged(_ sender: NSPopUpButton) {
         let index = sender.indexOfSelectedItem - 1
         UserDefaults.standard.set(index >= 0 && adhkarOutputDevices.indices.contains(index)
@@ -15741,6 +15775,8 @@ private let adhkarModeEnglish: [String: String] = [
     "dock.style": "Control labels", "dock.style.icons": "Icons only",
     "dock.style.iconsText": "Icons and text", "dock.style.text": "Text only",
     "dock.theme": "Theme",
+    "recitation.style": "Recitation", "recitation.exact": "Exact text · natural voice",
+    "recitation.recordings": "Original recordings · trimmed",
     "nawafil.setting": "Nawafil guidance",
 ]
 
@@ -15763,6 +15799,8 @@ private let adhkarModeArabic: [String: String] = [
     "dock.style": "تسميات عناصر التحكم", "dock.style.icons": "أيقونات فقط",
     "dock.style.iconsText": "أيقونات ونص", "dock.style.text": "نص فقط",
     "dock.theme": "المظهر",
+    "recitation.style": "التلاوة", "recitation.exact": "النص المطابق · صوت طبيعي",
+    "recitation.recordings": "التسجيلات الأصلية · منقّحة",
     "nawafil.setting": "إرشاد النوافل",
 ]
 
@@ -15784,7 +15822,9 @@ private func adhkarModeText(_ key: String) -> String {
                "dock.right": "Droite", "dock.top": "Haut", "dock.bottom": "Bas",
                "dock.style": "Libellés des commandes", "dock.style.icons": "Icônes seules",
                "dock.style.iconsText": "Icônes et texte", "dock.style.text": "Texte seul",
-               "dock.theme": "Thème"],
+               "dock.theme": "Thème", "recitation.style": "Récitation",
+               "recitation.exact": "Texte exact · voix naturelle",
+               "recitation.recordings": "Enregistrements originaux · coupés"],
         "es": ["mode.reading": "Lectura", "mode.editing": "Edición",
                "reading.empty": "Elige una colección y pulsa reproducir",
                "studio.open": "Estudio de audio", "studio.import": "Importar audio…",
@@ -15793,33 +15833,43 @@ private func adhkarModeText(_ key: String) -> String {
                "dock.right": "Derecha", "dock.top": "Arriba", "dock.bottom": "Abajo",
                "dock.style": "Etiquetas de controles", "dock.style.icons": "Solo iconos",
                "dock.style.iconsText": "Iconos y texto", "dock.style.text": "Solo texto",
-               "dock.theme": "Tema"],
+               "dock.theme": "Tema", "recitation.style": "Recitación",
+               "recitation.exact": "Texto exacto · voz natural",
+               "recitation.recordings": "Grabaciones originales · recortadas"],
         "zh": ["dock.position": "控件位置", "dock.left": "左侧", "dock.right": "右侧",
                "dock.top": "顶部", "dock.bottom": "底部", "dock.style": "控件标签",
                "dock.style.icons": "仅图标", "dock.style.iconsText": "图标和文字",
-               "dock.style.text": "仅文字", "dock.theme": "主题"],
+               "dock.style.text": "仅文字", "dock.theme": "主题", "recitation.style": "诵读",
+               "recitation.exact": "准确文本 · 自然语音", "recitation.recordings": "原始录音 · 已剪辑"],
         "hi": ["dock.position": "नियंत्रण स्थान", "dock.left": "बाएँ", "dock.right": "दाएँ",
                "dock.top": "ऊपर", "dock.bottom": "नीचे", "dock.style": "नियंत्रण लेबल",
                "dock.style.icons": "केवल आइकन", "dock.style.iconsText": "आइकन और पाठ",
-               "dock.style.text": "केवल पाठ", "dock.theme": "थीम"],
+               "dock.style.text": "केवल पाठ", "dock.theme": "थीम", "recitation.style": "पाठ",
+               "recitation.exact": "सटीक पाठ · स्वाभाविक आवाज़", "recitation.recordings": "मूल रिकॉर्डिंग · संपादित"],
         "bn": ["dock.position": "নিয়ন্ত্রণের অবস্থান", "dock.left": "বামে", "dock.right": "ডানে",
                "dock.top": "উপরে", "dock.bottom": "নিচে", "dock.style": "নিয়ন্ত্রণের লেবেল",
                "dock.style.icons": "শুধু আইকন", "dock.style.iconsText": "আইকন ও লেখা",
-               "dock.style.text": "শুধু লেখা", "dock.theme": "থিম"],
+               "dock.style.text": "শুধু লেখা", "dock.theme": "থিম", "recitation.style": "তিলাওয়াত",
+               "recitation.exact": "হুবহু পাঠ · স্বাভাবিক কণ্ঠ", "recitation.recordings": "মূল রেকর্ডিং · ছাঁটা"],
         "ru": ["dock.position": "Положение элементов", "dock.left": "Слева",
                "dock.right": "Справа", "dock.top": "Сверху", "dock.bottom": "Снизу",
                "dock.style": "Подписи элементов", "dock.style.icons": "Только значки",
                "dock.style.iconsText": "Значки и текст", "dock.style.text": "Только текст",
-               "dock.theme": "Тема"],
+               "dock.theme": "Тема", "recitation.style": "Чтение",
+               "recitation.exact": "Точный текст · естественный голос",
+               "recitation.recordings": "Оригинальные записи · обрезанные"],
         "pt": ["dock.position": "Posição dos controlos", "dock.left": "Esquerda",
                "dock.right": "Direita", "dock.top": "Topo", "dock.bottom": "Fundo",
                "dock.style": "Rótulos dos controlos", "dock.style.icons": "Só ícones",
                "dock.style.iconsText": "Ícones e texto", "dock.style.text": "Só texto",
-               "dock.theme": "Tema"],
+               "dock.theme": "Tema", "recitation.style": "Recitação",
+               "recitation.exact": "Texto exato · voz natural",
+               "recitation.recordings": "Gravações originais · recortadas"],
         "ur": ["dock.position": "کنٹرول کی جگہ", "dock.left": "بائیں", "dock.right": "دائیں",
                "dock.top": "اوپر", "dock.bottom": "نیچے", "dock.style": "کنٹرول لیبل",
                "dock.style.icons": "صرف آئیکن", "dock.style.iconsText": "آئیکن اور متن",
-               "dock.style.text": "صرف متن", "dock.theme": "تھیم"],
+               "dock.style.text": "صرف متن", "dock.theme": "تھیم", "recitation.style": "تلاوت",
+               "recitation.exact": "بالکل متن · قدرتی آواز", "recitation.recordings": "اصل ریکارڈنگ · تراشی ہوئی"],
     ]
     let raw = (code == "ar" ? adhkarModeArabic[key] : localized[code]?[key])
         ?? adhkarModeEnglish[key] ?? key
