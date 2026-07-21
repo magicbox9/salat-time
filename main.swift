@@ -121,7 +121,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.30.1"
+let kAppVersion          = "3.30.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -16371,6 +16371,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     private var readingTimer: Timer?
     private var readingListTable: NSTableView!
     private var readingItems: [AdhkarEntry] = []
+    private var readingPreviewIndex = 0
     private var syncingReadingSelection = false
     private var spaceKeyMonitor: Any?
     private var isReadingMode: Bool {
@@ -16564,8 +16565,14 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
             session.start(collection: c)
         }
     }
-    @objc private func playerPrev(_ sender: Any?) { session.previous() }
-    @objc private func playerNext(_ sender: Any?) { session.next() }
+    @objc private func playerPrev(_ sender: Any?) {
+        if session.currentItem != nil { session.previous() }
+        else if isReadingMode { previewReadingItem(at: readingPreviewIndex - 1) }
+    }
+    @objc private func playerNext(_ sender: Any?) {
+        if session.currentItem != nil { session.next() }
+        else if isReadingMode { previewReadingItem(at: readingPreviewIndex + 1) }
+    }
     @objc private func playerVolumeChanged(_ sender: NSSlider) {
         UserDefaults.standard.set(Float(sender.floatValue), forKey: kAdhkarVolume)
         session.setMuted(sender.floatValue == 0)
@@ -16642,12 +16649,12 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
 
         readingVirtueLabel = NSTextField(wrappingLabelWithString: "")
         readingVirtueLabel.font = Localizer.shared.font(size: 13)
-        readingVirtueLabel.textColor = .secondaryLabelColor
+        readingVirtueLabel.textColor = .labelColor.withAlphaComponent(0.78)
         readingVirtueLabel.alignment = .center
         readingVirtueLabel.maximumNumberOfLines = 3
         readingSourceLabel = NSTextField(labelWithString: "")
-        readingSourceLabel.font = Localizer.shared.font(size: 11)
-        readingSourceLabel.textColor = .tertiaryLabelColor
+        readingSourceLabel.font = Localizer.shared.font(size: 11.5, weight: .medium)
+        readingSourceLabel.textColor = .labelColor.withAlphaComponent(0.62)
         readingSourceLabel.alignment = .center
         readingSourceLabel.lineBreakMode = .byTruncatingTail
         for label in [readingVirtueLabel!, readingSourceLabel!] {
@@ -16798,11 +16805,15 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     @objc private func readingCollectionChanged(_ sender: NSPopUpButton) {
         guard let collection = readingSelectedCollection() else { return }
         selectedCollectionID = collection.id
+        readingPreviewIndex = 0
         reloadReadingList()
+        syncReadingSurface()
     }
 
     private func reloadReadingList() {
         readingItems = readingSelectedCollection()?.items ?? []
+        readingPreviewIndex = min(max(0, readingPreviewIndex),
+                                  max(0, readingItems.count - 1))
         readingListTable?.reloadData()
         syncReadingListSelection()
     }
@@ -16813,7 +16824,14 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
               position.1 == readingItems.count,
               readingItems.indices.contains(position.0 - 1) else {
             syncingReadingSelection = true
-            readingListTable.deselectAll(nil)
+            if readingItems.indices.contains(readingPreviewIndex) {
+                readingListTable.selectRowIndexes(
+                    IndexSet(integer: readingPreviewIndex),
+                    byExtendingSelection: false)
+                readingListTable.scrollRowToVisible(readingPreviewIndex)
+            } else {
+                readingListTable.deselectAll(nil)
+            }
             syncingReadingSelection = false
             return
         }
@@ -16871,7 +16889,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         if session.currentItem != nil, session.count == collection.items.count {
             session.jump(to: row)
         } else {
-            session.start(collection: collection, at: row)
+            previewReadingItem(at: row)
         }
     }
 
@@ -16894,6 +16912,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         guard readingCard != nil else { return }
         if let item = session.currentItem, let position = session.position {
             updateReadingForItem(item, idx: position.0 - 1, total: position.1)
+        } else if readingItems.indices.contains(readingPreviewIndex) {
+            previewReadingItem(at: readingPreviewIndex)
         } else {
             readingCard.isHidden = true
             readingEmptyLabel.isHidden = false
@@ -16905,7 +16925,17 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         }
     }
 
-    private func updateReadingForItem(_ item: AdhkarEntry, idx: Int, total: Int) {
+    private func previewReadingItem(at index: Int) {
+        guard !readingItems.isEmpty else { return }
+        readingPreviewIndex = min(max(0, index), readingItems.count - 1)
+        updateReadingForItem(readingItems[readingPreviewIndex],
+                             idx: readingPreviewIndex,
+                             total: readingItems.count,
+                             repeatState: (0, max(1, readingItems[readingPreviewIndex].count)))
+    }
+
+    private func updateReadingForItem(_ item: AdhkarEntry, idx: Int, total: Int,
+                                      repeatState: (Int, Int)? = nil) {
         guard readingCard != nil, isReadingMode else { return }
         readingCard.isHidden = false
         readingEmptyLabel.isHidden = true
@@ -16925,7 +16955,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         readingProgress.doubleValue = total > 0 ? Double(idx + 1) / Double(total) : 0
         tasbihRemaining = max(1, item.count)
         updateTasbihButton()
-        updateReadingRepeat(session.repeatState.0, session.repeatState.1)
+        let repeats = repeatState ?? session.repeatState
+        updateReadingRepeat(repeats.0, repeats.1)
         refreshReadingControls()
         syncReadingListSelection()
     }
@@ -16952,7 +16983,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         if tasbihRemaining <= 0 {
             // Count completed — move to the next dhikr.
             if session.currentItem != nil { session.next() }
-            else { tasbihRemaining = 0 }
+            else if readingPreviewIndex + 1 < readingItems.count {
+                previewReadingItem(at: readingPreviewIndex + 1)
+            } else { tasbihRemaining = 0 }
         }
         updateTasbihButton()
     }
@@ -16973,7 +17006,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
             let index = readingCollectionPopup.indexOfSelectedItem
             guard collections.indices.contains(index) else { return }
             selectedCollectionID = collections[index].id
-            session.start(collection: collections[index])
+            session.start(collection: collections[index], at: readingPreviewIndex)
         }
     }
 
