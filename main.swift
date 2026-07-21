@@ -121,7 +121,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.30.0"
+let kAppVersion          = "3.30.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -20143,14 +20143,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             of: #""writtenAt":[0-9.]+"#, with: "", options: .regularExpression)
         guard comparable != lastWidgetSnapshotJSON else { return }
         lastWidgetSnapshotJSON = comparable
-        let directory = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Group Containers/group.com.salattime.app",
-                                    isDirectory: true)
-        try? FileManager.default.createDirectory(at: directory,
-                                                 withIntermediateDirectories: true)
-        try? data.write(to: directory.appendingPathComponent("widget-snapshot.json"),
-                        options: [.atomic])
-        WidgetCenter.shared.reloadAllTimelines()
+        // A group-container mount or signing mismatch must never stall the
+        // AppKit main thread during launch. Persist on a utility queue and
+        // return to the main actor only for WidgetKit's timeline invalidation.
+        DispatchQueue.global(qos: .utility).async {
+            let directory = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Group Containers/group.com.salattime.app",
+                                        isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: directory,
+                                                        withIntermediateDirectories: true)
+                try data.write(to: directory.appendingPathComponent("widget-snapshot.json"),
+                               options: [.atomic])
+                DispatchQueue.main.async {
+                    WidgetCenter.shared.reloadAllTimelines()
+                }
+            } catch {
+                NSLog("Salat Time widget snapshot write failed: %@", error.localizedDescription)
+            }
+        }
     }
 
     func updateUI() {
