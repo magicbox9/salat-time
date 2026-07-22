@@ -76,6 +76,9 @@ let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
 /// "exact" reads only the displayed Arabic with the best installed system
 /// voice; "recordings" uses the bundled, hand-trimmed Hisn recordings.
 let kAdhkarRecitationStyle = "adhkarRecitationStyle"
+/// One-time repair for builds that made synthesized speech the implicit
+/// default and consequently hid the bundled Hisn al-Muslim recordings.
+let kAdhkarRecordedVoiceRestored = "adhkarRecordedVoiceRestored_v334"
 /// Extra wait after an Adhan finishes before a queued Adhkar collection
 /// begins. This is applied only when both were scheduled for the same time.
 let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
@@ -124,7 +127,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.33.0"
+let kAppVersion          = "3.34.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1473,13 +1476,12 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
             activeUtterance = nil
             speechSynthesizer.stopSpeaking(at: .immediate)
         }
-        // Exact Text is the safe default: it can never introduce a title,
-        // count instruction, or morning/evening substitution that is absent
-        // from the displayed dhikr. The highest-quality installed Arabic
-        // system voice is selected below. Users who prefer the original Hisn
-        // recordings can opt into the hand-trimmed recording path.
+        // Prefer the bundled human Hisn recordings. "Exact text" remains an
+        // explicit alternative for users who prefer the installed macOS
+        // Arabic voice and is also our integrity fallback for the handful of
+        // evening files whose spoken wording differs from the displayed text.
         let recitationStyle = UserDefaults.standard.string(
-            forKey: kAdhkarRecitationStyle) ?? "exact"
+            forKey: kAdhkarRecitationStyle) ?? "recordings"
         if recitationStyle == "exact", !text.isEmpty {
             playSpokenText(text)
             return
@@ -4044,13 +4046,21 @@ final class HoverablePickerRow: FlippedView {
 // ============================================================================
 // MARK: Mosque picker view
 // ============================================================================
+enum MosquePickerPresentation {
+    case compact
+    case settings
+}
+
 final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManagerDelegate {
     weak var appDelegate: AppDelegate?
     var onDone: (() -> Void)?
     private let showsNavigationHeader: Bool
+    private let presentation: MosquePickerPresentation
 
     private let segmented = NSSegmentedControl()
     private let titleLbl  = NSTextField(labelWithString: t("picker.title"))
+    private let currentMosqueNameLabel = NSTextField(labelWithString: "")
+    private let currentMosqueDetailLabel = NSTextField(labelWithString: "")
     private var backBtn: HoverIconButton!
     private let inputContainer = FlippedView()
     private let statusLabel = NSTextField(labelWithString: "")
@@ -4151,8 +4161,10 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     /// to reset vs. reuse it across back/forward navigation.
     private var searchCountryCode: String? = nil
 
-    init(width: CGFloat, height: CGFloat, showsNavigationHeader: Bool = true) {
+    init(width: CGFloat, height: CGFloat, showsNavigationHeader: Bool = true,
+         presentation: MosquePickerPresentation = .compact) {
         self.showsNavigationHeader = showsNavigationHeader
+        self.presentation = presentation
         super.init(frame: NSRect(x: 0, y: 0, width: width, height: height))
         build()
         refreshCurrentMode()
@@ -4161,6 +4173,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
 
     private func build() {
         let W = bounds.width, H = bounds.height
+        let isSettings = presentation == .settings
+        let contentWidth: CGFloat = isSettings ? min(860, W - 48) : W - 24
+        let contentX: CGFloat = isSettings ? (W - contentWidth) / 2 : 12
 
         // -------------------- Header: back + title -------------------------
         if showsNavigationHeader {
@@ -4192,8 +4207,53 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // 4 segments across W-24 with monotone SF-Symbol glyphs only (no
         // text labels — sub-labels were removed to reclaim vertical space).
         // Tooltips explain each tab.
+        if isSettings {
+            let currentCard = AdaptiveCardView(frame: NSRect(
+                x: contentX, y: 24, width: contentWidth, height: 92))
+            currentCard.addsDepth = true
+            currentCard.autoresizingMask = [.minXMargin, .maxXMargin]
+            addSubview(currentCard)
+
+            let iconWell = AdaptiveBackgroundView(
+                frame: NSRect(x: 18, y: 18, width: 56, height: 56),
+                light: NSColor.appAccent.withAlphaComponent(0.10),
+                dark: NSColor.appAccent.withAlphaComponent(0.16),
+                radius: 16)
+            currentCard.addSubview(iconWell)
+            let icon = NSImageView(frame: NSRect(x: 14, y: 14, width: 28, height: 28))
+            icon.image = templateSymbol("building.columns.fill", pointSize: 22,
+                                        weight: .semibold)
+            icon.contentTintColor = .appAccent
+            iconWell.addSubview(icon)
+
+            let textX: CGFloat = 92
+            let textWidth = contentWidth - textX - 22
+            let heading = NSTextField(labelWithString: t("settings.mosque.currently"))
+            // AdaptiveCardView uses AppKit's bottom-up coordinates.
+            heading.frame = NSRect(x: textX, y: 61, width: textWidth, height: 16)
+            heading.font = Localizer.shared.font(size: 11, weight: .semibold)
+            heading.textColor = .secondaryLabelColor
+            currentCard.addSubview(heading)
+
+            currentMosqueNameLabel.frame = NSRect(x: textX, y: 34,
+                                                   width: textWidth, height: 25)
+            currentMosqueNameLabel.font = Localizer.shared.font(size: 18,
+                                                                 weight: .semibold)
+            currentMosqueNameLabel.textColor = .labelColor
+            currentMosqueNameLabel.lineBreakMode = .byTruncatingTail
+            currentCard.addSubview(currentMosqueNameLabel)
+
+            currentMosqueDetailLabel.frame = NSRect(x: textX, y: 15,
+                                                     width: textWidth, height: 16)
+            currentMosqueDetailLabel.font = Localizer.shared.font(size: 11)
+            currentMosqueDetailLabel.textColor = .secondaryLabelColor
+            currentMosqueDetailLabel.lineBreakMode = .byTruncatingMiddle
+            currentCard.addSubview(currentMosqueDetailLabel)
+            if Localizer.shared.isRTL { applyRTL(currentCard) }
+        }
+
         let segCount = 4
-        let segTotal = W - 24
+        let segTotal = contentWidth
         let segW = segTotal / CGFloat(segCount)
         segmented.segmentCount = segCount
         let segSymbols  = ["star.fill", "magnifyingglass", "location.fill", "link"]
@@ -4204,27 +4264,33 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         for (i, s) in segSymbols.enumerated() {
             if let img = templateSymbol(s, pointSize: 13, weight: .medium) {
                 segmented.setImage(img, forSegment: i)
-            } else {
+            }
+            if isSettings {
+                segmented.setLabel(segTooltips[i], forSegment: i)
+            } else if segmented.image(forSegment: i) == nil {
                 // Fallback to a short text label
                 segmented.setLabel(["Fav", "Find", "Near", "URL"][i], forSegment: i)
             }
             segmented.setToolTip(segTooltips[i], forSegment: i)
             segmented.setWidth(segW, forSegment: i)
         }
-        segmented.segmentStyle = .texturedRounded
+        segmented.segmentStyle = isSettings ? .rounded : .texturedRounded
         segmented.selectedSegment = 0
         segmented.target = self
         segmented.action = #selector(segmentChanged)
-        segmented.frame = NSRect(x: 12, y: showsNavigationHeader ? 50 : 10,
-                                 width: segTotal, height: 30)
+        let segmentedY: CGFloat = isSettings ? 136 : (showsNavigationHeader ? 50 : 10)
+        segmented.frame = NSRect(x: contentX, y: segmentedY,
+                                 width: segTotal, height: isSettings ? 42 : 30)
+        segmented.autoresizingMask = isSettings ? [.minXMargin, .maxXMargin] : [.width]
         segmented.setAccessibilityLabel(t("settings.section.mosque"))
         addSubview(segmented)
 
         // Status / help line. Dynamically shows the active tab's hint text,
         // the search-in-progress message, or a result count.
-        statusLabel.frame = NSRect(x: 12, y: showsNavigationHeader ? 80 : 46,
-                                   width: W - 24, height: 18)
-        statusLabel.font = Localizer.shared.font(size: 10)
+        statusLabel.frame = NSRect(x: contentX,
+                                   y: isSettings ? 186 : (showsNavigationHeader ? 80 : 46),
+                                   width: contentWidth, height: isSettings ? 22 : 18)
+        statusLabel.font = Localizer.shared.font(size: isSettings ? 12 : 10)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.drawsBackground = false
         statusLabel.alignment = .center
@@ -4233,9 +4299,11 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         addSubview(statusLabel)
 
         // -------------------- Input area ----------------------------------
-        inputContainer.frame = NSRect(x: 12, y: showsNavigationHeader ? 100 : 68,
-                                      width: W - 24, height: 44)
-        inputContainer.autoresizingMask = [.width]
+        inputContainer.frame = NSRect(x: contentX,
+                                      y: isSettings ? 214 : (showsNavigationHeader ? 100 : 68),
+                                      width: contentWidth, height: isSettings ? 52 : 44)
+        inputContainer.autoresizingMask = isSettings
+            ? [.minXMargin, .maxXMargin] : [.width]
         addSubview(inputContainer)
 
         let iw = inputContainer.bounds.width
@@ -4245,7 +4313,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // monotone-icon rule.
         let btnW: CGFloat = 44
 
-        searchField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 4, height: 28)
+        let fieldHeight: CGFloat = isSettings ? 36 : 28
+        searchField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 8,
+                                   height: fieldHeight)
         searchField.placeholderString = t("picker.placeholder.search")
         searchField.font = Localizer.shared.font(size: 12)
         searchField.delegate = self
@@ -4257,7 +4327,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // belt-and-suspenders switch for older AppKit paths.
         searchField.isContinuous = true
 
-        goSearchBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 44)
+        goSearchBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW,
+                                   height: isSettings ? 52 : 44)
         goSearchBtn.bezelStyle = .rounded
         goSearchBtn.title = ""
         goSearchBtn.target = self
@@ -4271,14 +4342,16 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             goSearchBtn.imagePosition = .imageOnly
         }
 
-        urlField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 4, height: 28)
+        urlField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 8,
+                                height: fieldHeight)
         urlField.placeholderString = "mawaqit.net/fr/m/…"
         urlField.font = Localizer.shared.font(size: 12)
         urlField.target = self
         urlField.action = #selector(runAddURL)
         urlField.autoresizingMask = [.width]
 
-        addUrlBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 44)
+        addUrlBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW,
+                                 height: isSettings ? 52 : 44)
         addUrlBtn.bezelStyle = .rounded
         addUrlBtn.title = ""
         addUrlBtn.target = self
@@ -4297,7 +4370,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // a city name and runs the same search the text field does — so the
         // UX stays uniform regardless of whether the city is typed or
         // detected automatically.
-        cityField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 4, height: 28)
+        cityField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 8,
+                                 height: fieldHeight)
         cityField.placeholderString = t("picker.placeholder.city")
         cityField.font = Localizer.shared.font(size: 12)
         cityField.delegate = self
@@ -4306,7 +4380,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         cityField.autoresizingMask = [.width]
         cityField.stringValue = userCity()
 
-        nearMeBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW, height: 44)
+        nearMeBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW,
+                                 height: isSettings ? 52 : 44)
         nearMeBtn.bezelStyle = .rounded
         nearMeBtn.title = ""
         nearMeBtn.target = self
@@ -4321,9 +4396,14 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         }
 
         // -------------------- Results scroll view -------------------------
-        let resultsY: CGFloat = showsNavigationHeader ? 152 : 120
-        scrollView.frame = NSRect(x: 12, y: resultsY, width: W - 24,
-                                  height: H - resultsY - 12)
+        let resultsY: CGFloat = isSettings ? 278 : (showsNavigationHeader ? 152 : 120)
+        let resultsInset: CGFloat = isSettings ? 12 : 0
+        scrollView.frame = NSRect(x: isSettings ? resultsInset : contentX,
+                                  y: isSettings ? resultsInset : resultsY,
+                                  width: contentWidth - resultsInset * 2,
+                                  height: isSettings
+                                    ? H - resultsY - 24
+                                    : H - resultsY - 12)
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
@@ -4350,7 +4430,18 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             resultsStack.trailingAnchor.constraint(equalTo: doc.trailingAnchor),
             resultsStack.bottomAnchor.constraint(equalTo: doc.bottomAnchor),
         ])
-        addSubview(scrollView)
+        if isSettings {
+            let resultsCard = AdaptiveCardView(frame: NSRect(
+                x: contentX, y: resultsY, width: contentWidth,
+                height: H - resultsY - 12))
+            resultsCard.addsDepth = true
+            resultsCard.autoresizingMask = [.minXMargin, .maxXMargin, .height]
+            resultsCard.addSubview(scrollView)
+            scrollView.autoresizingMask = [.width, .height]
+            addSubview(resultsCard)
+        } else {
+            addSubview(scrollView)
+        }
 
         // RTL: recursive mirror + native control direction.
         if Localizer.shared.isRTL {
@@ -4359,6 +4450,16 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     }
 
     func refreshCurrentMode() {
+        if presentation == .settings {
+            let info = appDelegate?.info
+            let name = info?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            currentMosqueNameLabel.stringValue = name.isEmpty
+                ? t("settings.mosque.none") : name
+            let location = info?.localisation.trimmingCharacters(
+                in: .whitespacesAndNewlines) ?? ""
+            currentMosqueDetailLabel.stringValue = location.isEmpty
+                ? desktopMawaqitURL(currentMosqueURL()) : location
+        }
         updateInputContainer()
         switch mode {
         case 0: showFavorites()
@@ -6245,10 +6346,6 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     /// Push the active tab's view modes onto the dock.
     func refreshDockModes() {
         guard dock != nil else { return }
-        if isShowingSettings {
-            dock.setModes([], selected: 0)
-            return
-        }
         let vc = activeViewController()
         dock.setModes(vc?.railModeItems ?? [], selected: vc?.railSelectedMode ?? 0)
     }
@@ -6316,6 +6413,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         isShowingSettings = true
         syncDockSelection()
         showSettings(section: section)
+        dock.revealSettingsModes()
     }
 
     func reloadPrayerDashboard() {
@@ -9331,6 +9429,7 @@ final class MainDockView: NSView {
     private var modeButtons: [PrayerDisplayModeButton] = []
     private var isDrawerOpen = false
     private var selectedNavIndex: Int?
+    private var isSettingsActive = false
     private var themeButton: PrayerDisplayModeButton!
     private var settingsButton: PrayerDisplayModeButton!
     var onSelectNav: ((Int) -> Void)?
@@ -9502,7 +9601,7 @@ final class MainDockView: NSView {
             let button = PrayerDisplayModeButton(
                 modeIndex: index, symbol: item.symbol, label: item.label,
                 target: self, action: #selector(modePressed(_:)),
-                contextLabel: selectedNavIndex.flatMap {
+                contextLabel: isSettingsActive ? t("settings.title") : selectedNavIndex.flatMap {
                     Self.navDefinitions.indices.contains($0)
                         ? Self.navDefinitions[$0].labelKey() : nil
                 } ?? featureText("main.destinations"),
@@ -9528,7 +9627,16 @@ final class MainDockView: NSView {
     }
 
     func setSettingsActive(_ active: Bool) {
+        isSettingsActive = active
         settingsButton.isModeSelected = active
+        positionDrawerBesideSelectedDestination()
+    }
+
+    /// Used by shortcuts outside the dock (the compact popover and prayer
+    /// dashboard) so Settings opens with its contextual controls visible.
+    func revealSettingsModes() {
+        guard isSettingsActive, !modeButtons.isEmpty else { return }
+        setDrawerOpen(true, animated: true)
     }
 
     @objc private func navPressed(_ sender: PrayerDisplayModeButton) {
@@ -9549,7 +9657,14 @@ final class MainDockView: NSView {
     }
 
     @objc private func settingsPressed(_ sender: PrayerDisplayModeButton) {
+        let wasCurrent = isSettingsActive
+        if !wasCurrent { setDrawerOpen(false, animated: false) }
         onSettings?()
+        if isSettingsActive {
+            setDrawerOpen(wasCurrent ? !isDrawerOpen : true, animated: true)
+        } else {
+            setDrawerOpen(false, animated: true)
+        }
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -9571,10 +9686,11 @@ final class MainDockView: NSView {
             capsule.layer?.shadowRadius = 10
             capsule.layer?.shadowOffset = NSSize(width: 0, height: -2)
         }
-        drawerHost.layer?.backgroundColor = NSColor.appAccent
+        let drawerColor: NSColor = isSettingsActive ? .systemOrange : .appAccent
+        drawerHost.layer?.backgroundColor = drawerColor
             .withAlphaComponent(dark ? 0.105 : 0.065).cgColor
         drawerHost.layer?.borderWidth = 1
-        drawerHost.layer?.borderColor = NSColor.appAccent
+        drawerHost.layer?.borderColor = drawerColor
             .withAlphaComponent(dark ? 0.34 : 0.22).cgColor
     }
 
@@ -9585,27 +9701,35 @@ final class MainDockView: NSView {
     }
 
     private func positionDrawerBesideSelectedDestination() {
-        guard let selectedNavIndex,
-              navButtons.indices.contains(selectedNavIndex) else { return }
-
-        let selectedButton = navButtons[selectedNavIndex]
-        if let buttonPosition = primaryStack.arrangedSubviews.firstIndex(
+        let targetStack: NSStackView
+        let selectedButton: NSView
+        if isSettingsActive {
+            targetStack = utilityStack
+            selectedButton = settingsButton
+        } else {
+            guard let selectedNavIndex,
+                  navButtons.indices.contains(selectedNavIndex) else { return }
+            targetStack = primaryStack
+            selectedButton = navButtons[selectedNavIndex]
+        }
+        if let buttonPosition = targetStack.arrangedSubviews.firstIndex(
                 of: selectedButton),
-           buttonPosition + 1 < primaryStack.arrangedSubviews.count,
-           primaryStack.arrangedSubviews[buttonPosition + 1] === drawerHost {
+           buttonPosition + 1 < targetStack.arrangedSubviews.count,
+           targetStack.arrangedSubviews[buttonPosition + 1] === drawerHost {
             return
         }
 
         // Remove first, then calculate the new insertion index. Calculating
         // while the old drawer is still present shifts later destinations by
         // one and can attach the controls to the wrong section.
-        if drawerHost.superview != nil {
-            primaryStack.removeArrangedSubview(drawerHost)
+        if let oldStack = drawerHost.superview as? NSStackView {
+            oldStack.removeArrangedSubview(drawerHost)
             drawerHost.removeFromSuperview()
         }
-        guard let buttonPosition = primaryStack.arrangedSubviews.firstIndex(
+        guard let buttonPosition = targetStack.arrangedSubviews.firstIndex(
                 of: selectedButton) else { return }
-        primaryStack.insertArrangedSubview(drawerHost, at: buttonPosition + 1)
+        targetStack.insertArrangedSubview(drawerHost, at: buttonPosition + 1)
+        updateCapsuleAppearance()
     }
 
     private func desiredDrawerSize() -> CGFloat {
@@ -15217,7 +15341,6 @@ private extension String {
 
 final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
-    private var sectionControl: NSSegmentedControl!
     private var settingsScrollView: NSScrollView!
     private var selectedSection: SettingsSection = .general
     private var embeddedMosquePicker: MosquePickerView?
@@ -15266,33 +15389,29 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     func selectSection(_ section: SettingsSection) {
         selectedSection = section
         guard isViewLoaded else { return }
-        sectionControl.selectedSegment = selectedSection.rawValue
         rebuildSelectedSection()
+        appDelegate?.mainWindow?.refreshDockModes()
         tabDidActivate()
+    }
+
+    var railModeItems: [(symbol: String, label: String)] {
+        [
+            ("slider.horizontal.3", featureText("settings.general")),
+            ("building.columns.fill", t("settings.section.mosque")),
+            ("menubar.rectangle", t("settings.section.menu_bar")),
+            ("speaker.wave.2.fill", t("settings.section.adhan")),
+            ("text.book.closed.fill", t("settings.section.adhkar")),
+        ]
+    }
+    var railSelectedMode: Int { selectedSection.rawValue }
+    func railDidSelectMode(_ index: Int) {
+        guard let section = SettingsSection(rawValue: index) else { return }
+        selectSection(section)
     }
 
     override func loadView() {
         let root = NSView()
         root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        sectionControl = NSSegmentedControl()
-        sectionControl.segmentCount = SettingsSection.allCases.count
-        sectionControl.setLabel(featureText("settings.general"),
-                                forSegment: SettingsSection.general.rawValue)
-        sectionControl.setLabel(t("settings.section.mosque"),
-                                forSegment: SettingsSection.mosque.rawValue)
-        sectionControl.setLabel(t("settings.section.menu_bar"),
-                                forSegment: SettingsSection.menuBar.rawValue)
-        sectionControl.setLabel(t("settings.section.adhan"),
-                                forSegment: SettingsSection.adhan.rawValue)
-        sectionControl.setLabel(t("settings.section.adhkar"),
-                                forSegment: SettingsSection.adhkar.rawValue)
-        sectionControl.segmentStyle = .texturedRounded
-        sectionControl.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        sectionControl.selectedSegment = selectedSection.rawValue
-        sectionControl.target = self
-        sectionControl.action = #selector(settingsSectionChanged(_:))
-        sectionControl.translatesAutoresizingMaskIntoConstraints = false
-
         settingsScrollView = NSScrollView()
         settingsScrollView.drawsBackground = false
         settingsScrollView.hasVerticalScroller = true
@@ -15302,19 +15421,11 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             settingsScrollView.userInterfaceLayoutDirection = .rightToLeft
         }
 
-        root.addSubview(sectionControl)
         root.addSubview(settingsScrollView)
         NSLayoutConstraint.activate([
-            sectionControl.topAnchor.constraint(equalTo: root.topAnchor, constant: 18),
-            sectionControl.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            sectionControl.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor,
-                                                  constant: -40),
-            sectionControl.heightAnchor.constraint(equalToConstant: 30),
-
             settingsScrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             settingsScrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            settingsScrollView.topAnchor.constraint(equalTo: sectionControl.bottomAnchor,
-                                                     constant: 10),
+            settingsScrollView.topAnchor.constraint(equalTo: root.topAnchor),
             settingsScrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         self.view = root
@@ -15348,7 +15459,8 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             let size = settingsScrollView.contentSize
             let picker = MosquePickerView(width: max(780, size.width),
                                           height: max(470, size.height),
-                                          showsNavigationHeader: false)
+                                          showsNavigationHeader: false,
+                                          presentation: .settings)
             picker.appDelegate = appDelegate
             picker.autoresizingMask = [.width, .height]
             picker.setAccessibilityLabel(t("settings.section.mosque"))
@@ -15364,15 +15476,6 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         settingsScrollView.documentView = body
         buildContent(into: body)
         body.needsDisplay = true
-    }
-
-    @objc private func settingsSectionChanged(_ sender: NSSegmentedControl) {
-        guard let section = SettingsSection(rawValue: max(0, sender.selectedSegment)) else {
-            return
-        }
-        selectedSection = section
-        rebuildSelectedSection()
-        tabDidActivate()
     }
 
     private func buildContent(into body: FlippedView) {
@@ -15733,12 +15836,12 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
         let recitationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         recitationPopup.addItems(withTitles: [
-            adhkarModeText("recitation.exact"),
             adhkarModeText("recitation.recordings"),
+            adhkarModeText("recitation.exact"),
         ])
         recitationPopup.selectItem(at:
-            (UserDefaults.standard.string(forKey: kAdhkarRecitationStyle) ?? "exact")
-                == "recordings" ? 1 : 0)
+            (UserDefaults.standard.string(forKey: kAdhkarRecitationStyle) ?? "recordings")
+                == "exact" ? 1 : 0)
         recitationPopup.target = self
         recitationPopup.action = #selector(adhkarRecitationChanged(_:))
         recitationPopup.setAccessibilityLabel(adhkarModeText("recitation.style"))
@@ -15966,7 +16069,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     }
     @objc private func adhkarRecitationChanged(_ sender: NSPopUpButton) {
         UserDefaults.standard.set(sender.indexOfSelectedItem == 1
-            ? "recordings" : "exact", forKey: kAdhkarRecitationStyle)
+            ? "exact" : "recordings", forKey: kAdhkarRecitationStyle)
         adhkarTestSession.stop()
     }
     @objc private func adhkarOutputChanged(_ sender: NSPopUpButton) {
@@ -16030,8 +16133,8 @@ private let adhkarModeEnglish: [String: String] = [
     "dock.style": "Control labels", "dock.style.icons": "Icons only",
     "dock.style.iconsText": "Icons and text", "dock.style.text": "Text only",
     "dock.theme": "Theme",
-    "recitation.style": "Recitation", "recitation.exact": "Exact text · natural voice",
-    "recitation.recordings": "Original recordings · trimmed",
+    "recitation.style": "Recitation", "recitation.exact": "Exact text · system voice",
+    "recitation.recordings": "Human recordings · Hisn al-Muslim",
     "nawafil.setting": "Nawafil guidance",
 ]
 
@@ -16054,8 +16157,8 @@ private let adhkarModeArabic: [String: String] = [
     "dock.style": "تسميات عناصر التحكم", "dock.style.icons": "أيقونات فقط",
     "dock.style.iconsText": "أيقونات ونص", "dock.style.text": "نص فقط",
     "dock.theme": "المظهر",
-    "recitation.style": "التلاوة", "recitation.exact": "النص المطابق · صوت طبيعي",
-    "recitation.recordings": "التسجيلات الأصلية · منقّحة",
+    "recitation.style": "التلاوة", "recitation.exact": "النص المطابق · صوت النظام",
+    "recitation.recordings": "تسجيلات بشرية · حصن المسلم",
     "nawafil.setting": "إرشاد النوافل",
 ]
 
@@ -16078,8 +16181,8 @@ private func adhkarModeText(_ key: String) -> String {
                "dock.style": "Libellés des commandes", "dock.style.icons": "Icônes seules",
                "dock.style.iconsText": "Icônes et texte", "dock.style.text": "Texte seul",
                "dock.theme": "Thème", "recitation.style": "Récitation",
-               "recitation.exact": "Texte exact · voix naturelle",
-               "recitation.recordings": "Enregistrements originaux · coupés"],
+               "recitation.exact": "Texte exact · voix système",
+               "recitation.recordings": "Voix humaines · Hisn al-Muslim"],
         "es": ["mode.reading": "Lectura", "mode.editing": "Edición",
                "reading.empty": "Elige una colección y pulsa reproducir",
                "studio.open": "Estudio de audio", "studio.import": "Importar audio…",
@@ -16089,42 +16192,42 @@ private func adhkarModeText(_ key: String) -> String {
                "dock.style": "Etiquetas de controles", "dock.style.icons": "Solo iconos",
                "dock.style.iconsText": "Iconos y texto", "dock.style.text": "Solo texto",
                "dock.theme": "Tema", "recitation.style": "Recitación",
-               "recitation.exact": "Texto exacto · voz natural",
-               "recitation.recordings": "Grabaciones originales · recortadas"],
+               "recitation.exact": "Texto exacto · voz del sistema",
+               "recitation.recordings": "Voces humanas · Hisn al-Muslim"],
         "zh": ["dock.position": "控件位置", "dock.left": "左侧", "dock.right": "右侧",
                "dock.top": "顶部", "dock.bottom": "底部", "dock.style": "控件标签",
                "dock.style.icons": "仅图标", "dock.style.iconsText": "图标和文字",
                "dock.style.text": "仅文字", "dock.theme": "主题", "recitation.style": "诵读",
-               "recitation.exact": "准确文本 · 自然语音", "recitation.recordings": "原始录音 · 已剪辑"],
+               "recitation.exact": "准确文本 · 系统语音", "recitation.recordings": "真人录音 · Hisn al-Muslim"],
         "hi": ["dock.position": "नियंत्रण स्थान", "dock.left": "बाएँ", "dock.right": "दाएँ",
                "dock.top": "ऊपर", "dock.bottom": "नीचे", "dock.style": "नियंत्रण लेबल",
                "dock.style.icons": "केवल आइकन", "dock.style.iconsText": "आइकन और पाठ",
                "dock.style.text": "केवल पाठ", "dock.theme": "थीम", "recitation.style": "पाठ",
-               "recitation.exact": "सटीक पाठ · स्वाभाविक आवाज़", "recitation.recordings": "मूल रिकॉर्डिंग · संपादित"],
+               "recitation.exact": "सटीक पाठ · सिस्टम आवाज़", "recitation.recordings": "मानवीय रिकॉर्डिंग · Hisn al-Muslim"],
         "bn": ["dock.position": "নিয়ন্ত্রণের অবস্থান", "dock.left": "বামে", "dock.right": "ডানে",
                "dock.top": "উপরে", "dock.bottom": "নিচে", "dock.style": "নিয়ন্ত্রণের লেবেল",
                "dock.style.icons": "শুধু আইকন", "dock.style.iconsText": "আইকন ও লেখা",
                "dock.style.text": "শুধু লেখা", "dock.theme": "থিম", "recitation.style": "তিলাওয়াত",
-               "recitation.exact": "হুবহু পাঠ · স্বাভাবিক কণ্ঠ", "recitation.recordings": "মূল রেকর্ডিং · ছাঁটা"],
+               "recitation.exact": "হুবহু পাঠ · সিস্টেম কণ্ঠ", "recitation.recordings": "মানব কণ্ঠ · Hisn al-Muslim"],
         "ru": ["dock.position": "Положение элементов", "dock.left": "Слева",
                "dock.right": "Справа", "dock.top": "Сверху", "dock.bottom": "Снизу",
                "dock.style": "Подписи элементов", "dock.style.icons": "Только значки",
                "dock.style.iconsText": "Значки и текст", "dock.style.text": "Только текст",
                "dock.theme": "Тема", "recitation.style": "Чтение",
-               "recitation.exact": "Точный текст · естественный голос",
-               "recitation.recordings": "Оригинальные записи · обрезанные"],
+               "recitation.exact": "Точный текст · системный голос",
+               "recitation.recordings": "Живые записи · Hisn al-Muslim"],
         "pt": ["dock.position": "Posição dos controlos", "dock.left": "Esquerda",
                "dock.right": "Direita", "dock.top": "Topo", "dock.bottom": "Fundo",
                "dock.style": "Rótulos dos controlos", "dock.style.icons": "Só ícones",
                "dock.style.iconsText": "Ícones e texto", "dock.style.text": "Só texto",
                "dock.theme": "Tema", "recitation.style": "Recitação",
-               "recitation.exact": "Texto exato · voz natural",
-               "recitation.recordings": "Gravações originais · recortadas"],
+               "recitation.exact": "Texto exato · voz do sistema",
+               "recitation.recordings": "Vozes humanas · Hisn al-Muslim"],
         "ur": ["dock.position": "کنٹرول کی جگہ", "dock.left": "بائیں", "dock.right": "دائیں",
                "dock.top": "اوپر", "dock.bottom": "نیچے", "dock.style": "کنٹرول لیبل",
                "dock.style.icons": "صرف آئیکن", "dock.style.iconsText": "آئیکن اور متن",
                "dock.style.text": "صرف متن", "dock.theme": "تھیم", "recitation.style": "تلاوت",
-               "recitation.exact": "بالکل متن · قدرتی آواز", "recitation.recordings": "اصل ریکارڈنگ · تراشی ہوئی"],
+               "recitation.exact": "بالکل متن · سسٹم آواز", "recitation.recordings": "انسانی آوازیں · Hisn al-Muslim"],
     ]
     let raw = (code == "ar" ? adhkarModeArabic[key] : localized[code]?[key])
         ?? adhkarModeEnglish[key] ?? key
@@ -19258,6 +19361,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
         if UserDefaults.standard.object(forKey: kAdhkarAfterAdhanDelay) == nil {
             UserDefaults.standard.set(0, forKey: kAdhkarAfterAdhanDelay)
+        }
+        // Restore the bundled human reciters for upgrades that inherited the
+        // synthesized "Exact text" default. This runs once; after it, the
+        // user's explicit choice in Settings is always respected.
+        if !UserDefaults.standard.bool(forKey: kAdhkarRecordedVoiceRestored) {
+            UserDefaults.standard.set("recordings", forKey: kAdhkarRecitationStyle)
+            UserDefaults.standard.set(true, forKey: kAdhkarRecordedVoiceRestored)
         }
 
         registerCairoFonts()
