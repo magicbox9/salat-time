@@ -124,7 +124,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.32.3"
+let kAppVersion          = "3.33.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1208,6 +1208,32 @@ func presentAudioImportPanel() -> String? {
 /// setting `onItemChange` / `onPlaybackStateChange` / `onFinish` closures.
 final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
 
+    /// Lightweight multicast observation keeps the compact popup and full
+    /// reader synchronized when they are both reflecting the same playback
+    /// session. Legacy single callbacks remain for the standalone panel and
+    /// settings previews.
+    private final class Observation {
+        weak var owner: AnyObject?
+        let onItemChange: ((AdhkarEntry, Int, Int) -> Void)?
+        let onPlaybackStateChange: (() -> Void)?
+        let onFinish: (() -> Void)?
+        let onRepeatChange: ((Int, Int) -> Void)?
+
+        init(owner: AnyObject,
+             onItemChange: ((AdhkarEntry, Int, Int) -> Void)?,
+             onPlaybackStateChange: (() -> Void)?,
+             onFinish: (() -> Void)?,
+             onRepeatChange: ((Int, Int) -> Void)?) {
+            self.owner = owner
+            self.onItemChange = onItemChange
+            self.onPlaybackStateChange = onPlaybackStateChange
+            self.onFinish = onFinish
+            self.onRepeatChange = onRepeatChange
+        }
+    }
+
+    private var observations: [UUID: Observation] = [:]
+
     /// `(current item, current item index 0-based, total items)`.
     var onItemChange:          ((AdhkarEntry, Int, Int) -> Void)?
     /// Fired on play / pause / resume / mute toggles so the panel can refresh.
@@ -1235,6 +1261,27 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     private(set) var isPlaying  = false
     private(set) var isPaused   = false
     private(set) var isMuted    = false
+    private(set) var activeCollection: AdhkarCollection?
+
+    @discardableResult
+    func observe(owner: AnyObject,
+                 onItemChange: ((AdhkarEntry, Int, Int) -> Void)? = nil,
+                 onPlaybackStateChange: (() -> Void)? = nil,
+                 onFinish: (() -> Void)? = nil,
+                 onRepeatChange: ((Int, Int) -> Void)? = nil) -> UUID {
+        removeReleasedObservers()
+        let token = UUID()
+        observations[token] = Observation(
+            owner: owner, onItemChange: onItemChange,
+            onPlaybackStateChange: onPlaybackStateChange,
+            onFinish: onFinish, onRepeatChange: onRepeatChange)
+        return token
+    }
+
+    func removeObserver(_ token: UUID?) {
+        guard let token else { return }
+        observations.removeValue(forKey: token)
+    }
 
     /// Total number of items in the active set (0 if not started).
     var count: Int { items.count }
@@ -1262,6 +1309,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         stop()
         items = collection.items
         activeCategoryKey = collection.categoryKey
+        activeCollection = collection
         guard !items.isEmpty else { return }
         index = max(0, min(items.count - 1, startIndex))
         playsSoFar = 0
@@ -1273,7 +1321,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         guard items.indices.contains(newIndex) else { return }
         index = newIndex
         playsSoFar = 0
-        if isPaused { onItemChange?(items[index], index, items.count); return }
+        if isPaused { emitItemChange(items[index], index, items.count); return }
         playCurrent()
     }
 
@@ -1293,7 +1341,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         if index + 1 < items.count {
             index += 1
             playsSoFar = 0
-            if isPaused { onItemChange?(items[index], index, items.count); return }
+            if isPaused { emitItemChange(items[index], index, items.count); return }
             playCurrent()
         } else {
             finish()
@@ -1306,7 +1354,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         if index > 0 {
             index -= 1
             playsSoFar = 0
-            if isPaused { onItemChange?(items[index], index, items.count); return }
+            if isPaused { emitItemChange(items[index], index, items.count); return }
             playCurrent()
         }
     }
@@ -1319,7 +1367,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         }
         isPlaying = false
         isPaused  = true
-        onPlaybackStateChange?()
+        emitPlaybackStateChange()
     }
 
     func resume() {
@@ -1329,7 +1377,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         if resumed {
             isPlaying = true
             isPaused  = false
-            onPlaybackStateChange?()
+            emitPlaybackStateChange()
         }
     }
 
@@ -1339,7 +1387,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         guard isMuted != m else { return }
         isMuted = m
         player?.volume = m ? 0 : savedAdhkarVolume()
-        onPlaybackStateChange?()
+        emitPlaybackStateChange()
     }
 
     /// Hard stop — abandons the session and releases the player.
@@ -1355,11 +1403,49 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         }
         items = []
         activeCategoryKey = nil
+        activeCollection = nil
         index = 0
         playsSoFar = 0
         isPlaying = false
         isPaused  = false
+        emitPlaybackStateChange()
+    }
+
+    private func removeReleasedObservers() {
+        observations = observations.filter { $0.value.owner != nil }
+    }
+
+    private func activeObservations() -> [Observation] {
+        removeReleasedObservers()
+        return Array(observations.values)
+    }
+
+    private func emitItemChange(_ item: AdhkarEntry, _ index: Int, _ total: Int) {
+        onItemChange?(item, index, total)
+        for observation in activeObservations() {
+            observation.onItemChange?(item, index, total)
+        }
+    }
+
+    private func emitPlaybackStateChange() {
         onPlaybackStateChange?()
+        for observation in activeObservations() {
+            observation.onPlaybackStateChange?()
+        }
+    }
+
+    private func emitFinish() {
+        onFinish?()
+        for observation in activeObservations() {
+            observation.onFinish?()
+        }
+    }
+
+    private func emitRepeatChange(_ completed: Int, _ target: Int) {
+        onRepeatChange?(completed, target)
+        for observation in activeObservations() {
+            observation.onRepeatChange?(completed, target)
+        }
     }
 
     // MARK: - internal
@@ -1372,7 +1458,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         // complete via tasbih — we only play the audio once in that case.
         targetPlays = max(1, min(item.count, 3))
         playsSoFar = 0
-        onItemChange?(item, index, items.count)
+        emitItemChange(item, index, items.count)
         playAudioRef(item.audioRef, text: item.arabic)
     }
 
@@ -1451,7 +1537,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
             isPlaying = true
             isPaused  = false
             startCleanSegmentMonitorIfNeeded()
-            onPlaybackStateChange?()
+            emitPlaybackStateChange()
         }
     }
 
@@ -1535,7 +1621,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         isPlaying = true
         isPaused = false
         speechSynthesizer.speak(utterance)
-        onPlaybackStateChange?()
+        emitPlaybackStateChange()
     }
 
     /// If audio is missing, auto-advance after a beat so the session never
@@ -1556,10 +1642,11 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         player = nil
         isPlaying = false
         isPaused  = false
-        let cb = onFinish
         items = []
+        activeCategoryKey = nil
+        activeCollection = nil
         index = 0
-        cb?()
+        emitFinish()
     }
 
     // MARK: - AVAudioPlayerDelegate
@@ -1571,7 +1658,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
 
     private func completeCurrentPlay() {
         playsSoFar += 1
-        onRepeatChange?(playsSoFar, targetPlays)
+        emitRepeatChange(playsSoFar, targetPlays)
         if playsSoFar < targetPlays {
             // Same item, repeat.
             if items.indices.contains(index) {
@@ -16565,8 +16652,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     private var playerVolumeSlider: NSSlider!
     private var playerSettingsBtn: HoverIconButton!
 
-    // The inline playback session (separate from AdhkarPanel's session).
-    private let session = AdhkarSession()
+    // Shared with the popup so a background recitation can be revealed here
+    // without restarting it or losing its current position.
+    private let session: AdhkarSession
+    private var sessionObserver: UUID?
     /// Index of the currently-highlighted card (-1 = none).
     private var highlightedCardIndex = -1
 
@@ -16598,6 +16687,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
 
     deinit {
         readingTimer?.invalidate()
+        session.removeObserver(sessionObserver)
         if let monitor = spaceKeyMonitor { NSEvent.removeMonitor(monitor) }
     }
 
@@ -16607,6 +16697,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
 
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
+        self.session = appDelegate.adhkarPlaybackSession
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -16694,27 +16785,30 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     // MARK: - inline playback session
 
     private func wireSession() {
-        session.onItemChange = { [weak self] item, idx, total in
-            DispatchQueue.main.async {
-                self?.updatePlayerForItem(item, idx: idx, total: total)
-                self?.updateReadingForItem(item, idx: idx, total: total)
-            }
-        }
-        session.onPlaybackStateChange = { [weak self] in
-            DispatchQueue.main.async {
-                self?.refreshPlayerButton()
-                self?.refreshReadingControls()
-            }
-        }
-        session.onFinish = { [weak self] in
-            DispatchQueue.main.async {
-                self?.resetPlayer()
-                self?.syncReadingSurface()
-            }
-        }
-        session.onRepeatChange = { [weak self] done, target in
-            DispatchQueue.main.async { self?.updateReadingRepeat(done, target) }
-        }
+        session.removeObserver(sessionObserver)
+        sessionObserver = session.observe(
+            owner: self,
+            onItemChange: { [weak self] item, idx, total in
+                DispatchQueue.main.async {
+                    self?.updatePlayerForItem(item, idx: idx, total: total)
+                    self?.updateReadingForItem(item, idx: idx, total: total)
+                }
+            },
+            onPlaybackStateChange: { [weak self] in
+                DispatchQueue.main.async {
+                    self?.refreshPlayerButton()
+                    self?.refreshReadingControls()
+                }
+            },
+            onFinish: { [weak self] in
+                DispatchQueue.main.async {
+                    self?.resetPlayer()
+                    self?.syncReadingSurface()
+                }
+            },
+            onRepeatChange: { [weak self] done, target in
+                DispatchQueue.main.async { self?.updateReadingRepeat(done, target) }
+            })
     }
 
     private func updatePlayerForItem(_ item: AdhkarEntry, idx: Int, total: Int) {
@@ -18674,7 +18768,8 @@ final class AdhkarLibraryPickerSheet: NSWindowController, NSWindowDelegate,
 
 final class CompactAdhkarView: FlippedView {
     private weak var appDelegate: AppDelegate?
-    private let session = AdhkarSession()
+    private let session: AdhkarSession
+    private var sessionObserver: UUID?
     private var collections: [AdhkarCollection] = []
     private var selectedID: UUID?
     private var manualFontSize: CGFloat?
@@ -18696,6 +18791,7 @@ final class CompactAdhkarView: FlippedView {
 
     init(frame: NSRect, appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
+        self.session = appDelegate.adhkarPlaybackSession
         super.init(frame: frame)
         autoresizingMask = [.width]
         userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
@@ -18705,6 +18801,8 @@ final class CompactAdhkarView: FlippedView {
     }
 
     required init?(coder: NSCoder) { fatalError() }
+
+    deinit { session.removeObserver(sessionObserver) }
 
     private func buildUI() {
         collectionPopup = NSPopUpButton(frame: NSRect(x: 16, y: 14,
@@ -18819,17 +18917,22 @@ final class CompactAdhkarView: FlippedView {
     }
 
     private func wireSession() {
-        session.onItemChange = { [weak self] item, index, total in
-            self?.render(item: item, index: index, total: total)
-        }
-        session.onPlaybackStateChange = { [weak self] in
-            self?.refreshControls()
-        }
-        session.onFinish = { [weak self] in
-            self?.renderPreview()
-            self?.refreshControls()
-            self?.onFinish?()
-        }
+        session.removeObserver(sessionObserver)
+        sessionObserver = session.observe(
+            owner: self,
+            onItemChange: { [weak self] item, index, total in
+                self?.render(item: item, index: index, total: total)
+            },
+            onPlaybackStateChange: { [weak self] in
+                self?.refreshControls()
+                self?.appDelegate?.syncAdhkarPlaybackButton()
+            },
+            onFinish: { [weak self] in
+                self?.renderPreview()
+                self?.refreshControls()
+                self?.appDelegate?.syncAdhkarPlaybackButton()
+                self?.onFinish?()
+            })
     }
 
     func reloadCollections() {
@@ -18997,6 +19100,11 @@ final class CompactAdhkarView: FlippedView {
 class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                    UNUserNotificationCenterDelegate,
                    AVAudioPlayerDelegate {
+
+    /// One application-wide Adhkar session. Scheduled audio starts here in
+    /// the background; the compact popup and full reader are merely two
+    /// synchronized views onto the same uninterrupted recitation.
+    let adhkarPlaybackSession = AdhkarSession()
 
     var statusItem: NSStatusItem!
     /// Transient second menu-bar item that only exists while adhan is playing.
@@ -19187,6 +19295,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 mainWindow?.showSettingsWindow(section:
                     SettingsSection(rawValue: raw) ?? .general)
             } else if destination == "popup" {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                    self?.togglePopover()
+                }
+            } else if destination == "adhkar-background" {
+                if let collection = AdhkarLibrary.load().first(where: { !$0.items.isEmpty }) {
+                    adhkarPlaybackSession.start(collection: collection)
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
                     self?.togglePopover()
                 }
@@ -19960,19 +20075,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         quranBtn.setFrameOrigin(NSPoint(x: centers[1] - btnSize.width/2, y: btnY))
         content.addSubview(quranBtn)
 
-        // Adhkar button — opens the full management window on the Adhkar
-        // destination, mirroring the Qur'an button. (The compact in-popup
-        // reader remains the surface for scheduled auto-presentations.)
+        // Adhkar button — normally opens the Adhkar destination. During an
+        // active recitation it becomes a playback entry point offering Stop
+        // or Open Full Reader without forcing a popup to appear by itself.
         let adhkarBtn = HoverIconButton(
             symbol: "text.book.closed.fill",
             toolTip: t("adhkar.editor.title"),
             target: self,
-            action: #selector(openAdhkarFromPopup),
+            action: #selector(adhkarPopupButtonTapped(_:)),
             pointSize: 15,
             size: btnSize)
         adhkarBtn.setFrameOrigin(NSPoint(x: centers[2] - btnSize.width/2, y: btnY))
         content.addSubview(adhkarBtn)
         compactAdhkarButton = adhkarBtn
+        syncAdhkarPlaybackButton()
 
         let settingsBtn = HoverIconButton(
             symbol: "gearshape.fill",
@@ -20036,6 +20152,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         popover?.performClose(nil)
         openMainWindow(selecting: 1)
     }
+
+    /// The popup's Adhkar destination doubles as the active-playback control.
+    /// A normal click opens Adhkar; while reciting it presents two deliberate
+    /// choices so playback is never stopped or moved accidentally.
+    @objc func adhkarPopupButtonTapped(_ sender: NSButton) {
+        guard adhkarPlaybackSession.isPlaying || adhkarPlaybackSession.isPaused else {
+            openAdhkarFromPopup()
+            return
+        }
+        let menu = NSMenu()
+        let open = NSMenuItem(title: featureText("full.open_more"),
+                              action: #selector(openPlayingAdhkar),
+                              keyEquivalent: "")
+        open.image = templateSymbol("arrow.up.right.square", pointSize: 13)
+        open.target = self
+        menu.addItem(open)
+        let stop = NSMenuItem(title: t("adhkar.stop"),
+                              action: #selector(stopPlayingAdhkar),
+                              keyEquivalent: "")
+        stop.image = templateSymbol("stop.fill", pointSize: 12)
+        stop.target = self
+        menu.addItem(stop)
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: sender.bounds.height + 4),
+                   in: sender)
+    }
+
+    @objc private func openPlayingAdhkar() {
+        let collection = adhkarPlaybackSession.activeCollection
+        popover?.performClose(nil)
+        openMainWindow(selecting: 1)
+        if let collection {
+            mainWindow?.startAdhkarReading(collection, autoPlay: false)
+        }
+    }
+
+    @objc private func stopPlayingAdhkar() {
+        // A direct Stop means stop the whole scheduled run, including any
+        // same-anchor collections waiting behind the current one.
+        scheduledAdhkarDelayTimer?.invalidate()
+        scheduledAdhkarDelayTimer = nil
+        scheduledAdhkarQueue.removeAll()
+        queuedAdhkarIsWaitingForAdhan = false
+        completedAdhanAllowsQueuedAdhkar = false
+        adhkarPlaybackSession.stop()
+        syncAdhkarPlaybackButton()
+    }
+
+    func syncAdhkarPlaybackButton() {
+        guard let button = compactAdhkarButton else { return }
+        let active = adhkarPlaybackSession.isPlaying || adhkarPlaybackSession.isPaused
+        button.image = templateSymbol(active ? "waveform.circle.fill"
+                                              : "text.book.closed.fill",
+                                      pointSize: active ? 17 : 15,
+                                      weight: active ? .semibold : .regular)
+        let tint: NSColor = (active || isCompactAdhkarMode)
+            ? .appGreenAccent : .secondaryLabelColor
+        button.idleTint = tint
+        button.contentTintColor = tint
+        button.toolTip = active
+            ? "\(featureText("full.open_more")) · \(t("adhkar.stop"))"
+            : t("adhkar.editor.title")
+        button.setAccessibilityLabel(button.toolTip ?? t("adhkar.editor.title"))
+        button.setAccessibilityValue(NSNumber(value: active))
+    }
     @objc func openPrayerFromPopup() {
         popover?.performClose(nil)
         openMainWindow(selecting: 0)
@@ -20055,9 +20236,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         compactAdhkarView?.isHidden = !enabled
         if enabled { compactAdhkarView?.reloadCollections() }
         updateUI()
-        let tint: NSColor = enabled ? .appGreenAccent : .secondaryLabelColor
-        compactAdhkarButton?.idleTint = tint
-        compactAdhkarButton?.contentTintColor = tint
+        syncAdhkarPlaybackButton()
     }
 
     private func showCompactAdhkar(_ collection: AdhkarCollection, autoPlay: Bool) {
@@ -21217,7 +21396,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let next = scheduledAdhkarQueue.removeFirst()
         queuedAdhkarIsWaitingForAdhan = false
         completedAdhanAllowsQueuedAdhkar = false
-        showCompactAdhkar(next, autoPlay: true)
+        // Scheduled playback is intentionally non-presenting: audio begins,
+        // the popup stays exactly where the user left it, and the Adhkar
+        // toolbar button becomes the visible route to Stop or the full reader.
+        if let compactAdhkarView {
+            compactAdhkarView.present(collection: next, autoPlay: true)
+        } else {
+            adhkarPlaybackSession.start(collection: next)
+        }
+        syncAdhkarPlaybackButton()
     }
 
     private func adhanIsDueThisMinute() -> Bool {
@@ -21257,9 +21444,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         }
     }
 
-    /// Open the adhkar window. `autoPlay` = true on scheduled trigger; false
-    /// when the user opens it manually from the menu (still autoplays because
-    /// that's the point of opening it, but leaves control to the user).
+    /// Manual Adhkar entry point. Scheduled triggers bypass presentation and
+    /// start through `presentNextScheduledAdhkarIfPossible()` above.
     func presentAdhkar(set: AdhkarSet, autoPlay: Bool) {
         let collection = AdhkarLibrary.load().first(where: {
             $0.categoryKey == set.rawValue || $0.name == set.arabicName
