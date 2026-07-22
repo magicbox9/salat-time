@@ -13,9 +13,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleVersion</key>
-    <string>3.34.1</string>
+    <string>3.34.2</string>
     <key>CFBundleShortVersionString</key>
-    <string>3.34.1</string>
+    <string>3.34.2</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>
@@ -27,8 +27,8 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSLocationUsageDescription</key>
-    <string>Salat Time uses your location to find the closest mosques via Mawaqit.</string>
+    <string>Salat Time uses your location to find nearby mosques.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>Salat Time uses your location to find the closest mosques via Mawaqit.</string>
+    <string>Salat Time uses your location to find nearby mosques.</string>
 </dict>
 </plist>

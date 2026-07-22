@@ -127,7 +127,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.34.1"
+let kAppVersion          = "3.34.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4009,7 +4009,7 @@ final class CityRowView: FlippedView {
 // ============================================================================
 /// Row used in the Search / Nearby / Favorites result lists. When the mouse
 /// lingers over the row, macOS shows a multi-line tooltip that reveals the
-/// mosque's full name, city, street address, and URL — without truncation.
+/// mosque's full name, city, and street address without truncation.
 final class HoverablePickerRow: FlippedView {
     var mosque: MosqueRef? {
         didSet { updateRichToolTip() }
@@ -4023,9 +4023,6 @@ final class HoverablePickerRow: FlippedView {
         parts.append(m.name)
         if !m.city.isEmpty { parts.append("📍 \(m.city)") }
         if let addr = m.address, !addr.isEmpty { parts.append("🏠 \(addr)") }
-        // Show the **desktop** URL here — that's what the "open" button uses
-        // and it's the URL the user actually wants to see in their browser.
-        parts.append("🔗 \(desktopMawaqitURL(m.url))")
         let text = parts.joined(separator: "\n")
         // Apply the same tooltip to the whole row AND its subviews so hovering
         // over a child label also reveals the popup (AppKit doesn't walk up
@@ -4448,8 +4445,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
                 ? t("settings.mosque.none") : name
             let location = info?.localisation.trimmingCharacters(
                 in: .whitespacesAndNewlines) ?? ""
-            currentMosqueDetailLabel.stringValue = location.isEmpty
-                ? desktopMawaqitURL(currentMosqueURL()) : location
+            currentMosqueDetailLabel.stringValue = location
+            currentMosqueDetailLabel.isHidden = location.isEmpty
         }
         updateInputContainer()
         switch mode {
@@ -5196,33 +5193,11 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         defBtn.isEnabled = !isCurrent
         row.addSubview(defBtn)
 
-        // ---------- Open-in-browser button ---------------------------------
-        // Opens the mosque's **desktop** Mawaqit page (stripping /m/ from the
-        // path) so the user sees the full site instead of the mobile/embed
-        // variant. Lives to the left of the check+star buttons.
-        let linkBtn = NSButton(frame: NSRect(x: rowW - rightPad - btnSize * 3 - btnGap * 2,
-                                             y: btnY, width: btnSize, height: btnSize))
-        linkBtn.bezelStyle = .regularSquare
-        linkBtn.isBordered = false
-        linkBtn.title = ""
-        linkBtn.target = self
-        linkBtn.action = #selector(openMosquePageTapped(_:))
-        linkBtn.identifier = NSUserInterfaceItemIdentifier(serialize(m))
-        linkBtn.imagePosition = .imageOnly
-        linkBtn.imageScaling = .scaleProportionallyDown
-        linkBtn.focusRingType = .none
-        if let img = templateSymbol("arrow.up.right.square", pointSize: 14, weight: .medium) {
-            linkBtn.image = img
-        }
-        linkBtn.contentTintColor = .secondaryLabelColor
-        linkBtn.toolTip = "Open on mawaqit.net"
-        row.addSubview(linkBtn)
-
         // ---------- Text block ---------------------------------------------
         // Name + city + address stack fills the remaining horizontal space
-        // to the left of the three action buttons (open-link, check, star).
+        // to the left of the two in-app actions (default and favorite).
         let leftPad: CGFloat = 12
-        let textW = rowW - rightPad - btnSize * 3 - btnGap * 2 - leftPad - 8
+        let textW = rowW - rightPad - btnSize * 2 - btnGap - leftPad - 8
 
         var y: CGFloat = padTop
 
@@ -5311,15 +5286,6 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         showFavorites()
     }
 
-    /// Open the mosque's official Mawaqit page in the user's default browser,
-    /// switched to the desktop variant (`/fr/slug` instead of `/fr/m/slug`).
-    @objc private func openMosquePageTapped(_ sender: NSButton) {
-        guard let m = deserialize(sender.identifier?.rawValue ?? "") else { return }
-        let desktop = desktopMawaqitURL(m.url)
-        guard let url = URL(string: desktop) else { return }
-        NSWorkspace.shared.open(url)
-        statusLabel.stringValue = "Opening \(m.name) on mawaqit.net…"
-    }
 }
 
 // ============================================================================
@@ -5585,7 +5551,7 @@ final class SettingsView: FlippedView {
         footerSep.boxType = .separator
         addSubview(footerSep)
 
-        let about = NSTextField(labelWithString: "Salat Time v\(kAppVersion) · mawaqit.net")
+        let about = NSTextField(labelWithString: "Salat Time v\(kAppVersion)")
         about.frame = NSRect(x: 10, y: footerY + 6, width: W - 20, height: 12)
         about.font = Localizer.shared.font(size: 9)
         about.textColor = .tertiaryLabelColor
