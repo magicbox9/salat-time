@@ -23,6 +23,11 @@ let kAppearanceKey       = "appearancePref"
 let kCurrentMosqueKey    = "currentMosqueURL"
 let kFavoritesKey        = "favoriteMosquesJSON"
 let kAdhanSoundKey       = "adhanSoundID"
+/// Non-destructive playback windows for the selected Adhan recording. The
+/// source file remains immutable; Fajr and the other prayers can each use a
+/// different start/end range from that same recording.
+let kAdhanRegularCut     = "adhanRegularAudioCut_v1"
+let kAdhanFajrCut        = "adhanFajrAudioCut_v1"
 let kNotificationsKey    = "notificationsEnabled"
 let kLanguageKey         = "appLanguage"
 let kPerPrayerAdhanMode  = "perPrayerAdhanMode"   // [String: Int] keyed "0".."4"
@@ -127,7 +132,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.34.2"
+let kAppVersion          = "3.35.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -437,6 +442,45 @@ struct AdhanOption {
     let fileName: String   // empty => use system Glass sound
 }
 
+enum AdhanCutTarget: Int, CaseIterable {
+    case regular = 0
+    case fajr = 1
+
+    var defaultsKey: String {
+        self == .fajr ? kAdhanFajrCut : kAdhanRegularCut
+    }
+}
+
+struct AdhanAudioCut: Codable, Equatable {
+    var start: TimeInterval
+    var end: TimeInterval
+
+    var isUsable: Bool {
+        start >= 0 && end.isFinite && start.isFinite && end - start >= 0.15
+    }
+}
+
+func adhanAudioCut(for target: AdhanCutTarget) -> AdhanAudioCut? {
+    guard let data = UserDefaults.standard.data(forKey: target.defaultsKey),
+          let cut = try? JSONDecoder().decode(AdhanAudioCut.self, from: data),
+          cut.isUsable else { return nil }
+    return cut
+}
+
+func saveAdhanAudioCut(_ cut: AdhanAudioCut?, for target: AdhanCutTarget) {
+    guard let cut else {
+        UserDefaults.standard.removeObject(forKey: target.defaultsKey)
+        return
+    }
+    guard cut.isUsable, let data = try? JSONEncoder().encode(cut) else { return }
+    UserDefaults.standard.set(data, forKey: target.defaultsKey)
+}
+
+func resetAdhanAudioCuts() {
+    saveAdhanAudioCut(nil, for: .regular)
+    saveAdhanAudioCut(nil, for: .fajr)
+}
+
 // Curated selection of 14 adhan recordings sourced from Assabile — each option
 // is labeled either by the mosque or by the muezzin ("moadin") whose voice is
 // on the recording. Ordered with the two Haramain recordings (Makkah, Madinah)
@@ -509,7 +553,18 @@ func currentAdhanOption() -> AdhanOption {
     return adhanCatalog.first(where: { $0.id == id }) ?? adhanCatalog[0]
 }
 func setCurrentAdhan(_ id: String) {
+    let changed = currentAdhanOption().id != id
     UserDefaults.standard.set(id, forKey: kAdhanSoundKey)
+    // Cut times are meaningful only for the recording they were created
+    // against. A newly selected source starts safely at its full duration.
+    if changed { resetAdhanAudioCuts() }
+}
+
+func currentAdhanAudioURL() -> URL? {
+    let option = currentAdhanOption()
+    guard !option.fileName.isEmpty else { return nil }
+    let base = option.fileName.replacingOccurrences(of: ".mp3", with: "")
+    return Bundle.main.url(forResource: base, withExtension: "mp3")
 }
 
 // ============================================================================
@@ -15688,7 +15743,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         if selectedSection == .adhan {
             // Complete Adhan controls live here as well as in the compact popup.
             sectionHeader(t("settings.section.adhan"))
-            let (adhanCard, adhanH) = beginCard(rows: 6)
+            let (adhanCard, adhanH) = beginCard(rows: 8)
         adhanCheck = NSButton(checkboxWithTitle: t("settings.adhan.play"), target: self,
                               action: #selector(adhanEnabledChanged(_:)))
         adhanCheck.state = UserDefaults.standard.bool(forKey: kAdhanEnabled) ? .on : .off
@@ -15702,6 +15757,30 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         adhanSoundPopup.target = self
         adhanSoundPopup.action = #selector(adhanSoundChanged(_:))
         addRow(adhanCard, label: t("settings.adhan.sound"), control: adhanSoundPopup)
+
+        let regularCutButton = NSButton(title: adhanCutSummary(for: .regular),
+                                        target: self,
+                                        action: #selector(editAdhanCut(_:)))
+        regularCutButton.tag = AdhanCutTarget.regular.rawValue
+        regularCutButton.bezelStyle = .rounded
+        regularCutButton.image = templateSymbol("waveform.badge.scissors",
+                                                 pointSize: 12,
+                                                 weight: .medium)
+        regularCutButton.imagePosition = .imageLeading
+        regularCutButton.setAccessibilityHelp(adhanStudioText("hint"))
+        addRow(adhanCard, label: adhanStudioText("regular"), control: regularCutButton)
+
+        let fajrCutButton = NSButton(title: adhanCutSummary(for: .fajr),
+                                     target: self,
+                                     action: #selector(editAdhanCut(_:)))
+        fajrCutButton.tag = AdhanCutTarget.fajr.rawValue
+        fajrCutButton.bezelStyle = .rounded
+        fajrCutButton.image = templateSymbol("waveform.badge.scissors",
+                                              pointSize: 12,
+                                              weight: .medium)
+        fajrCutButton.imagePosition = .imageLeading
+        fajrCutButton.setAccessibilityHelp(adhanStudioText("hint"))
+        addRow(adhanCard, label: adhanStudioText("fajr"), control: fajrCutButton)
 
         adhanOutputPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         adhanOutputPopup.target = self
@@ -15964,6 +16043,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     @objc private func adhanSoundChanged(_ sender: NSPopUpButton) {
         guard adhanCatalog.indices.contains(sender.indexOfSelectedItem) else { return }
         setCurrentAdhan(adhanCatalog[sender.indexOfSelectedItem].id)
+        rebuildSelectedSection()
+    }
+    @objc private func editAdhanCut(_ sender: NSButton) {
+        guard let target = AdhanCutTarget(rawValue: sender.tag) else { return }
+        let studio = AdhanAudioStudioController(initialTarget: target)
+        studio.onSave = { [weak self] in self?.rebuildSelectedSection() }
+        presentAsSheet(studio)
     }
     @objc private func adhanOutputChanged(_ sender: NSPopUpButton) {
         let index = sender.indexOfSelectedItem - 1
@@ -16164,6 +16250,105 @@ private func adhkarModeText(_ key: String) -> String {
     let raw = (code == "ar" ? adhkarModeArabic[key] : localized[code]?[key])
         ?? adhkarModeEnglish[key] ?? key
     return applyingArabicDigitPreference(raw, languageCode: code)
+}
+
+private func adhanStudioText(_ key: String) -> String {
+    let strings: [String: [String: String]] = [
+        "en": [
+            "title": "Adhan Audio Studio", "hint": "Create two versions from the same recording. Drag the handles to choose exactly what each prayer plays.",
+            "regular": "Other prayers", "fajr": "Fajr", "recording": "Recording",
+            "preview": "Preview selection", "stop": "Stop", "start": "Start = playhead",
+            "end": "End = playhead", "selection": "Selection", "full": "Full recording",
+            "edit": "Edit…", "reset": "Reset to full", "save": "Save versions",
+            "done": "Done", "saved": "Both Adhan versions are saved.",
+            "unavailable": "Choose an Adhan recording to edit. The system sound cannot be cut."
+        ],
+        "fr": [
+            "title": "Studio audio de l’adhan", "hint": "Créez deux versions du même enregistrement. Déplacez les poignées pour choisir précisément ce que chaque prière diffuse.",
+            "regular": "Autres prières", "fajr": "Fajr", "recording": "Enregistrement",
+            "preview": "Écouter la sélection", "stop": "Arrêter", "start": "Début = curseur",
+            "end": "Fin = curseur", "selection": "Sélection", "full": "Enregistrement complet",
+            "edit": "Modifier…", "reset": "Rétablir l’intégralité", "save": "Enregistrer les versions",
+            "done": "Terminé", "saved": "Les deux versions de l’adhan sont enregistrées.",
+            "unavailable": "Choisissez un enregistrement d’adhan. Le son système ne peut pas être découpé."
+        ],
+        "es": [
+            "title": "Estudio de audio del adhan", "hint": "Crea dos versiones de la misma grabación. Arrastra los controles para elegir exactamente qué reproduce cada oración.",
+            "regular": "Otras oraciones", "fajr": "Fajr", "recording": "Grabación",
+            "preview": "Escuchar selección", "stop": "Detener", "start": "Inicio = cursor",
+            "end": "Fin = cursor", "selection": "Selección", "full": "Grabación completa",
+            "edit": "Editar…", "reset": "Restablecer completa", "save": "Guardar versiones",
+            "done": "Listo", "saved": "Las dos versiones del adhan están guardadas.",
+            "unavailable": "Elige una grabación de adhan. El sonido del sistema no se puede recortar."
+        ],
+        "ar": [
+            "title": "استوديو صوت الأذان", "hint": "أنشئ نسختين من التسجيل نفسه. حرّك المقبضين لتحديد المقطع الذي يُشغّل لكل صلاة بدقة.",
+            "regular": "باقي الصلوات", "fajr": "الفجر", "recording": "التسجيل",
+            "preview": "استماع للمقطع", "stop": "إيقاف", "start": "البداية عند المؤشر",
+            "end": "النهاية عند المؤشر", "selection": "المقطع", "full": "التسجيل كاملًا",
+            "edit": "تحرير…", "reset": "إعادة التسجيل كاملًا", "save": "حفظ النسختين",
+            "done": "تم", "saved": "تم حفظ نسختي الأذان.",
+            "unavailable": "اختر تسجيل أذان لتحريره. لا يمكن قص صوت النظام."
+        ],
+        "zh": [
+            "title": "宣礼音频工作室", "hint": "从同一录音创建两个版本。拖动手柄，精确选择每次礼拜播放的片段。",
+            "regular": "其他礼拜", "fajr": "晨礼", "recording": "录音", "preview": "试听所选片段",
+            "stop": "停止", "start": "起点 = 播放头", "end": "终点 = 播放头", "selection": "所选片段",
+            "full": "完整录音", "edit": "编辑…", "reset": "恢复完整录音", "save": "保存两个版本",
+            "done": "完成", "saved": "两个宣礼版本均已保存。", "unavailable": "请选择宣礼录音；系统声音无法剪辑。"
+        ],
+        "hi": [
+            "title": "अज़ान ऑडियो स्टूडियो", "hint": "एक ही रिकॉर्डिंग से दो संस्करण बनाएँ। हर नमाज़ में बजने वाला सटीक भाग चुनने के लिए हैंडल खींचें।",
+            "regular": "अन्य नमाज़ें", "fajr": "फ़ज्र", "recording": "रिकॉर्डिंग", "preview": "चयन सुनें",
+            "stop": "रोकें", "start": "आरंभ = प्लेहेड", "end": "अंत = प्लेहेड", "selection": "चयन",
+            "full": "पूरी रिकॉर्डिंग", "edit": "संपादित करें…", "reset": "पूरी रिकॉर्डिंग", "save": "संस्करण सहेजें",
+            "done": "पूर्ण", "saved": "अज़ान के दोनों संस्करण सहेजे गए।", "unavailable": "संपादन के लिए अज़ान रिकॉर्डिंग चुनें। सिस्टम ध्वनि काटी नहीं जा सकती।"
+        ],
+        "bn": [
+            "title": "আজান অডিও স্টুডিও", "hint": "একই রেকর্ডিং থেকে দুটি সংস্করণ তৈরি করুন। প্রতিটি নামাজে ঠিক কোন অংশ বাজবে তা বেছে নিতে হ্যান্ডেল টানুন।",
+            "regular": "অন্যান্য নামাজ", "fajr": "ফজর", "recording": "রেকর্ডিং", "preview": "নির্বাচন শুনুন",
+            "stop": "থামান", "start": "শুরু = প্লেহেড", "end": "শেষ = প্লেহেড", "selection": "নির্বাচন",
+            "full": "সম্পূর্ণ রেকর্ডিং", "edit": "সম্পাদনা…", "reset": "সম্পূর্ণটিতে ফিরুন", "save": "সংস্করণ সংরক্ষণ",
+            "done": "সম্পন্ন", "saved": "আজানের দুটি সংস্করণই সংরক্ষিত।", "unavailable": "সম্পাদনার জন্য আজান রেকর্ডিং বেছে নিন। সিস্টেম সাউন্ড কাটা যায় না।"
+        ],
+        "ru": [
+            "title": "Аудиостудия азана", "hint": "Создайте две версии одной записи. Перетаскивайте маркеры, чтобы точно выбрать фрагмент для каждой молитвы.",
+            "regular": "Другие молитвы", "fajr": "Фаджр", "recording": "Запись", "preview": "Прослушать фрагмент",
+            "stop": "Остановить", "start": "Начало = курсор", "end": "Конец = курсор", "selection": "Фрагмент",
+            "full": "Полная запись", "edit": "Изменить…", "reset": "Вернуть полную запись", "save": "Сохранить версии",
+            "done": "Готово", "saved": "Обе версии азана сохранены.", "unavailable": "Выберите запись азана. Системный звук обрезать нельзя."
+        ],
+        "pt": [
+            "title": "Estúdio de áudio do adhan", "hint": "Crie duas versões da mesma gravação. Arraste os controlos para escolher exatamente o que cada oração reproduz.",
+            "regular": "Outras orações", "fajr": "Fajr", "recording": "Gravação", "preview": "Ouvir seleção",
+            "stop": "Parar", "start": "Início = cursor", "end": "Fim = cursor", "selection": "Seleção",
+            "full": "Gravação completa", "edit": "Editar…", "reset": "Repor gravação completa", "save": "Guardar versões",
+            "done": "Concluído", "saved": "As duas versões do adhan foram guardadas.", "unavailable": "Escolha uma gravação de adhan. O som do sistema não pode ser cortado."
+        ],
+        "ur": [
+            "title": "اذان آڈیو اسٹوڈیو", "hint": "ایک ہی ریکارڈنگ سے دو ورژن بنائیں۔ ہر نماز کے لیے درست حصہ منتخب کرنے کو ہینڈلز کھینچیں۔",
+            "regular": "دیگر نمازیں", "fajr": "فجر", "recording": "ریکارڈنگ", "preview": "منتخب حصہ سنیں",
+            "stop": "روکیں", "start": "آغاز = پلے ہیڈ", "end": "اختتام = پلے ہیڈ", "selection": "انتخاب",
+            "full": "مکمل ریکارڈنگ", "edit": "ترمیم…", "reset": "مکمل ریکارڈنگ بحال کریں", "save": "دونوں ورژن محفوظ کریں",
+            "done": "مکمل", "saved": "اذان کے دونوں ورژن محفوظ ہو گئے۔", "unavailable": "ترمیم کے لیے اذان ریکارڈنگ منتخب کریں۔ سسٹم آواز نہیں کاٹی جا سکتی۔"
+        ]
+    ]
+    let code = Localizer.shared.current.code
+    let raw = strings[code]?[key] ?? strings["en"]?[key] ?? key
+    return applyingArabicDigitPreference(raw, languageCode: code)
+}
+
+private func formatAdhanCutTime(_ time: TimeInterval) -> String {
+    let minutes = Int(max(0, time)) / 60
+    let seconds = max(0, time) - Double(minutes * 60)
+    return localizedInterfaceDigits(String(format: "%d:%04.1f", minutes, seconds))
+}
+
+private func adhanCutSummary(for target: AdhanCutTarget) -> String {
+    guard let cut = adhanAudioCut(for: target) else {
+        return "\(adhanStudioText("full")) · \(adhanStudioText("edit"))"
+    }
+    return "\(formatAdhanCutTime(cut.start))–\(formatAdhanCutTime(cut.end)) · \(adhanStudioText("edit"))"
 }
 
 /// Streams an audio file once and reduces it to peak buckets for drawing.
@@ -16650,6 +16835,301 @@ final class AdhkarAudioStudioController: NSViewController {
             return
         }
         onAssignAudio?(collectionItems[index].id, ref)
+    }
+
+    @objc private func doneTapped() {
+        stopPreview()
+        dismiss(nil)
+    }
+}
+
+// ============================================================================
+// MARK: Adhan Audio Studio — shared source, independent Fajr/regular cuts
+// ============================================================================
+
+/// A focused, non-destructive editor for the selected Adhan recording. Both
+/// profiles point at the same bundled source and persist only their playback
+/// windows, so the canonical audio is never rewritten or duplicated.
+final class AdhanAudioStudioController: NSViewController {
+    var onSave: (() -> Void)?
+
+    private let initialTarget: AdhanCutTarget
+    private var currentTarget: AdhanCutTarget
+    private var targetControl: NSSegmentedControl!
+    private var waveform: AdhkarWaveformView!
+    private var selectionLabel: NSTextField!
+    private var statusLabel: NSTextField!
+    private var previewButton: NSButton!
+    private var resetButton: NSButton!
+    private var saveButton: NSButton!
+    private var previewPlayer: AVAudioPlayer?
+    private var previewTimer: Timer?
+    private var sourceDuration: TimeInterval = 0
+    private var drafts: [AdhanCutTarget: AdhanAudioCut] = [:]
+
+    init(initialTarget: AdhanCutTarget) {
+        self.initialTarget = initialTarget
+        self.currentTarget = initialTarget
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    deinit {
+        previewTimer?.invalidate()
+        previewPlayer?.stop()
+    }
+
+    override func loadView() {
+        let isRTL = Localizer.shared.isRTL
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 760, height: 500))
+        root.userInterfaceLayoutDirection = isRTL ? .rightToLeft : .leftToRight
+
+        let title = NSTextField(labelWithString: adhanStudioText("title"))
+        title.font = Localizer.shared.font(size: 19, weight: .bold)
+        title.alignment = isRTL ? .right : .left
+
+        let hint = NSTextField(wrappingLabelWithString: adhanStudioText("hint"))
+        hint.font = Localizer.shared.font(size: 12)
+        hint.textColor = .secondaryLabelColor
+        hint.maximumNumberOfLines = 2
+        hint.alignment = isRTL ? .right : .left
+
+        targetControl = NSSegmentedControl(
+            labels: [adhanStudioText("regular"), adhanStudioText("fajr")],
+            trackingMode: .selectOne,
+            target: self,
+            action: #selector(targetChanged(_:)))
+        targetControl.selectedSegment = initialTarget.rawValue
+        targetControl.segmentStyle = .rounded
+        targetControl.setAccessibilityLabel(adhanStudioText("selection"))
+
+        let sourceSymbol = NSImageView()
+        sourceSymbol.image = templateSymbol("waveform", pointSize: 15, weight: .medium)
+        sourceSymbol.contentTintColor = .appGreenAccent
+        sourceSymbol.translatesAutoresizingMaskIntoConstraints = false
+        sourceSymbol.widthAnchor.constraint(equalToConstant: 22).isActive = true
+        let sourceName = NSTextField(labelWithString: currentAdhanOption().name)
+        sourceName.font = Localizer.shared.font(size: 13, weight: .medium)
+        sourceName.lineBreakMode = .byTruncatingTail
+        let sourceCaption = NSTextField(labelWithString: adhanStudioText("recording"))
+        sourceCaption.font = Localizer.shared.font(size: 11)
+        sourceCaption.textColor = .secondaryLabelColor
+        let sourceText = NSStackView(views: [sourceName, sourceCaption])
+        sourceText.orientation = .vertical
+        sourceText.spacing = 1
+        sourceText.alignment = isRTL ? .trailing : .leading
+        let sourceRow = NSStackView(views: [sourceSymbol, sourceText, NSView()])
+        sourceRow.orientation = .horizontal
+        sourceRow.spacing = 9
+        sourceRow.edgeInsets = NSEdgeInsets(top: 9, left: 12, bottom: 9, right: 12)
+        sourceRow.wantsLayer = true
+        sourceRow.layer?.cornerRadius = 10
+        sourceRow.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+
+        waveform = AdhkarWaveformView()
+        waveform.translatesAutoresizingMaskIntoConstraints = false
+        waveform.onSelectionChange = { [weak self] in
+            self?.captureDraft()
+            self?.refreshLabels()
+        }
+        waveform.onSeek = { [weak self] time in self?.seekPreview(to: time) }
+
+        selectionLabel = NSTextField(labelWithString: "")
+        selectionLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        selectionLabel.baseWritingDirection = .leftToRight
+        selectionLabel.alignment = .left
+
+        previewButton = NSButton(title: adhanStudioText("preview"),
+                                 target: self, action: #selector(previewTapped))
+        previewButton.bezelStyle = .rounded
+        previewButton.keyEquivalent = " "
+        let setStart = NSButton(title: adhanStudioText("start"),
+                                target: self, action: #selector(setStartTapped))
+        setStart.bezelStyle = .rounded
+        let setEnd = NSButton(title: adhanStudioText("end"),
+                              target: self, action: #selector(setEndTapped))
+        setEnd.bezelStyle = .rounded
+        let transport = NSStackView(views: [previewButton, setStart, setEnd,
+                                            NSView(), selectionLabel])
+        transport.orientation = .horizontal
+        transport.spacing = 8
+
+        statusLabel = NSTextField(labelWithString: "")
+        statusLabel.font = Localizer.shared.font(size: 11.5)
+        statusLabel.textColor = .secondaryLabelColor
+        statusLabel.alignment = isRTL ? .right : .left
+
+        resetButton = NSButton(title: adhanStudioText("reset"),
+                               target: self, action: #selector(resetTapped))
+        resetButton.bezelStyle = .rounded
+        saveButton = NSButton(title: adhanStudioText("save"),
+                              target: self, action: #selector(saveTapped))
+        saveButton.bezelStyle = .rounded
+        saveButton.keyEquivalent = "\r"
+        saveButton.contentTintColor = .appGreenAccent
+        let done = NSButton(title: adhanStudioText("done"),
+                            target: self, action: #selector(doneTapped))
+        done.bezelStyle = .rounded
+        let footer = NSStackView(views: [resetButton, NSView(), saveButton, done])
+        footer.orientation = .horizontal
+        footer.spacing = 8
+
+        let stack = NSStackView(views: [title, hint, targetControl, sourceRow,
+                                        waveform, transport, statusLabel, footer])
+        stack.orientation = .vertical
+        stack.spacing = 12
+        stack.alignment = .leading
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 22),
+            stack.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -22),
+            stack.topAnchor.constraint(equalTo: root.topAnchor, constant: 20),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -18),
+            hint.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            targetControl.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            targetControl.heightAnchor.constraint(equalToConstant: 34),
+            sourceRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            waveform.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            waveform.heightAnchor.constraint(equalToConstant: 170),
+            transport.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            statusLabel.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            footer.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+        self.view = root
+        preferredContentSize = NSSize(width: 760, height: 500)
+        loadSource()
+    }
+
+    private func loadSource() {
+        waveform.samples = []
+        waveform.duration = 0
+        guard let url = currentAdhanAudioURL() else {
+            statusLabel.stringValue = adhanStudioText("unavailable")
+            previewButton.isEnabled = false
+            resetButton.isEnabled = false
+            saveButton.isEnabled = false
+            return
+        }
+        loadAdhkarWaveform(url: url, buckets: 640) { [weak self] samples, duration in
+            guard let self else { return }
+            self.sourceDuration = duration
+            self.waveform.samples = samples
+            self.waveform.duration = duration
+            for target in AdhanCutTarget.allCases {
+                if let cut = adhanAudioCut(for: target), cut.start < duration {
+                    self.drafts[target] = AdhanAudioCut(
+                        start: min(max(0, cut.start), max(0, duration - 0.15)),
+                        end: min(max(cut.start + 0.15, cut.end), duration))
+                } else {
+                    self.drafts[target] = AdhanAudioCut(start: 0, end: duration)
+                }
+            }
+            self.showDraft(for: self.currentTarget)
+        }
+    }
+
+    private func captureDraft() {
+        guard sourceDuration > 0, waveform.selectionEnd > waveform.selectionStart else { return }
+        drafts[currentTarget] = AdhanAudioCut(start: waveform.selectionStart,
+                                              end: waveform.selectionEnd)
+        statusLabel?.stringValue = ""
+    }
+
+    private func showDraft(for target: AdhanCutTarget) {
+        stopPreview()
+        let cut = drafts[target] ?? AdhanAudioCut(start: 0, end: sourceDuration)
+        waveform.selectionStart = cut.start
+        waveform.selectionEnd = cut.end
+        waveform.playhead = nil
+        refreshLabels()
+    }
+
+    private func refreshLabels() {
+        guard selectionLabel != nil else { return }
+        selectionLabel.stringValue = "\(adhanStudioText("selection")): "
+            + "\(formatAdhanCutTime(waveform.selectionStart)) — "
+            + formatAdhanCutTime(waveform.selectionEnd)
+    }
+
+    private func ensurePlayer() -> AVAudioPlayer? {
+        if let previewPlayer { return previewPlayer }
+        guard let url = currentAdhanAudioURL(),
+              let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
+        let wantedUID = UserDefaults.standard.string(forKey: kAdhanAudioDevice) ?? ""
+        if !wantedUID.isEmpty { player.currentDevice = wantedUID }
+        player.prepareToPlay()
+        previewPlayer = player
+        return player
+    }
+
+    private func seekPreview(to time: TimeInterval) {
+        guard let player = ensurePlayer() else { return }
+        player.currentTime = time
+    }
+
+    @objc private func targetChanged(_ sender: NSSegmentedControl) {
+        captureDraft()
+        guard let next = AdhanCutTarget(rawValue: sender.selectedSegment) else { return }
+        currentTarget = next
+        showDraft(for: next)
+    }
+
+    @objc private func previewTapped() {
+        if previewPlayer?.isPlaying == true { stopPreview(); return }
+        guard let player = ensurePlayer(), waveform.selectionEnd > waveform.selectionStart else {
+            NSSound.beep()
+            return
+        }
+        player.currentTime = waveform.selectionStart
+        player.play()
+        previewButton.title = adhanStudioText("stop")
+        previewTimer?.invalidate()
+        previewTimer = Timer.scheduledTimer(withTimeInterval: 0.04, repeats: true) {
+            [weak self] _ in
+            guard let self, let player = self.previewPlayer else { return }
+            self.waveform.playhead = player.currentTime
+            if !player.isPlaying || player.currentTime >= self.waveform.selectionEnd {
+                self.stopPreview()
+            }
+        }
+    }
+
+    private func stopPreview() {
+        previewTimer?.invalidate()
+        previewTimer = nil
+        previewPlayer?.pause()
+        previewButton?.title = adhanStudioText("preview")
+    }
+
+    @objc private func setStartTapped() {
+        guard let playhead = waveform.playhead else { NSSound.beep(); return }
+        waveform.selectionStart = min(playhead, waveform.selectionEnd - 0.15)
+    }
+
+    @objc private func setEndTapped() {
+        guard let playhead = waveform.playhead else { NSSound.beep(); return }
+        waveform.selectionEnd = max(playhead, waveform.selectionStart + 0.15)
+    }
+
+    @objc private func resetTapped() {
+        guard sourceDuration > 0 else { return }
+        drafts[currentTarget] = AdhanAudioCut(start: 0, end: sourceDuration)
+        showDraft(for: currentTarget)
+    }
+
+    @objc private func saveTapped() {
+        captureDraft()
+        guard sourceDuration > 0 else { return }
+        for target in AdhanCutTarget.allCases {
+            let cut = drafts[target] ?? AdhanAudioCut(start: 0, end: sourceDuration)
+            let isFull = cut.start <= 0.05 && cut.end >= sourceDuration - 0.05
+            saveAdhanAudioCut(isFull ? nil : cut, for: target)
+        }
+        statusLabel.stringValue = adhanStudioText("saved")
+        statusLabel.textColor = .systemGreen
+        onSave?()
     }
 
     @objc private func doneTapped() {
@@ -19210,6 +19690,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     var secondTimer:  Timer?
     var refreshTimer: Timer?
     var adhanPlayer:  AVAudioPlayer?
+    var adhanCutTimer: Timer?
 
     /// Is an adhan currently playing? Computed from the player so it reflects
     /// natural stop (file ended) even if nothing explicitly cleared the ref.
@@ -21204,7 +21685,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                         notify(prayer: localizedPrayerName(at: i), time: info.times[i])
                     }
                 case .adhan:
-                    if globalAdhan { playAdhan() }
+                    if globalAdhan { playAdhan(forPrayer: i) }
                     if globalNotif {
                         notify(prayer: localizedPrayerName(at: i), time: info.times[i])
                     }
@@ -21236,26 +21717,48 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         UNUserNotificationCenter.current().add(req, withCompletionHandler: nil)
     }
 
-    func playAdhan() {
+    func playAdhan(forPrayer prayerIndex: Int? = nil) {
         // Guarantee only one playback at a time — if the user spam-taps Test,
         // cut the previous player off before starting the next one.
         scheduledAdhkarDelayTimer?.invalidate()
         scheduledAdhkarDelayTimer = nil
         completedAdhanAllowsQueuedAdhkar = false
         if !scheduledAdhkarQueue.isEmpty { queuedAdhkarIsWaitingForAdhan = true }
+        adhanCutTimer?.invalidate()
+        adhanCutTimer = nil
         adhanPlayer?.stop()
         let opt = currentAdhanOption()
+        let cutTarget: AdhanCutTarget = prayerIndex == 0 ? .fajr : .regular
+        let selectedCut = adhanAudioCut(for: cutTarget)
         let wantedUID = UserDefaults.standard.string(forKey: kAdhanAudioDevice) ?? ""
         func route(_ p: AVAudioPlayer) {
             if !wantedUID.isEmpty { p.currentDevice = wantedUID }
         }
-        func start(_ p: AVAudioPlayer) {
+        func start(_ p: AVAudioPlayer, cut: AdhanAudioCut?) {
             adhanPlayer = p
             p.delegate = self      // so `audioPlayerDidFinishPlaying` resets UI
             route(p)
             p.volume = 1.0
             p.prepareToPlay()
+            var cutEnd: TimeInterval?
+            if let cut, cut.start < p.duration {
+                let end = min(cut.end, p.duration)
+                if end - cut.start >= 0.15 {
+                    p.currentTime = max(0, cut.start)
+                    if end < p.duration - 0.03 { cutEnd = end }
+                }
+            }
             p.play()
+            if let cutEnd {
+                adhanCutTimer = Timer.scheduledTimer(withTimeInterval: 0.04,
+                                                      repeats: true) {
+                    [weak self, weak p] _ in
+                    guard let self, let p else { return }
+                    if !p.isPlaying || p.currentTime >= cutEnd {
+                        self.completeAdhanPlayback(p)
+                    }
+                }
+            }
             onAdhanStateChanged?()
             syncStopAdhanStatusItem()
         }
@@ -21264,7 +21767,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             if let url = Bundle.main.url(forResource: base, withExtension: "mp3"),
                FileManager.default.fileExists(atPath: url.path),
                let p = try? AVAudioPlayer(contentsOf: url) {
-                start(p)
+                start(p, cut: selectedCut)
                 return
             }
         }
@@ -21274,7 +21777,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             .first?.appendingPathComponent("adhan.mp3")
         for case let url? in [legacy, userAdhan] where FileManager.default.fileExists(atPath: url.path) {
             if let p = try? AVAudioPlayer(contentsOf: url) {
-                start(p)
+                // A cut created for the selected catalog recording must never
+                // be applied to an unrelated fallback file.
+                start(p, cut: nil)
                 return
             }
         }
@@ -21285,6 +21790,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// nothing is playing (no-ops). Notifies observers so the Test button
     /// can swap back to a play icon.
     func stopAdhan() {
+        adhanCutTimer?.invalidate()
+        adhanCutTimer = nil
         adhanPlayer?.stop()
         adhanPlayer = nil
         onAdhanStateChanged?()
@@ -21293,16 +21800,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     // MARK: - AVAudioPlayerDelegate
+    private func completeAdhanPlayback(_ player: AVAudioPlayer) {
+        guard adhanPlayer === player else { return }
+        adhanCutTimer?.invalidate()
+        adhanCutTimer = nil
+        player.stop()
+        adhanPlayer = nil
+        onAdhanStateChanged?()
+        syncStopAdhanStatusItem()
+        scheduleQueuedAdhkarAfterAdhan()
+    }
+
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         let wasAdhan = adhanPlayer === player
-        if wasAdhan { adhanPlayer = nil }
+        if wasAdhan {
+            adhanCutTimer?.invalidate()
+            adhanCutTimer = nil
+            adhanPlayer = nil
+        }
         onAdhanStateChanged?()
         syncStopAdhanStatusItem()
         if wasAdhan { scheduleQueuedAdhkarAfterAdhan() }
     }
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         let wasAdhan = adhanPlayer === player
-        if wasAdhan { adhanPlayer = nil }
+        if wasAdhan {
+            adhanCutTimer?.invalidate()
+            adhanCutTimer = nil
+            adhanPlayer = nil
+        }
         onAdhanStateChanged?()
         syncStopAdhanStatusItem()
         if wasAdhan { scheduleQueuedAdhkarAfterAdhan() }
