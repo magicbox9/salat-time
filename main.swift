@@ -124,7 +124,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.32.2"
+let kAppVersion          = "3.32.3"
 
 // ============================================================================
 // MARK: Theme palette
@@ -8984,6 +8984,7 @@ final class PrayerDisplayModeButton: NSButton {
     private let symbolName: String
     private let displayStyle: DockDisplayStyle
     private let buttonRole: DockButtonRole
+    private let compact: Bool
     private var localizedLabel: String
     private let circleShape = CAShapeLayer()
     private var trackingAreaRef: NSTrackingArea?
@@ -9002,13 +9003,17 @@ final class PrayerDisplayModeButton: NSButton {
          target: AnyObject?, action: Selector,
          contextLabel: String = "",
          displayStyle: DockDisplayStyle = .icons,
-         role: DockButtonRole = .standard) {
+         role: DockButtonRole = .standard,
+         compact: Bool = false) {
         self.modeIndex = modeIndex
         self.symbolName = symbol
         self.displayStyle = displayStyle
         self.buttonRole = role
+        self.compact = compact
         self.localizedLabel = label
-        super.init(frame: NSRect(x: 0, y: 0, width: 48, height: 48))
+        let initialSide: CGFloat = compact ? 34 : 48
+        super.init(frame: NSRect(x: 0, y: 0,
+                                 width: initialSide, height: initialSide))
         self.target = target
         self.action = action
         self.tag = modeIndex
@@ -9028,10 +9033,12 @@ final class PrayerDisplayModeButton: NSButton {
         self.alignment = .center
         self.focusRingType = .default
         self.setButtonType(.toggle)
-        self.image = templateSymbol(symbol, pointSize: 17, weight: .semibold)
+        self.image = templateSymbol(symbol, pointSize: compact ? 13 : 17,
+                                    weight: .semibold)
         self.translatesAutoresizingMaskIntoConstraints = false
         self.wantsLayer = true
-        self.layer?.cornerRadius = displayStyle == .icons ? 24 : 10
+        self.layer?.cornerRadius = displayStyle == .icons
+            ? initialSide / 2 : (compact ? 8 : 10)
         self.layer?.masksToBounds = true
         if displayStyle == .icons {
             circleShape.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
@@ -9105,21 +9112,26 @@ final class PrayerDisplayModeButton: NSButton {
     }
 
     func preferredWidth(vertical: Bool) -> CGFloat {
+        let labelFontSize: CGFloat = compact ? 11 : 12.5
         switch displayStyle {
         case .icons:
-            return 48
+            return compact ? 34 : 48
         case .iconsText:
-            if vertical { return 168 }
+            if vertical { return compact ? 142 : 168 }
             let labelWidth = (localizedLabel as NSString).size(
-                withAttributes: [.font: NSFont.systemFont(ofSize: 12.5,
+                withAttributes: [.font: NSFont.systemFont(ofSize: labelFontSize,
                                                            weight: .semibold)]).width
-            return min(184, max(96, ceil(labelWidth) + 56))
+            return compact
+                ? min(148, max(76, ceil(labelWidth) + 44))
+                : min(184, max(96, ceil(labelWidth) + 56))
         case .text:
-            if vertical { return 144 }
+            if vertical { return compact ? 126 : 144 }
             let labelWidth = (localizedLabel as NSString).size(
-                withAttributes: [.font: NSFont.systemFont(ofSize: 12.5,
+                withAttributes: [.font: NSFont.systemFont(ofSize: labelFontSize,
                                                            weight: .semibold)]).width
-            return min(170, max(76, ceil(labelWidth) + 28))
+            return compact
+                ? min(136, max(60, ceil(labelWidth) + 22))
+                : min(170, max(76, ceil(labelWidth) + 28))
         }
     }
 
@@ -9141,7 +9153,8 @@ final class PrayerDisplayModeButton: NSButton {
             attributedTitle = NSAttributedString(
                 string: localizedLabel,
                 attributes: [
-                    .font: NSFont.systemFont(ofSize: 12.5, weight: .semibold),
+                    .font: NSFont.systemFont(ofSize: compact ? 11 : 12.5,
+                                             weight: .semibold),
                     .foregroundColor: foreground,
                 ])
         }
@@ -9173,9 +9186,11 @@ final class PrayerDisplayModeButton: NSButton {
 
     private func circularLabelSymbol(foreground: NSColor, selected: Bool,
                                      dark: Bool) -> NSImage? {
-        guard let base = templateSymbol(symbolName, pointSize: 15,
+        guard let base = templateSymbol(symbolName, pointSize: compact ? 12 : 15,
                                         weight: .semibold) else { return nil }
-        let size = NSSize(width: 32, height: 32)
+        let circleSide: CGFloat = compact ? 25 : 32
+        let symbolSide: CGFloat = compact ? 13 : 17
+        let size = NSSize(width: circleSide, height: circleSide)
         let result = NSImage(size: size, flipped: false) { rect in
             let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1))
             (selected
@@ -9193,9 +9208,9 @@ final class PrayerDisplayModeButton: NSButton {
             foreground.set()
             NSRect(origin: .zero, size: symbol.size).fill(using: .sourceIn)
             symbol.unlockFocus()
-            let target = NSRect(x: (rect.width - 17) / 2,
-                                y: (rect.height - 17) / 2,
-                                width: 17, height: 17)
+            let target = NSRect(x: (rect.width - symbolSide) / 2,
+                                y: (rect.height - symbolSide) / 2,
+                                width: symbolSide, height: symbolSide)
             symbol.draw(in: target, from: .zero, operation: .sourceOver,
                         fraction: 1, respectFlipped: true, hints: nil)
             return true
@@ -9205,9 +9220,9 @@ final class PrayerDisplayModeButton: NSButton {
     }
 }
 
-/// Stable primary navigation plus a destination-specific controls drawer.
-/// The two capsules are separate both visually and structurally: changing a
-/// prayer/Qur'an/adhkar view never reorders the three primary destinations.
+/// Stable primary navigation plus an inset destination-specific controls
+/// drawer. Main destinations remain large and constant; the selected
+/// destination reveals a smaller, tinted control group immediately beside it.
 final class MainDockView: NSView {
     private static let navDefinitions: [(symbol: String, labelKey: () -> String)] = [
         ("sun.and.horizon", { t("settings.section.adhan") }),
@@ -9343,10 +9358,11 @@ final class MainDockView: NSView {
     private func configureDrawerHost() {
         drawerHost.translatesAutoresizingMaskIntoConstraints = false
         drawerHost.wantsLayer = true
+        drawerHost.layer?.cornerRadius = 20
         drawerHost.layer?.masksToBounds = true
         drawerStack.orientation = vertical ? .vertical : .horizontal
         drawerStack.alignment = vertical ? .centerX : .centerY
-        drawerStack.spacing = 7
+        drawerStack.spacing = 4
         drawerStack.userInterfaceLayoutDirection = Localizer.shared.isRTL
             ? .rightToLeft : .leftToRight
         drawerStack.translatesAutoresizingMaskIntoConstraints = false
@@ -9356,23 +9372,27 @@ final class MainDockView: NSView {
             drawerAxisConstraint = drawerHost.heightAnchor.constraint(equalToConstant: 0)
             NSLayoutConstraint.activate([
                 drawerHost.widthAnchor.constraint(equalToConstant:
-                    Self.primaryCrossAxisSize(for: displayStyle) - 16),
-                drawerStack.topAnchor.constraint(equalTo: drawerHost.topAnchor),
+                    Self.primaryCrossAxisSize(for: displayStyle) - 22),
+                drawerStack.topAnchor.constraint(equalTo: drawerHost.topAnchor,
+                                                   constant: 5),
                 drawerStack.centerXAnchor.constraint(equalTo: drawerHost.centerXAnchor),
             ])
         } else {
             drawerAxisConstraint = drawerHost.widthAnchor.constraint(equalToConstant: 0)
             NSLayoutConstraint.activate([
-                drawerHost.heightAnchor.constraint(equalToConstant: 48),
-                drawerStack.leadingAnchor.constraint(equalTo: drawerHost.leadingAnchor),
+                drawerHost.heightAnchor.constraint(equalToConstant: 42),
+                drawerStack.leadingAnchor.constraint(equalTo: drawerHost.leadingAnchor,
+                                                       constant: 4),
                 drawerStack.centerYAnchor.constraint(equalTo: drawerHost.centerYAnchor),
             ])
         }
         drawerAxisConstraint.isActive = true
     }
 
-    private func constrainButton(_ button: PrayerDisplayModeButton) {
-        let height = button.heightAnchor.constraint(equalToConstant: 48)
+    private func constrainButton(_ button: PrayerDisplayModeButton,
+                                 compact: Bool = false) {
+        let height = button.heightAnchor.constraint(
+            equalToConstant: compact ? 34 : 48)
         let width: NSLayoutConstraint
         if displayStyle == .icons {
             width = button.widthAnchor.constraint(equalTo: button.heightAnchor)
@@ -9399,8 +9419,8 @@ final class MainDockView: NSView {
                     Self.navDefinitions.indices.contains($0)
                         ? Self.navDefinitions[$0].labelKey() : nil
                 } ?? featureText("main.destinations"),
-                displayStyle: displayStyle)
-            constrainButton(button)
+                displayStyle: displayStyle, compact: true)
+            constrainButton(button, compact: true)
             button.isModeSelected = index == selected
             modeButtons.append(button)
             drawerStack.addArrangedSubview(button)
@@ -9464,6 +9484,11 @@ final class MainDockView: NSView {
             capsule.layer?.shadowRadius = 10
             capsule.layer?.shadowOffset = NSSize(width: 0, height: -2)
         }
+        drawerHost.layer?.backgroundColor = NSColor.appAccent
+            .withAlphaComponent(dark ? 0.105 : 0.065).cgColor
+        drawerHost.layer?.borderWidth = 1
+        drawerHost.layer?.borderColor = NSColor.appAccent
+            .withAlphaComponent(dark ? 0.34 : 0.22).cgColor
     }
 
     private func drawerStartTransform() -> CATransform3D {
@@ -9474,13 +9499,25 @@ final class MainDockView: NSView {
 
     private func positionDrawerBesideSelectedDestination() {
         guard let selectedNavIndex,
-              navButtons.indices.contains(selectedNavIndex),
-              let buttonPosition = primaryStack.arrangedSubviews.firstIndex(
-                of: navButtons[selectedNavIndex]) else { return }
-        if primaryStack.arrangedSubviews.contains(drawerHost) {
+              navButtons.indices.contains(selectedNavIndex) else { return }
+
+        let selectedButton = navButtons[selectedNavIndex]
+        if let buttonPosition = primaryStack.arrangedSubviews.firstIndex(
+                of: selectedButton),
+           buttonPosition + 1 < primaryStack.arrangedSubviews.count,
+           primaryStack.arrangedSubviews[buttonPosition + 1] === drawerHost {
+            return
+        }
+
+        // Remove first, then calculate the new insertion index. Calculating
+        // while the old drawer is still present shifts later destinations by
+        // one and can attach the controls to the wrong section.
+        if drawerHost.superview != nil {
             primaryStack.removeArrangedSubview(drawerHost)
             drawerHost.removeFromSuperview()
         }
+        guard let buttonPosition = primaryStack.arrangedSubviews.firstIndex(
+                of: selectedButton) else { return }
         primaryStack.insertArrangedSubview(drawerHost, at: buttonPosition + 1)
     }
 
@@ -9488,20 +9525,14 @@ final class MainDockView: NSView {
         guard !modeButtons.isEmpty else { return 0 }
         drawerStack.layoutSubtreeIfNeeded()
         let fitting = drawerStack.fittingSize
-        return (vertical ? fitting.height : fitting.width) + 7
+        return (vertical ? fitting.height : fitting.width) + 9
     }
 
     private func updateOpenDrawerSize(animated: Bool) {
         guard isDrawerOpen else { return }
         let size = desiredDrawerSize()
-        if animated {
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = 0.18
-                drawerAxisConstraint.animator().constant = size
-            }
-        } else {
-            drawerAxisConstraint.constant = size
-        }
+        drawerAxisConstraint.constant = size
+        if animated { window?.layoutIfNeeded() }
     }
 
     private func setDrawerOpen(_ open: Bool, animated: Bool) {
@@ -9510,15 +9541,14 @@ final class MainDockView: NSView {
         let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if open {
             positionDrawerBesideSelectedDestination()
+            drawerAxisConstraint.constant = desiredDrawerSize()
             drawerHost.isHidden = false
             drawerHost.alphaValue = animated ? 0 : 1
             drawerHost.layer?.transform = (animated && !reduceMotion)
                 ? drawerStartTransform() : CATransform3DIdentity
             window?.layoutIfNeeded()
         }
-        let targetSize = open ? desiredDrawerSize() : 0
         let changes = {
-            self.drawerAxisConstraint.animator().constant = targetSize
             self.drawerHost.animator().alphaValue = open ? 1 : 0
             if !reduceMotion {
                 self.drawerHost.layer?.transform = open
@@ -9526,7 +9556,7 @@ final class MainDockView: NSView {
             }
         }
         guard animated else {
-            drawerAxisConstraint.constant = targetSize
+            drawerAxisConstraint.constant = open ? desiredDrawerSize() : 0
             drawerHost.alphaValue = open ? 1 : 0
             drawerHost.layer?.transform = CATransform3DIdentity
             drawerHost.isHidden = !open
@@ -9540,6 +9570,7 @@ final class MainDockView: NSView {
             guard let self else { return }
             if !open {
                 self.drawerHost.isHidden = true
+                self.drawerAxisConstraint.constant = 0
                 self.drawerHost.layer?.transform = CATransform3DIdentity
             }
         }
