@@ -127,7 +127,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.34.0"
+let kAppVersion          = "3.34.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -4057,7 +4057,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private let showsNavigationHeader: Bool
     private let presentation: MosquePickerPresentation
 
-    private let segmented = NSSegmentedControl()
+    private let modeStack = NSStackView()
+    private var modeButtons: [PrayerDisplayModeButton] = []
     private let titleLbl  = NSTextField(labelWithString: t("picker.title"))
     private let currentMosqueNameLabel = NSTextField(labelWithString: "")
     private let currentMosqueDetailLabel = NSTextField(labelWithString: "")
@@ -4069,8 +4070,6 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
 
     private let searchField = NSTextField()
     private let goSearchBtn = NSButton(title: t("picker.btn.search"), target: nil, action: nil)
-    private let urlField    = NSTextField()
-    private let addUrlBtn   = NSButton(title: t("picker.btn.add"), target: nil, action: nil)
     // Nearby tab: an editable "your city" text field + a location icon button.
     // Typing a city and hitting Enter runs the search by city name (the same
     // pipeline the Search tab uses). The location button reverse-geocodes the
@@ -4203,10 +4202,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             addSubview(hdrSep)
         }
 
-        // -------------------- Segmented tab bar ---------------------------
-        // 4 segments across W-24 with monotone SF-Symbol glyphs only (no
-        // text labels — sub-labels were removed to reclaim vertical space).
-        // Tooltips explain each tab.
+        // -------------------- iOS-style mode selector ---------------------
         if isSettings {
             let currentCard = AdaptiveCardView(frame: NSRect(
                 x: contentX, y: 24, width: contentWidth, height: 92))
@@ -4252,43 +4248,61 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             if Localizer.shared.isRTL { applyRTL(currentCard) }
         }
 
-        let segCount = 4
-        let segTotal = contentWidth
-        let segW = segTotal / CGFloat(segCount)
-        segmented.segmentCount = segCount
-        let segSymbols  = ["star.fill", "magnifyingglass", "location.fill", "link"]
-        let segTooltips = [t("picker.tab.favorites"),
-                           t("picker.tab.search"),
-                           t("picker.tab.near"),
-                           t("picker.tab.url")]
-        for (i, s) in segSymbols.enumerated() {
-            if let img = templateSymbol(s, pointSize: 13, weight: .medium) {
-                segmented.setImage(img, forSegment: i)
-            }
-            if isSettings {
-                segmented.setLabel(segTooltips[i], forSegment: i)
-            } else if segmented.image(forSegment: i) == nil {
-                // Fallback to a short text label
-                segmented.setLabel(["Fav", "Find", "Near", "URL"][i], forSegment: i)
-            }
-            segmented.setToolTip(segTooltips[i], forSegment: i)
-            segmented.setWidth(segW, forSegment: i)
+        let selectorY: CGFloat = isSettings ? 132 : (showsNavigationHeader ? 50 : 10)
+        let selectorHeight: CGFloat = isSettings ? 64 : 44
+        let selectorSurface = AdaptiveCardView(frame: NSRect(
+            x: contentX, y: selectorY, width: contentWidth, height: selectorHeight))
+        selectorSurface.cornerRadius = isSettings ? 22 : 18
+        selectorSurface.addsDepth = isSettings
+        selectorSurface.autoresizingMask = isSettings
+            ? [.minXMargin, .maxXMargin] : [.width]
+        selectorSurface.setAccessibilityElement(true)
+        selectorSurface.setAccessibilityRole(.group)
+        selectorSurface.setAccessibilityLabel(t("settings.section.mosque"))
+        addSubview(selectorSurface)
+
+        modeStack.orientation = .horizontal
+        modeStack.alignment = .centerY
+        modeStack.distribution = .fillEqually
+        modeStack.spacing = isSettings ? 8 : 6
+        modeStack.edgeInsets = NSEdgeInsets(top: isSettings ? 8 : 5,
+                                            left: isSettings ? 8 : 6,
+                                            bottom: isSettings ? 8 : 5,
+                                            right: isSettings ? 8 : 6)
+        modeStack.translatesAutoresizingMaskIntoConstraints = false
+        modeStack.userInterfaceLayoutDirection = Localizer.shared.isRTL
+            ? .rightToLeft : .leftToRight
+        selectorSurface.addSubview(modeStack)
+        NSLayoutConstraint.activate([
+            modeStack.leadingAnchor.constraint(equalTo: selectorSurface.leadingAnchor),
+            modeStack.trailingAnchor.constraint(equalTo: selectorSurface.trailingAnchor),
+            modeStack.topAnchor.constraint(equalTo: selectorSurface.topAnchor),
+            modeStack.bottomAnchor.constraint(equalTo: selectorSurface.bottomAnchor),
+        ])
+
+        let modeDefinitions = [
+            ("star.fill", t("picker.tab.favorites")),
+            ("magnifyingglass", t("picker.tab.search")),
+            ("location.fill", t("picker.tab.near")),
+        ]
+        for (index, definition) in modeDefinitions.enumerated() {
+            let button = PrayerDisplayModeButton(
+                modeIndex: index, symbol: definition.0, label: definition.1,
+                target: self, action: #selector(modeButtonPressed(_:)),
+                contextLabel: t("settings.section.mosque"),
+                displayStyle: isSettings ? .iconsText : .icons,
+                compact: !isSettings)
+            button.isModeSelected = index == mode
+            button.heightAnchor.constraint(equalToConstant:
+                isSettings ? 48 : 34).isActive = true
+            modeButtons.append(button)
+            modeStack.addArrangedSubview(button)
         }
-        segmented.segmentStyle = isSettings ? .rounded : .texturedRounded
-        segmented.selectedSegment = 0
-        segmented.target = self
-        segmented.action = #selector(segmentChanged)
-        let segmentedY: CGFloat = isSettings ? 136 : (showsNavigationHeader ? 50 : 10)
-        segmented.frame = NSRect(x: contentX, y: segmentedY,
-                                 width: segTotal, height: isSettings ? 42 : 30)
-        segmented.autoresizingMask = isSettings ? [.minXMargin, .maxXMargin] : [.width]
-        segmented.setAccessibilityLabel(t("settings.section.mosque"))
-        addSubview(segmented)
 
         // Status / help line. Dynamically shows the active tab's hint text,
         // the search-in-progress message, or a result count.
         statusLabel.frame = NSRect(x: contentX,
-                                   y: isSettings ? 186 : (showsNavigationHeader ? 80 : 46),
+                                   y: isSettings ? 204 : (showsNavigationHeader ? 98 : 58),
                                    width: contentWidth, height: isSettings ? 22 : 18)
         statusLabel.font = Localizer.shared.font(size: isSettings ? 12 : 10)
         statusLabel.textColor = .secondaryLabelColor
@@ -4300,7 +4314,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
 
         // -------------------- Input area ----------------------------------
         inputContainer.frame = NSRect(x: contentX,
-                                      y: isSettings ? 214 : (showsNavigationHeader ? 100 : 68),
+                                      y: isSettings ? 232 : (showsNavigationHeader ? 120 : 80),
                                       width: contentWidth, height: isSettings ? 52 : 44)
         inputContainer.autoresizingMask = isSettings
             ? [.minXMargin, .maxXMargin] : [.width]
@@ -4342,29 +4356,6 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             goSearchBtn.imagePosition = .imageOnly
         }
 
-        urlField.frame = NSRect(x: 0, y: 8, width: iw - btnW - 8,
-                                height: fieldHeight)
-        urlField.placeholderString = "mawaqit.net/fr/m/…"
-        urlField.font = Localizer.shared.font(size: 12)
-        urlField.target = self
-        urlField.action = #selector(runAddURL)
-        urlField.autoresizingMask = [.width]
-
-        addUrlBtn.frame = NSRect(x: iw - btnW, y: 0, width: btnW,
-                                 height: isSettings ? 52 : 44)
-        addUrlBtn.bezelStyle = .rounded
-        addUrlBtn.title = ""
-        addUrlBtn.target = self
-        addUrlBtn.action = #selector(runAddURL)
-        addUrlBtn.keyEquivalent = "\r"
-        addUrlBtn.autoresizingMask = [.minXMargin]
-        addUrlBtn.toolTip = t("picker.btn.add")
-        addUrlBtn.setAccessibilityLabel(t("picker.btn.add"))
-        if let img = templateSymbol("plus", pointSize: 12, weight: .semibold) {
-            addUrlBtn.image = img
-            addUrlBtn.imagePosition = .imageOnly
-        }
-
         // Nearby: compact [city text field][location icon button] row. The
         // icon button on the right reverse-geocodes the device location into
         // a city name and runs the same search the text field does — so the
@@ -4396,7 +4387,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         }
 
         // -------------------- Results scroll view -------------------------
-        let resultsY: CGFloat = isSettings ? 278 : (showsNavigationHeader ? 152 : 120)
+        let resultsY: CGFloat = isSettings ? 296 : (showsNavigationHeader ? 172 : 132)
         let resultsInset: CGFloat = isSettings ? 12 : 0
         scrollView.frame = NSRect(x: isSettings ? resultsInset : contentX,
                                   y: isSettings ? resultsInset : resultsY,
@@ -4465,13 +4456,16 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         case 0: showFavorites()
         case 1: showSearchPrompt()
         case 2: showNearMePrompt()
-        case 3: showUrlPrompt()
         default: break
         }
     }
 
     @objc private func backTapped() { onDone?() }
-    @objc private func segmentChanged() { mode = segmented.selectedSegment; refreshCurrentMode() }
+    @objc private func modeButtonPressed(_ sender: PrayerDisplayModeButton) {
+        mode = sender.modeIndex
+        modeButtons.forEach { $0.isModeSelected = $0.modeIndex == mode }
+        refreshCurrentMode()
+    }
 
     private func updateInputContainer() {
         inputContainer.subviews.forEach { $0.removeFromSuperview() }
@@ -4503,10 +4497,6 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             // choice without having to re-type it.
             cityField.stringValue = userCity()
             window?.makeFirstResponder(cityField)
-        case 3:
-            inputContainer.addSubview(urlField)
-            inputContainer.addSubview(addUrlBtn)
-            window?.makeFirstResponder(urlField)
         default: break
         }
     }
@@ -4515,7 +4505,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         clearResults()
         let favs = loadFavorites()
         if favs.isEmpty {
-            statusLabel.stringValue = "No favorites yet. Add from Search, Near me, or By URL."
+            statusLabel.stringValue = "No favorites yet. Add one from Search or Nearby."
             return
         }
         statusLabel.stringValue = "\(favs.count) favorite\(favs.count == 1 ? "" : "s")"
@@ -4705,11 +4695,6 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             showNearbyFlat(cityLabel: label.isEmpty ? userCity() : label)
         }
     }
-    private func showUrlPrompt() {
-        clearResults()
-        statusLabel.stringValue = "Paste a Mawaqit mosque URL."
-    }
-
     @objc private func runSearch() {
         // Only relevant while in the cities state. Enter key re-runs the
         // current typed text through the country-scoped typeahead.
@@ -4742,25 +4727,6 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             repeats: false
         ) { [weak self] _ in
             self?.liveCitySearch(seed, country: country)
-        }
-    }
-
-    @objc private func runAddURL() {
-        let raw = urlField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard isValidMawaqitURL(raw) else {
-            statusLabel.stringValue = "Not a valid Mawaqit URL."
-            return
-        }
-        clearResults()
-        statusLabel.stringValue = "Validating URL…"
-        search.validateURL(raw) { [weak self] ref in
-            guard let self = self else { return }
-            guard let ref = ref else {
-                self.statusLabel.stringValue = "Could not load mosque at that URL."
-                return
-            }
-            self.showResults([ref], emptyMsg: "")
-            self.statusLabel.stringValue = "Found \"\(ref.name)\"."
         }
     }
 
@@ -5196,7 +5162,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             favBtn.toolTip = t("picker.tooltip.remove_fav")
             favBtn.action = #selector(removeFavTapped(_:))
         } else {
-            // In Search / Near / URL tabs, the star toggles save state.
+            // In Search / Nearby, the star toggles save state.
             let sym = alreadyFav ? "star.fill" : "star"
             if let img = templateSymbol(sym, pointSize: 14, weight: .medium) {
                 favBtn.image = img
