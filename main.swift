@@ -78,12 +78,6 @@ let kAdhkarVolume        = "adhkarVolume"
 /// CoreAudio device UID for adhkar audio output ("" = system default).
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
-/// "exact" reads only the displayed Arabic with the best installed system
-/// voice; "recordings" uses the bundled, hand-trimmed Hisn recordings.
-let kAdhkarRecitationStyle = "adhkarRecitationStyle"
-/// One-time repair for builds that made synthesized speech the implicit
-/// default and consequently hid the bundled Hisn al-Muslim recordings.
-let kAdhkarRecordedVoiceRestored = "adhkarRecordedVoiceRestored_v334"
 /// Extra wait after an Adhan finishes before a queued Adhkar collection
 /// begins. This is applied only when both were scheduled for the same time.
 let kAdhkarAfterAdhanDelay = "adhkarAfterAdhanDelayMinutes"
@@ -132,7 +126,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.35.0"
+let kAppVersion          = "3.35.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1264,7 +1258,7 @@ func presentAudioImportPanel() -> String? {
 /// Drives adhkar playback. Owns its own `AVAudioPlayer` (separate from the
 /// adhan player so the two never collide). The owning panel drives the UI by
 /// setting `onItemChange` / `onPlaybackStateChange` / `onFinish` closures.
-final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
+final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
 
     /// Lightweight multicast observation keeps the compact popup and full
     /// reader synchronized when they are both reflecting the same playback
@@ -1309,13 +1303,9 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     private var targetPlays = 1
 
     private var player: AVAudioPlayer?
-    private let speechSynthesizer = AVSpeechSynthesizer()
-    private var activeCategoryKey: String?
     private var cleanSegments: [ClosedRange<TimeInterval>] = []
     private var cleanSegmentIndex = 0
     private var cleanSegmentTimer: Timer?
-    private var sessionGeneration = 0
-    private var activeUtterance: AVSpeechUtterance?
     private(set) var isPlaying  = false
     private(set) var isPaused   = false
     private(set) var isMuted    = false
@@ -1365,11 +1355,21 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     /// v3 entry point — accepts user-edited collections.
     func start(collection: AdhkarCollection, at startIndex: Int = 0) {
         stop()
-        items = collection.items
-        activeCategoryKey = collection.categoryKey
+        let requestedStart = max(0, min(max(0, collection.items.count - 1), startIndex))
+        let nextPlayableID = collection.items.dropFirst(requestedStart)
+            .first(where: Self.hasPlayableRecording)?.id
+        // A playback session contains only entries backed by a real, local
+        // recording. Missing or stale refs never fall back to computer speech
+        // and never flash as silent items in the reader.
+        items = collection.items.filter(Self.hasPlayableRecording)
         activeCollection = collection
-        guard !items.isEmpty else { return }
-        index = max(0, min(items.count - 1, startIndex))
+        guard !items.isEmpty, let nextPlayableID,
+              let playableIndex = items.firstIndex(where: { $0.id == nextPlayableID }) else {
+            items = []
+            activeCollection = nil
+            return
+        }
+        index = playableIndex
         playsSoFar = 0
         playCurrent()
     }
@@ -1420,9 +1420,6 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
     func pause() {
         guard isPlaying else { return }
         player?.pause()
-        if speechSynthesizer.isSpeaking {
-            speechSynthesizer.pauseSpeaking(at: .immediate)
-        }
         isPlaying = false
         isPaused  = true
         emitPlaybackStateChange()
@@ -1430,9 +1427,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
 
     func resume() {
         guard isPaused else { return }
-        let resumed = (player?.play() ?? false)
-            || (speechSynthesizer.isPaused && speechSynthesizer.continueSpeaking())
-        if resumed {
+        if player?.play() ?? false {
             isPlaying = true
             isPaused  = false
             emitPlaybackStateChange()
@@ -1450,17 +1445,11 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
 
     /// Hard stop — abandons the session and releases the player.
     func stop() {
-        sessionGeneration += 1
         cleanSegmentTimer?.invalidate()
         cleanSegmentTimer = nil
         player?.stop()
         player = nil
-        if speechSynthesizer.isSpeaking || speechSynthesizer.isPaused {
-            activeUtterance = nil
-            speechSynthesizer.stopSpeaking(at: .immediate)
-        }
         items = []
-        activeCategoryKey = nil
         activeCollection = nil
         index = 0
         playsSoFar = 0
@@ -1508,6 +1497,12 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
 
     // MARK: - internal
 
+    private static func hasPlayableRecording(_ entry: AdhkarEntry) -> Bool {
+        guard !entry.audioRef.isEmpty,
+              let url = resolveAdhkarAudio(entry.audioRef) else { return false }
+        return FileManager.default.fileExists(atPath: url.path)
+    }
+
     private func playCurrent() {
         guard index >= 0 && index < items.count else { finish(); return }
         let item = items[index]
@@ -1517,61 +1512,20 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         targetPlays = max(1, min(item.count, 3))
         playsSoFar = 0
         emitItemChange(item, index, items.count)
-        playAudioRef(item.audioRef, text: item.arabic)
+        playAudioRef(item.audioRef)
     }
 
     /// Resolve a logical audioRef to a URL and start playback. Handles both
     /// bundled ("bundled:75.mp3") and imported ("imported:abc.mp3") refs via
-    /// resolveAdhkarAudio(). Falls back to auto-advance if audio is missing.
-    private func playAudioRef(_ ref: String, text: String) {
+    /// resolveAdhkarAudio(). Unavailable recordings are skipped immediately.
+    private func playAudioRef(_ ref: String) {
         cleanSegmentTimer?.invalidate()
         cleanSegmentTimer = nil
         player?.stop()
-        if speechSynthesizer.isSpeaking || speechSynthesizer.isPaused {
-            activeUtterance = nil
-            speechSynthesizer.stopSpeaking(at: .immediate)
-        }
-        // Prefer the bundled human Hisn recordings. "Exact text" remains an
-        // explicit alternative for users who prefer the installed macOS
-        // Arabic voice and is also our integrity fallback for the handful of
-        // evening files whose spoken wording differs from the displayed text.
-        let recitationStyle = UserDefaults.standard.string(
-            forKey: kAdhkarRecitationStyle) ?? "recordings"
-        if recitationStyle == "exact", !text.isEmpty {
-            playSpokenText(text)
-            return
-        }
-
-        // If the entry has no audio at all, just advance after a beat.
-        guard !ref.isEmpty else {
-            scheduleAutoAdvance()
-            return
-        }
-
-        // Several evening files contain the morning wording followed by a
-        // spoken instruction explaining what to substitute at night. Reading
-        // that file would contradict the text on screen, so use the installed
-        // macOS Arabic voice for these exact variants instead.
-        let eveningVariants: Set<String> = [
-            "bundled:77.mp3", "bundled:78.mp3", "bundled:80.mp3",
-            "bundled:81.mp3", "bundled:89.mp3", "bundled:90.mp3"
-        ]
-        if activeCategoryKey == AdhkarSet.evening.rawValue,
-           eveningVariants.contains(ref) {
-            playSpokenText(text)
-            return
-        }
         guard let url = resolveAdhkarAudio(ref),
               FileManager.default.fileExists(atPath: url.path),
               let p = try? AVAudioPlayer(contentsOf: url) else {
-            // Expanded collections in older installs referenced Hisn files
-            // that were never bundled. Read their exact Arabic text instead
-            // of silently flashing past them in half a second.
-            if ref.hasPrefix("bundled:"), !text.isEmpty {
-                playSpokenText(text)
-            } else {
-                scheduleAutoAdvance()
-            }
+            advancePastUnavailableRecording()
             return
         }
         player = p
@@ -1652,43 +1606,16 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         }
     }
 
-    private func playSpokenText(_ text: String) {
-        guard !text.isEmpty else { scheduleAutoAdvance(); return }
-        speechSynthesizer.delegate = self
-        let utterance = AVSpeechUtterance(string: text)
-        // Prefer the highest-quality Arabic voice installed on this Mac.
-        // If the user later adds an Enhanced or Premium Arabic voice in
-        // macOS, the reader adopts it automatically without an app update.
-        // Quality outranks regional matching because adhkar use MSA.
-        let arabicVoices = AVSpeechSynthesisVoice.speechVoices().filter {
-            $0.language.lowercased().hasPrefix("ar")
-        }
-        utterance.voice = arabicVoices.max { lhs, rhs in
-            if lhs.quality.rawValue != rhs.quality.rawValue {
-                return lhs.quality.rawValue < rhs.quality.rawValue
-            }
-            let lhsRegional = lhs.language == "ar-SA" ? 1 : 0
-            let rhsRegional = rhs.language == "ar-SA" ? 1 : 0
-            return lhsRegional < rhsRegional
-        } ?? AVSpeechSynthesisVoice(language: "ar-SA")
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.82
-        utterance.pitchMultiplier = 0.98
-        utterance.volume = isMuted ? 0 : savedAdhkarVolume()
-        activeUtterance = utterance
-        isPlaying = true
-        isPaused = false
-        speechSynthesizer.speak(utterance)
-        emitPlaybackStateChange()
-    }
-
-    /// If audio is missing, auto-advance after a beat so the session never
-    /// stalls on a single broken/silent entry.
-    private func scheduleAutoAdvance() {
-        let generation = sessionGeneration
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self = self else { return }
-            guard generation == self.sessionGeneration, !self.items.isEmpty else { return }
-            self.completeCurrentPlay()
+    /// A file can disappear or become unreadable after the session's initial
+    /// availability check. Skip it immediately without counting a repetition.
+    private func advancePastUnavailableRecording() {
+        guard !items.isEmpty else { finish(); return }
+        if index + 1 < items.count {
+            index += 1
+            playsSoFar = 0
+            playCurrent()
+        } else {
+            finish()
         }
     }
 
@@ -1700,7 +1627,6 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         isPlaying = false
         isPaused  = false
         items = []
-        activeCategoryKey = nil
         activeCollection = nil
         index = 0
         emitFinish()
@@ -1719,7 +1645,7 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         if playsSoFar < targetPlays {
             // Same item, repeat.
             if items.indices.contains(index) {
-                playAudioRef(items[index].audioRef, text: items[index].arabic)
+                playAudioRef(items[index].audioRef)
             }
             return
         }
@@ -1732,12 +1658,6 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerD
         }
     }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
-                           didFinish utterance: AVSpeechUtterance) {
-        guard activeUtterance === utterance, !items.isEmpty else { return }
-        activeUtterance = nil
-        completeCurrentPlay()
-    }
     func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
         // Skip to next on decode failure rather than stalling.
         next()
@@ -15838,26 +15758,12 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
             sectionHeader(t("settings.section.adhkar"))
-            let (adhkarCard, adhkarH) = beginCard(rows: 8)
+            let (adhkarCard, adhkarH) = beginCard(rows: 7)
         adhkarAutoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                       target: self,
                                       action: #selector(adhkarAutoPlayChanged(_:)))
         adhkarAutoPlayCheck.state = UserDefaults.standard.bool(forKey: kAdhkarEnabled) ? .on : .off
         addRow(adhkarCard, label: "", control: adhkarAutoPlayCheck)
-
-        let recitationPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        recitationPopup.addItems(withTitles: [
-            adhkarModeText("recitation.recordings"),
-            adhkarModeText("recitation.exact"),
-        ])
-        recitationPopup.selectItem(at:
-            (UserDefaults.standard.string(forKey: kAdhkarRecitationStyle) ?? "recordings")
-                == "exact" ? 1 : 0)
-        recitationPopup.target = self
-        recitationPopup.action = #selector(adhkarRecitationChanged(_:))
-        recitationPopup.setAccessibilityLabel(adhkarModeText("recitation.style"))
-        addRow(adhkarCard, label: adhkarModeText("recitation.style"),
-               control: recitationPopup)
 
         let volume = UserDefaults.standard.object(forKey: kAdhkarVolume) == nil
             ? 1.0 : Double(UserDefaults.standard.float(forKey: kAdhkarVolume))
@@ -16085,11 +15991,6 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     @objc private func adhkarVolumeChanged(_ sender: NSSlider) {
         UserDefaults.standard.set(Float(sender.floatValue), forKey: kAdhkarVolume)
     }
-    @objc private func adhkarRecitationChanged(_ sender: NSPopUpButton) {
-        UserDefaults.standard.set(sender.indexOfSelectedItem == 1
-            ? "exact" : "recordings", forKey: kAdhkarRecitationStyle)
-        adhkarTestSession.stop()
-    }
     @objc private func adhkarOutputChanged(_ sender: NSPopUpButton) {
         let index = sender.indexOfSelectedItem - 1
         UserDefaults.standard.set(index >= 0 && adhkarOutputDevices.indices.contains(index)
@@ -16151,8 +16052,6 @@ private let adhkarModeEnglish: [String: String] = [
     "dock.style": "Control labels", "dock.style.icons": "Icons only",
     "dock.style.iconsText": "Icons and text", "dock.style.text": "Text only",
     "dock.theme": "Theme",
-    "recitation.style": "Recitation", "recitation.exact": "Exact text · system voice",
-    "recitation.recordings": "Human recordings · Hisn al-Muslim",
     "nawafil.setting": "Nawafil guidance",
 ]
 
@@ -16175,8 +16074,6 @@ private let adhkarModeArabic: [String: String] = [
     "dock.style": "تسميات عناصر التحكم", "dock.style.icons": "أيقونات فقط",
     "dock.style.iconsText": "أيقونات ونص", "dock.style.text": "نص فقط",
     "dock.theme": "المظهر",
-    "recitation.style": "التلاوة", "recitation.exact": "النص المطابق · صوت النظام",
-    "recitation.recordings": "تسجيلات بشرية · حصن المسلم",
     "nawafil.setting": "إرشاد النوافل",
 ]
 
@@ -16198,9 +16095,7 @@ private func adhkarModeText(_ key: String) -> String {
                "dock.right": "Droite", "dock.top": "Haut", "dock.bottom": "Bas",
                "dock.style": "Libellés des commandes", "dock.style.icons": "Icônes seules",
                "dock.style.iconsText": "Icônes et texte", "dock.style.text": "Texte seul",
-               "dock.theme": "Thème", "recitation.style": "Récitation",
-               "recitation.exact": "Texte exact · voix système",
-               "recitation.recordings": "Voix humaines · Hisn al-Muslim"],
+               "dock.theme": "Thème"],
         "es": ["mode.reading": "Lectura", "mode.editing": "Edición",
                "reading.empty": "Elige una colección y pulsa reproducir",
                "studio.open": "Estudio de audio", "studio.import": "Importar audio…",
@@ -16209,43 +16104,33 @@ private func adhkarModeText(_ key: String) -> String {
                "dock.right": "Derecha", "dock.top": "Arriba", "dock.bottom": "Abajo",
                "dock.style": "Etiquetas de controles", "dock.style.icons": "Solo iconos",
                "dock.style.iconsText": "Iconos y texto", "dock.style.text": "Solo texto",
-               "dock.theme": "Tema", "recitation.style": "Recitación",
-               "recitation.exact": "Texto exacto · voz del sistema",
-               "recitation.recordings": "Voces humanas · Hisn al-Muslim"],
+               "dock.theme": "Tema"],
         "zh": ["dock.position": "控件位置", "dock.left": "左侧", "dock.right": "右侧",
                "dock.top": "顶部", "dock.bottom": "底部", "dock.style": "控件标签",
                "dock.style.icons": "仅图标", "dock.style.iconsText": "图标和文字",
-               "dock.style.text": "仅文字", "dock.theme": "主题", "recitation.style": "诵读",
-               "recitation.exact": "准确文本 · 系统语音", "recitation.recordings": "真人录音 · Hisn al-Muslim"],
+               "dock.style.text": "仅文字", "dock.theme": "主题"],
         "hi": ["dock.position": "नियंत्रण स्थान", "dock.left": "बाएँ", "dock.right": "दाएँ",
                "dock.top": "ऊपर", "dock.bottom": "नीचे", "dock.style": "नियंत्रण लेबल",
                "dock.style.icons": "केवल आइकन", "dock.style.iconsText": "आइकन और पाठ",
-               "dock.style.text": "केवल पाठ", "dock.theme": "थीम", "recitation.style": "पाठ",
-               "recitation.exact": "सटीक पाठ · सिस्टम आवाज़", "recitation.recordings": "मानवीय रिकॉर्डिंग · Hisn al-Muslim"],
+               "dock.style.text": "केवल पाठ", "dock.theme": "थीम"],
         "bn": ["dock.position": "নিয়ন্ত্রণের অবস্থান", "dock.left": "বামে", "dock.right": "ডানে",
                "dock.top": "উপরে", "dock.bottom": "নিচে", "dock.style": "নিয়ন্ত্রণের লেবেল",
                "dock.style.icons": "শুধু আইকন", "dock.style.iconsText": "আইকন ও লেখা",
-               "dock.style.text": "শুধু লেখা", "dock.theme": "থিম", "recitation.style": "তিলাওয়াত",
-               "recitation.exact": "হুবহু পাঠ · সিস্টেম কণ্ঠ", "recitation.recordings": "মানব কণ্ঠ · Hisn al-Muslim"],
+               "dock.style.text": "শুধু লেখা", "dock.theme": "থিম"],
         "ru": ["dock.position": "Положение элементов", "dock.left": "Слева",
                "dock.right": "Справа", "dock.top": "Сверху", "dock.bottom": "Снизу",
                "dock.style": "Подписи элементов", "dock.style.icons": "Только значки",
                "dock.style.iconsText": "Значки и текст", "dock.style.text": "Только текст",
-               "dock.theme": "Тема", "recitation.style": "Чтение",
-               "recitation.exact": "Точный текст · системный голос",
-               "recitation.recordings": "Живые записи · Hisn al-Muslim"],
+               "dock.theme": "Тема"],
         "pt": ["dock.position": "Posição dos controlos", "dock.left": "Esquerda",
                "dock.right": "Direita", "dock.top": "Topo", "dock.bottom": "Fundo",
                "dock.style": "Rótulos dos controlos", "dock.style.icons": "Só ícones",
                "dock.style.iconsText": "Ícones e texto", "dock.style.text": "Só texto",
-               "dock.theme": "Tema", "recitation.style": "Recitação",
-               "recitation.exact": "Texto exato · voz do sistema",
-               "recitation.recordings": "Vozes humanas · Hisn al-Muslim"],
+               "dock.theme": "Tema"],
         "ur": ["dock.position": "کنٹرول کی جگہ", "dock.left": "بائیں", "dock.right": "دائیں",
                "dock.top": "اوپر", "dock.bottom": "نیچے", "dock.style": "کنٹرول لیبل",
                "dock.style.icons": "صرف آئیکن", "dock.style.iconsText": "آئیکن اور متن",
-               "dock.style.text": "صرف متن", "dock.theme": "تھیم", "recitation.style": "تلاوت",
-               "recitation.exact": "بالکل متن · سسٹم آواز", "recitation.recordings": "انسانی آوازیں · Hisn al-Muslim"],
+               "dock.style.text": "صرف متن", "dock.theme": "تھیم"],
     ]
     let raw = (code == "ar" ? adhkarModeArabic[key] : localized[code]?[key])
         ?? adhkarModeEnglish[key] ?? key
@@ -19775,14 +19660,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         if UserDefaults.standard.object(forKey: kAdhkarAfterAdhanDelay) == nil {
             UserDefaults.standard.set(0, forKey: kAdhkarAfterAdhanDelay)
         }
-        // Restore the bundled human reciters for upgrades that inherited the
-        // synthesized "Exact text" default. This runs once; after it, the
-        // user's explicit choice in Settings is always respected.
-        if !UserDefaults.standard.bool(forKey: kAdhkarRecordedVoiceRestored) {
-            UserDefaults.standard.set("recordings", forKey: kAdhkarRecitationStyle)
-            UserDefaults.standard.set(true, forKey: kAdhkarRecordedVoiceRestored)
-        }
-
         registerCairoFonts()
         // One-time migrations: v2→v3 (morning/evening) + v3.1 (expanded catalog).
         migrateAdhkarDefaults()

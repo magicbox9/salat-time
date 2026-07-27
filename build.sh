@@ -324,6 +324,41 @@ download_adhkar "112.mp3"  "https://server8.mp3quran.net/afs/112.mp3"
 download_adhkar "113.mp3"  "https://server8.mp3quran.net/afs/113.mp3"
 download_adhkar "114.mp3"  "https://server8.mp3quran.net/afs/114.mp3"
 
+# Sabah and Masaa are real-recording-only features. Fail the build instead of
+# silently shipping an entry that would need synthesized speech or produce a
+# dead player row. The JSON may reuse recordings across the two collections.
+python3 - "$RESOURCES_DIR/$ADHKAR_AUDIO_SUBDIR" <<'PY'
+import json
+import pathlib
+import sys
+
+audio_dir = pathlib.Path(sys.argv[1])
+with open("adhkar.json", "r", encoding="utf-8") as handle:
+    library = json.load(handle)
+
+problems = []
+for collection in ("morning", "evening"):
+    entries = library.get(collection, [])
+    if not entries:
+        problems.append(f"{collection}: collection is empty")
+        continue
+    for position, entry in enumerate(entries, start=1):
+        filename = entry.get("audio_file", "")
+        path = audio_dir / filename
+        if not filename:
+            problems.append(f"{collection} #{position}: no audio_file")
+        elif not path.is_file() or path.stat().st_size <= 10_000:
+            problems.append(f"{collection} #{position}: missing {filename}")
+
+if problems:
+    print("Adhkar audio coverage check failed:", file=sys.stderr)
+    for problem in problems:
+        print(f"  - {problem}", file=sys.stderr)
+    raise SystemExit(1)
+
+print("  verified real audio for all morning/evening adhkar")
+PY
+
 # Bundle the adhkar text/metadata (morning + evening sets, sourced from
 # the open-source Morning and Evening Adhkar DB / Hisn al-Muslim).
 cp adhkar.json "$RESOURCES_DIR/adhkar.json"
