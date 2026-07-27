@@ -126,7 +126,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.35.1"
+let kAppVersion          = "3.36.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1123,16 +1123,30 @@ func updateBuiltInAdhkarSchedule(_ set: AdhkarSet,
 ///   "bundled:75.mp3"  → Resources/adhkar_audio/75.mp3
 ///   "imported:abc.mp3" → ~/Library/Application Support/SalatTime/audio/abc.mp3
 /// An audioRef may carry a non-destructive trim fragment appended by the
-/// Audio Studio: "imported:long.mp3#12.40-34.85" plays only that window of
-/// the source file. The file itself is never rewritten, so one imported
-/// recording can back any number of adhkar.
+/// Audio Studio. A single range remains backward compatible:
+///   "imported:long.mp3#12.40-34.85"
+/// Multiple comma-separated ranges remove any number of middle sections:
+///   "imported:long.mp3#0.00-12.40,15.20-34.85,39.10-48.00"
+/// The source file is never rewritten.
+func adhkarAudioSegments(of ref: String) -> [ClosedRange<TimeInterval>] {
+    guard let hash = ref.lastIndex(of: "#") else { return [] }
+    let encoded = ref[ref.index(after: hash)...]
+    let ranges = encoded.split(separator: ",").compactMap {
+        part -> ClosedRange<TimeInterval>? in
+        let bounds = part.split(separator: "-", maxSplits: 1)
+        guard bounds.count == 2,
+              let start = TimeInterval(bounds[0]),
+              let end = TimeInterval(bounds[1]),
+              end > start, start >= 0 else { return nil }
+        return start...end
+    }
+    return ranges.sorted { $0.lowerBound < $1.lowerBound }
+}
+
+/// Compatibility helper for older UI that only needs a single trim summary.
 func adhkarAudioSegment(of ref: String) -> ClosedRange<TimeInterval>? {
-    guard let hash = ref.lastIndex(of: "#") else { return nil }
-    let parts = ref[ref.index(after: hash)...].split(separator: "-")
-    guard parts.count == 2,
-          let start = TimeInterval(parts[0]), let end = TimeInterval(parts[1]),
-          end > start, start >= 0 else { return nil }
-    return start...end
+    let segments = adhkarAudioSegments(of: ref)
+    return segments.count == 1 ? segments[0] : nil
 }
 
 func adhkarAudioBaseRef(_ ref: String) -> String {
@@ -1558,9 +1572,10 @@ final class AdhkarSession: NSObject, AVAudioPlayerDelegate {
     }
 
     private func cleanRecitationSegments(for ref: String) -> [ClosedRange<TimeInterval>] {
-        // A studio trim fragment on the ref itself takes precedence — it IS
-        // the clean segment for that dhikr.
-        if let segment = adhkarAudioSegment(of: ref) { return [segment] }
+        // Studio fragments take precedence. They may contain several retained
+        // ranges when the user removed one or more middle sections.
+        let studioSegments = adhkarAudioSegments(of: ref)
+        if !studioSegments.isEmpty { return studioSegments }
         let ranges: [String: [ClosedRange<TimeInterval>]] = [
             "bundled:75.mp3":  [13.60...16.96, 18.36...74.80],
             "bundled:77.mp3":  [0.0...40.60],
@@ -16039,10 +16054,14 @@ private let adhkarModeEnglish: [String: String] = [
     "reading.repeat": "Recitation",
     "reading.tap.hint": "Tap (or press Space) to count a repetition",
     "studio.open": "Audio Studio",
-    "studio.hint": "Isolate one dhikr with the handles, preview it, then add it — the selection then jumps ahead so you can walk through the whole recording.",
+    "studio.hint": "Select any range with the handles. Keep it, remove it from the middle, and repeat as needed; Preview Result plays the final stitched audio without changing the source file.",
     "studio.source": "Recording", "studio.import": "Import audio…",
-    "studio.preview": "Preview selection", "studio.stop": "Stop",
+    "studio.preview": "Preview result", "studio.stop": "Stop",
     "studio.set.start": "Start = playhead", "studio.set.end": "End = playhead",
+    "studio.keep": "Keep selection", "studio.remove": "Remove selection",
+    "studio.undo": "Undo cut", "studio.reset": "Reset cuts",
+    "studio.kept": "%d kept section(s)", "studio.removed": "%d middle cut(s)",
+    "studio.no_audio": "The cuts remove the entire recording.",
     "studio.selection": "Selection", "studio.text.placeholder": "Dhikr text (Arabic)",
     "studio.count": "Repetitions", "studio.add": "Add as new dhikr",
     "studio.assign": "Replace audio of", "studio.apply": "Apply",
@@ -16061,10 +16080,14 @@ private let adhkarModeArabic: [String: String] = [
     "reading.repeat": "التلاوة",
     "reading.tap.hint": "انقر أو اضغط مفتاح المسافة لعدّ مرة",
     "studio.open": "استوديو الصوت",
-    "studio.hint": "حدّد ذكرًا واحدًا بالمقبضين ثم استمع إليه وأضِفه — ينتقل التحديد تلقائيًا بعدها لتتابع تقسيم التسجيل كاملًا.",
+    "studio.hint": "حدّد أي مقطع بالمقبضين، ثم احتفظ به أو احذفه من الوسط وكرّر ذلك حسب الحاجة. يشغّل «استماع للنتيجة» الصوت النهائي من دون تغيير الملف الأصلي.",
     "studio.source": "التسجيل", "studio.import": "استيراد ملف صوتي…",
-    "studio.preview": "استماع للمقطع", "studio.stop": "إيقاف",
+    "studio.preview": "استماع للنتيجة", "studio.stop": "إيقاف",
     "studio.set.start": "البداية عند المؤشر", "studio.set.end": "النهاية عند المؤشر",
+    "studio.keep": "الاحتفاظ بالمقطع", "studio.remove": "حذف المقطع المحدد",
+    "studio.undo": "تراجع عن الحذف", "studio.reset": "إلغاء كل الحذف",
+    "studio.kept": "%d مقطع محفوظ", "studio.removed": "%d مقطع محذوف",
+    "studio.no_audio": "تم حذف التسجيل كاملًا.",
     "studio.selection": "المقطع", "studio.text.placeholder": "نص الذكر",
     "studio.count": "عدد المرات", "studio.add": "إضافة كذكر جديد",
     "studio.assign": "تعيين كصوت لـ", "studio.apply": "تطبيق",
@@ -16280,6 +16303,11 @@ private func loadAdhkarWaveform(url: URL, buckets: Int = 640,
 final class AdhkarWaveformView: NSView {
     var samples: [Float] = [] { didSet { needsDisplay = true } }
     var duration: TimeInterval = 0 { didSet { needsDisplay = true } }
+    /// Non-destructive cutouts. They remain visible while the user selects
+    /// another middle section, making repeated edits easy to understand.
+    var removedRanges: [ClosedRange<TimeInterval>] = [] {
+        didSet { needsDisplay = true }
+    }
     var selectionStart: TimeInterval = 0 {
         didSet { needsDisplay = true; onSelectionChange?() }
     }
@@ -16333,12 +16361,27 @@ final class AdhkarWaveformView: NSView {
         NSRect(x: selX0, y: bounds.minY + 2, width: max(0, selX1 - selX0),
                height: bounds.height - 4).fill()
 
+        // Removed sections sit above the general selection tint. A warm,
+        // translucent treatment reads as a cut without hiding the waveform.
+        for range in removedRanges {
+            let x0 = xFor(range.lowerBound)
+            let x1 = xFor(range.upperBound)
+            NSColor.systemRed.withAlphaComponent(isDark ? 0.25 : 0.18).setFill()
+            NSRect(x: x0, y: bounds.minY + 2, width: max(1, x1 - x0),
+                   height: bounds.height - 4).fill()
+        }
+
         for (index, sample) in samples.enumerated() {
             let x = plot.minX + CGFloat(index) * barWidth
             let inSelection = x >= selX0 && x <= selX1
+            let sampleTime = duration * TimeInterval(index) / TimeInterval(samples.count)
+            let isRemoved = removedRanges.contains { $0.contains(sampleTime) }
             let height = max(1.2, plot.height * 0.48 * CGFloat(sample) / peak)
-            (inSelection ? NSColor.appGreenAccent
-                         : NSColor.secondaryLabelColor.withAlphaComponent(0.55)).setFill()
+            (isRemoved
+                ? NSColor.systemRed.withAlphaComponent(0.38)
+                : (inSelection
+                    ? NSColor.appGreenAccent
+                    : NSColor.secondaryLabelColor.withAlphaComponent(0.55))).setFill()
             NSRect(x: x, y: midY - height, width: max(0.8, barWidth - 0.6),
                    height: height * 2).fill()
         }
@@ -16418,11 +16461,22 @@ final class AdhkarAudioStudioController: NSViewController {
     private var countStepper: NSStepper!
     private var assignPopup: NSPopUpButton!
     private var addButton: NSButton!
+    private var editStatusLabel: NSTextField!
+    private var undoButton: NSButton!
 
     private var options: [AdhkarAudioOption] = []
     private var currentBaseRef: String?
     private var previewPlayer: AVAudioPlayer?
     private var previewTimer: Timer?
+    private var previewSegments: [ClosedRange<TimeInterval>] = []
+    private var previewSegmentIndex = 0
+
+    /// `false` preserves the original "selection becomes the clip" workflow.
+    /// It becomes true after a keep/remove/reset action or when reopening an
+    /// already edited ref, at which point every retained range is serialized.
+    private var hasEditedSegments = false
+    private var keptSegments: [ClosedRange<TimeInterval>] = []
+    private var editHistory: [([ClosedRange<TimeInterval>], Bool)] = []
 
     deinit {
         previewTimer?.invalidate()
@@ -16431,7 +16485,7 @@ final class AdhkarAudioStudioController: NSViewController {
 
     override func loadView() {
         let isRTL = Localizer.shared.isRTL
-        let root = NSView(frame: NSRect(x: 0, y: 0, width: 740, height: 540))
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 780, height: 610))
         root.userInterfaceLayoutDirection = isRTL ? .rightToLeft : .leftToRight
 
         let title = NSTextField(labelWithString: adhkarModeText("studio.open"))
@@ -16482,6 +16536,32 @@ final class AdhkarAudioStudioController: NSViewController {
                                                selectionLabel, playheadLabel])
         transportRow.orientation = .horizontal
         transportRow.spacing = 10
+
+        let keepButton = NSButton(title: adhkarModeText("studio.keep"),
+                                  target: self, action: #selector(keepSelectionTapped))
+        keepButton.bezelStyle = .rounded
+        keepButton.controlSize = .small
+        let removeButton = NSButton(title: adhkarModeText("studio.remove"),
+                                    target: self, action: #selector(removeSelectionTapped))
+        removeButton.bezelStyle = .rounded
+        removeButton.controlSize = .small
+        removeButton.contentTintColor = .systemRed
+        undoButton = NSButton(title: adhkarModeText("studio.undo"),
+                              target: self, action: #selector(undoCutTapped))
+        undoButton.bezelStyle = .rounded
+        undoButton.controlSize = .small
+        undoButton.isEnabled = false
+        let resetButton = NSButton(title: adhkarModeText("studio.reset"),
+                                   target: self, action: #selector(resetCutsTapped))
+        resetButton.bezelStyle = .rounded
+        resetButton.controlSize = .small
+        editStatusLabel = NSTextField(labelWithString: "")
+        editStatusLabel.font = Localizer.shared.font(size: 11.5, weight: .medium)
+        editStatusLabel.textColor = .secondaryLabelColor
+        let editRow = NSStackView(views: [keepButton, removeButton, undoButton,
+                                          resetButton, editStatusLabel])
+        editRow.orientation = .horizontal
+        editRow.spacing = 8
 
         let divider = NSBox()
         divider.boxType = .separator
@@ -16538,7 +16618,7 @@ final class AdhkarAudioStudioController: NSViewController {
         footerRow.orientation = .horizontal
 
         let stack = NSStackView(views: [title, hint, sourceRow, waveform,
-                                        transportRow, divider, createRow,
+                                        transportRow, editRow, divider, createRow,
                                         assignRow, footerRow])
         stack.orientation = .vertical
         stack.alignment = isRTL ? .trailing : .leading
@@ -16553,6 +16633,7 @@ final class AdhkarAudioStudioController: NSViewController {
             waveform.heightAnchor.constraint(equalToConstant: 150),
             waveform.widthAnchor.constraint(equalTo: stack.widthAnchor),
             sourceRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            editRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             createRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             assignRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
             footerRow.widthAnchor.constraint(equalTo: stack.widthAnchor),
@@ -16560,7 +16641,7 @@ final class AdhkarAudioStudioController: NSViewController {
             hint.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         self.view = root
-        preferredContentSize = NSSize(width: 740, height: 540)
+        preferredContentSize = NSSize(width: 780, height: 610)
 
         reloadOptions(selecting: initialRef.map(adhkarAudioBaseRef))
         refreshTimeLabels()
@@ -16587,20 +16668,30 @@ final class AdhkarAudioStudioController: NSViewController {
         waveform.samples = []
         waveform.duration = 0
         waveform.playhead = nil
+        waveform.removedRanges = []
+        keptSegments = []
+        hasEditedSegments = false
+        editHistory = []
+        undoButton?.isEnabled = false
         guard let url = resolveAdhkarAudio(ref) else { return }
         loadAdhkarWaveform(url: url) { [weak self] samples, duration in
             guard let self, self.currentBaseRef == adhkarAudioBaseRef(ref) else { return }
             self.waveform.samples = samples
             self.waveform.duration = duration
-            if let segment = self.initialRef.flatMap(adhkarAudioSegment(of:)),
-               segment.upperBound <= duration {
-                self.waveform.selectionStart = segment.lowerBound
-                self.waveform.selectionEnd = segment.upperBound
+            let existing = self.initialRef.map(adhkarAudioSegments(of:)) ?? []
+            let validExisting = self.normalizedSegments(existing, duration: duration)
+            if !validExisting.isEmpty {
+                self.keptSegments = validExisting
+                self.hasEditedSegments = true
+                self.waveform.selectionStart = validExisting.first?.lowerBound ?? 0
+                self.waveform.selectionEnd = validExisting.last?.upperBound ?? duration
             } else {
+                self.keptSegments = duration > 0 ? [0...duration] : []
+                self.hasEditedSegments = false
                 self.waveform.selectionStart = 0
                 self.waveform.selectionEnd = min(10, max(1, duration))
             }
-            self.refreshTimeLabels()
+            self.refreshEditPresentation()
         }
     }
 
@@ -16612,6 +16703,7 @@ final class AdhkarAudioStudioController: NSViewController {
 
     @objc private func importTapped() {
         guard let ref = presentAudioImportPanel() else { return }
+        initialRef = nil
         reloadOptions(selecting: adhkarAudioBaseRef(ref))
     }
 
@@ -16627,6 +16719,92 @@ final class AdhkarAudioStudioController: NSViewController {
         selectionLabel.stringValue = "\(adhkarModeText("studio.selection"))  "
             + "\(formatTime(waveform.selectionStart)) — \(formatTime(waveform.selectionEnd))"
         playheadLabel.stringValue = waveform.playhead.map { "▸ \(formatTime($0))" } ?? ""
+    }
+
+    private func normalizedSegments(_ ranges: [ClosedRange<TimeInterval>],
+                                    duration: TimeInterval? = nil)
+        -> [ClosedRange<TimeInterval>] {
+        let maximum = max(0, duration ?? waveform.duration)
+        let clamped = ranges.compactMap { range -> ClosedRange<TimeInterval>? in
+            let start = max(0, min(maximum, range.lowerBound))
+            let end = max(0, min(maximum, range.upperBound))
+            return end - start >= 0.05 ? start...end : nil
+        }.sorted { $0.lowerBound < $1.lowerBound }
+        var merged: [ClosedRange<TimeInterval>] = []
+        for range in clamped {
+            if let last = merged.last, range.lowerBound <= last.upperBound + 0.02 {
+                merged[merged.count - 1] = last.lowerBound...max(last.upperBound, range.upperBound)
+            } else {
+                merged.append(range)
+            }
+        }
+        return merged
+    }
+
+    private func removedSegments(from kept: [ClosedRange<TimeInterval>])
+        -> [ClosedRange<TimeInterval>] {
+        guard waveform.duration > 0 else { return [] }
+        let normalized = normalizedSegments(kept)
+        var removed: [ClosedRange<TimeInterval>] = []
+        var cursor: TimeInterval = 0
+        for segment in normalized {
+            if segment.lowerBound - cursor >= 0.05 {
+                removed.append(cursor...segment.lowerBound)
+            }
+            cursor = max(cursor, segment.upperBound)
+        }
+        if waveform.duration - cursor >= 0.05 {
+            removed.append(cursor...waveform.duration)
+        }
+        return removed
+    }
+
+    private func outputSegments() -> [ClosedRange<TimeInterval>] {
+        guard waveform.duration > 0 else { return [] }
+        if hasEditedSegments { return normalizedSegments(keptSegments) }
+        guard waveform.selectionEnd - waveform.selectionStart >= 0.05 else { return [] }
+        return normalizedSegments([waveform.selectionStart...waveform.selectionEnd])
+    }
+
+    private func refreshEditPresentation() {
+        waveform.removedRanges = hasEditedSegments
+            ? removedSegments(from: keptSegments) : []
+        let keptCount = outputSegments().count
+        let removedCount = waveform.removedRanges.filter {
+            $0.lowerBound > 0.02 && $0.upperBound < waveform.duration - 0.02
+        }.count
+        let keptText = String(format: adhkarModeText("studio.kept"), keptCount)
+        let removedText = String(format: adhkarModeText("studio.removed"), removedCount)
+        editStatusLabel?.stringValue = applyingArabicDigitPreference(
+            "\(keptText) · \(removedText)",
+            languageCode: Localizer.shared.current.code)
+        undoButton?.isEnabled = !editHistory.isEmpty
+        refreshTimeLabels()
+    }
+
+    private func pushEditState() {
+        editHistory.append((keptSegments, hasEditedSegments))
+        if editHistory.count > 30 { editHistory.removeFirst() }
+    }
+
+    private func subtract(_ removed: ClosedRange<TimeInterval>,
+                          from source: [ClosedRange<TimeInterval>])
+        -> [ClosedRange<TimeInterval>] {
+        var result: [ClosedRange<TimeInterval>] = []
+        for segment in source {
+            if removed.upperBound <= segment.lowerBound ||
+                removed.lowerBound >= segment.upperBound {
+                result.append(segment)
+                continue
+            }
+            if removed.lowerBound - segment.lowerBound >= 0.05 {
+                result.append(segment.lowerBound...min(removed.lowerBound, segment.upperBound))
+            }
+            if segment.upperBound - removed.upperBound >= 0.05 {
+                result.append(max(removed.upperBound, segment.lowerBound)...segment.upperBound)
+            }
+        }
+        return normalizedSegments(result)
     }
 
     private func ensurePlayer() -> AVAudioPlayer? {
@@ -16649,8 +16827,14 @@ final class AdhkarAudioStudioController: NSViewController {
             stopPreview()
             return
         }
-        guard let player = ensurePlayer() else { return }
-        player.currentTime = waveform.selectionStart
+        previewSegments = outputSegments()
+        previewSegmentIndex = 0
+        guard let first = previewSegments.first, let player = ensurePlayer() else {
+            NSSound.beep()
+            editStatusLabel.stringValue = adhkarModeText("studio.no_audio")
+            return
+        }
+        player.currentTime = first.lowerBound
         player.play()
         previewButton.title = adhkarModeText("studio.stop")
         previewTimer?.invalidate()
@@ -16659,7 +16843,19 @@ final class AdhkarAudioStudioController: NSViewController {
             guard let self, let player = self.previewPlayer else { return }
             self.waveform.playhead = player.currentTime
             self.refreshTimeLabels()
-            if !player.isPlaying || player.currentTime >= self.waveform.selectionEnd {
+            guard self.previewSegments.indices.contains(self.previewSegmentIndex) else {
+                self.stopPreview(); return
+            }
+            let current = self.previewSegments[self.previewSegmentIndex]
+            if player.currentTime >= current.upperBound {
+                if self.previewSegmentIndex + 1 < self.previewSegments.count {
+                    self.previewSegmentIndex += 1
+                    player.currentTime = self.previewSegments[self.previewSegmentIndex].lowerBound
+                    if !player.isPlaying { player.play() }
+                } else {
+                    self.stopPreview()
+                }
+            } else if !player.isPlaying {
                 self.stopPreview()
             }
         }
@@ -16669,6 +16865,8 @@ final class AdhkarAudioStudioController: NSViewController {
         previewTimer?.invalidate()
         previewTimer = nil
         previewPlayer?.pause()
+        previewSegments = []
+        previewSegmentIndex = 0
         previewButton?.title = adhkarModeText("studio.preview")
     }
 
@@ -16682,6 +16880,59 @@ final class AdhkarAudioStudioController: NSViewController {
         waveform.selectionEnd = max(playhead, waveform.selectionStart + 0.15)
     }
 
+    @objc private func keepSelectionTapped() {
+        guard waveform.selectionEnd - waveform.selectionStart >= 0.05 else {
+            NSSound.beep(); return
+        }
+        stopPreview()
+        pushEditState()
+        let selection = waveform.selectionStart...waveform.selectionEnd
+        let source = hasEditedSegments
+            ? keptSegments
+            : [0...waveform.duration]
+        keptSegments = normalizedSegments(source.compactMap { segment in
+            let start = max(segment.lowerBound, selection.lowerBound)
+            let end = min(segment.upperBound, selection.upperBound)
+            return end - start >= 0.05 ? start...end : nil
+        })
+        hasEditedSegments = true
+        refreshEditPresentation()
+    }
+
+    @objc private func removeSelectionTapped() {
+        guard waveform.selectionEnd - waveform.selectionStart >= 0.05 else {
+            NSSound.beep(); return
+        }
+        stopPreview()
+        pushEditState()
+        let source = hasEditedSegments
+            ? keptSegments
+            : [0...waveform.duration]
+        keptSegments = subtract(waveform.selectionStart...waveform.selectionEnd,
+                                from: source)
+        hasEditedSegments = true
+        refreshEditPresentation()
+    }
+
+    @objc private func undoCutTapped() {
+        guard let previous = editHistory.popLast() else { return }
+        stopPreview()
+        keptSegments = previous.0
+        hasEditedSegments = previous.1
+        refreshEditPresentation()
+    }
+
+    @objc private func resetCutsTapped() {
+        guard waveform.duration > 0 else { return }
+        stopPreview()
+        pushEditState()
+        keptSegments = [0...waveform.duration]
+        hasEditedSegments = true
+        waveform.selectionStart = 0
+        waveform.selectionEnd = waveform.duration
+        refreshEditPresentation()
+    }
+
     @objc private func stepperChanged(_ sender: NSStepper) {
         countField.stringValue = String(sender.integerValue)
     }
@@ -16689,11 +16940,18 @@ final class AdhkarAudioStudioController: NSViewController {
     // MARK: - producing segments
 
     private func segmentRef() -> String? {
-        guard let base = currentBaseRef, waveform.duration > 0,
-              waveform.selectionEnd > waveform.selectionStart else { return nil }
-        return base + String(format: "#%.2f-%.2f",
-                             waveform.selectionStart,
-                             min(waveform.selectionEnd, waveform.duration))
+        guard let base = currentBaseRef, waveform.duration > 0 else { return nil }
+        let segments = outputSegments()
+        guard !segments.isEmpty else { return nil }
+        if segments.count == 1,
+           segments[0].lowerBound <= 0.02,
+           segments[0].upperBound >= waveform.duration - 0.02 {
+            return base
+        }
+        let fragment = segments.map {
+            String(format: "%.2f-%.2f", $0.lowerBound, $0.upperBound)
+        }.joined(separator: ",")
+        return base + "#" + fragment
     }
 
     @objc private func addTapped() {
@@ -16705,12 +16963,17 @@ final class AdhkarAudioStudioController: NSViewController {
         // this dhikr ended.
         let length = waveform.selectionEnd - waveform.selectionStart
         let nextStart = waveform.selectionEnd
+        hasEditedSegments = false
+        keptSegments = waveform.duration > 0 ? [0...waveform.duration] : []
+        editHistory = []
+        waveform.removedRanges = []
         waveform.selectionStart = min(nextStart, max(0, waveform.duration - 0.2))
         waveform.selectionEnd = min(waveform.duration, nextStart + max(2, length))
         arabicField.stringValue = ""
         countStepper.integerValue = 1
         countField.stringValue = "1"
         stopPreview()
+        refreshEditPresentation()
     }
 
     @objc private func applyTapped() {
@@ -18574,8 +18837,14 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     private func audioDisplayName(_ ref: String) -> String {
         let base = adhkarAudioBaseRef(ref)
         var suffix = ""
-        if let segment = adhkarAudioSegment(of: ref) {
-            suffix = String(format: " · %.1fs–%.1fs", segment.lowerBound, segment.upperBound)
+        let segments = adhkarAudioSegments(of: ref)
+        if segments.count == 1, let segment = segments.first {
+            suffix = String(format: " · %.1fs–%.1fs",
+                            segment.lowerBound, segment.upperBound)
+        } else if segments.count > 1 {
+            let summary = String(format: adhkarModeText("studio.kept"), segments.count)
+            suffix = " · " + applyingArabicDigitPreference(
+                summary, languageCode: Localizer.shared.current.code)
         }
         if base.hasPrefix("bundled:") {
             return "Bundled · " + String(base.dropFirst("bundled:".count)) + suffix
