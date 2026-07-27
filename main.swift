@@ -126,7 +126,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.36.1"
+let kAppVersion          = "3.36.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -6146,18 +6146,41 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         buildShell()
     }
 
-    func showMainWindow(selecting destination: Int? = nil) {
+    func showMainWindow(selecting destination: Int? = nil,
+                        on targetScreen: NSScreen? = nil) {
         if let destination {
             selectedDestination = max(0, min(2, destination))
             isShowingSettings = false
             syncDockSelection()
             showSelectedDestination()
         }
+        if let targetScreen {
+            moveToInteractionScreen(targetScreen)
+        }
         NSApp.setActivationPolicy(.regular)
         makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         activeViewController()?.tabDidActivate()
         refreshDockModes()
+    }
+
+    /// Keep an already well-positioned window stable, but when an action
+    /// comes from another display move the full app to the center of that
+    /// display's usable area. The current size is preserved where possible
+    /// and constrained for a smaller monitor.
+    private func moveToInteractionScreen(_ targetScreen: NSScreen) {
+        if let currentScreen = screen,
+           currentScreen.frame.equalTo(targetScreen.frame) {
+            return
+        }
+
+        let visible = targetScreen.visibleFrame
+        var newFrame = frame
+        newFrame.size.width = min(newFrame.width, visible.width)
+        newFrame.size.height = min(newFrame.height, visible.height)
+        newFrame.origin.x = visible.midX - newFrame.width / 2
+        newFrame.origin.y = visible.midY - newFrame.height / 2
+        setFrame(newFrame, display: false)
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -20167,6 +20190,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// Adhan/prayer times and 1 is Adhkar.
     @objc func menuOpenMainWindow() { openMainWindow() }
     func openMainWindow(selecting destination: Int? = nil) {
+        let targetScreen = screenForCurrentInteraction()
         if mainWindow == nil {
             let w = MainWindow(appDelegate: self)
             let adhan = PrayerDashboardViewController(appDelegate: self)
@@ -20176,10 +20200,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             w.setQuran(QuranViewController())
             mainWindow = w
         }
-        mainWindow?.showMainWindow(selecting: destination)
+        mainWindow?.showMainWindow(selecting: destination, on: targetScreen)
     }
 
     func openSettingsWindow(section: SettingsSection) {
+        // Resolve the originating display before closing the popover because
+        // its transient window is the most precise record of the interaction.
+        let targetScreen = screenForCurrentInteraction()
         popover?.performClose(nil)
         if mainWindow == nil {
             let w = MainWindow(appDelegate: self)
@@ -20189,10 +20216,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             mainWindow = w
         }
         mainWindow?.showSettingsWindow(section: section)
-        mainWindow?.showMainWindow()
+        mainWindow?.showMainWindow(on: targetScreen)
     }
     func openMosqueSettings() {
         openSettingsWindow(section: .mosque)
+    }
+
+    /// The event window is authoritative for buttons inside the popup, full
+    /// app, sheets, and menus. The pointer is the correct fallback for menu
+    /// bar actions and for reopening the accessory app without an event
+    /// window.
+    private func screenForCurrentInteraction() -> NSScreen? {
+        if let eventScreen = NSApp.currentEvent?.window?.screen {
+            return eventScreen
+        }
+        let point = NSEvent.mouseLocation
+        return NSScreen.screens.first(where: {
+            NSMouseInRect(point, $0.frame, false)
+        }) ?? NSScreen.main ?? NSScreen.screens.first
     }
     @objc func switchToFavorite(_ sender: NSMenuItem) {
         let favs = loadFavorites()
