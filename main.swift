@@ -126,7 +126,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.37.0"
+let kAppVersion          = "3.37.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -16278,7 +16278,8 @@ private func adhanStudioText(_ key: String) -> String {
             "preview": "Preview result", "stop": "Stop", "start": "Start = playhead",
             "end": "End = playhead", "selection": "Selection", "full": "Full recording",
             "edit": "Edit…", "reset": "Reset to full", "save": "Save versions",
-            "done": "Done", "edited": "Edited", "saving": "Creating new audio files…",
+            "done": "Done", "edited": "Edited", "result_duration": "Final audio",
+            "saving": "Creating new audio files…",
             "saved": "Both newly named Adhan audio files are saved.",
             "save_failed": "The edited audio could not be saved. The original recording was not changed.",
             "unavailable": "Choose an Adhan recording to edit. The system sound cannot be cut."
@@ -16307,7 +16308,8 @@ private func adhanStudioText(_ key: String) -> String {
             "preview": "استماع للنتيجة", "stop": "إيقاف", "start": "البداية عند المؤشر",
             "end": "النهاية عند المؤشر", "selection": "المقطع", "full": "التسجيل كاملًا",
             "edit": "تحرير…", "reset": "إعادة التسجيل كاملًا", "save": "حفظ النسختين",
-            "done": "تم", "edited": "معدّل", "saving": "جارٍ إنشاء ملفي الصوت الجديدين…",
+            "done": "تم", "edited": "معدّل", "result_duration": "الصوت النهائي",
+            "saving": "جارٍ إنشاء ملفي الصوت الجديدين…",
             "saved": "تم حفظ ملفي الأذان الجديدين باسمين مختلفين.",
             "save_failed": "تعذّر حفظ الصوت المعدّل. لم يتغيّر التسجيل الأصلي.",
             "unavailable": "اختر تسجيل أذان لتحريره. لا يمكن قص صوت النظام."
@@ -16430,6 +16432,11 @@ final class AdhkarWaveformView: NSView {
     var removedRanges: [ClosedRange<TimeInterval>] = [] {
         didSet { needsDisplay = true }
     }
+    /// Adhkar editing keeps cutouts visible for auditability. Adhan editing
+    /// uses a result-first view: removed time collapses and the retained
+    /// samples are drawn as one continuous waveform, exactly like the file
+    /// that Save exports.
+    var collapsesRemovedRanges = false { didSet { needsDisplay = true } }
     var selectionStart: TimeInterval = 0 {
         didSet { needsDisplay = true; onSelectionChange?() }
     }
@@ -16447,15 +16454,69 @@ final class AdhkarWaveformView: NSView {
 
     private var plotRect: NSRect { bounds.insetBy(dx: 10, dy: 8) }
 
+    private var retainedRanges: [ClosedRange<TimeInterval>] {
+        guard duration > 0, collapsesRemovedRanges else {
+            return duration > 0 ? [0...duration] : []
+        }
+        let removed = removedRanges.sorted { $0.lowerBound < $1.lowerBound }
+        var retained: [ClosedRange<TimeInterval>] = []
+        var cursor: TimeInterval = 0
+        for range in removed {
+            let start = max(0, min(duration, range.lowerBound))
+            let end = max(0, min(duration, range.upperBound))
+            if start - cursor >= 0.001 { retained.append(cursor...start) }
+            cursor = max(cursor, end)
+        }
+        if duration - cursor >= 0.001 { retained.append(cursor...duration) }
+        return retained
+    }
+
+    var editedDuration: TimeInterval {
+        retainedRanges.reduce(0) { $0 + ($1.upperBound - $1.lowerBound) }
+    }
+
+    /// Maps a source timestamp to its position in the collapsed result.
+    /// Timestamps inside a deleted range resolve to that edit's stitch point.
+    func resultTime(for sourceTime: TimeInterval) -> TimeInterval {
+        guard collapsesRemovedRanges else { return sourceTime }
+        let time = max(0, min(duration, sourceTime))
+        var result: TimeInterval = 0
+        for range in retainedRanges {
+            if time < range.lowerBound { return result }
+            if time <= range.upperBound {
+                return result + time - range.lowerBound
+            }
+            result += range.upperBound - range.lowerBound
+        }
+        return result
+    }
+
+    private func sourceTime(forResultTime resultTime: TimeInterval)
+        -> TimeInterval {
+        guard collapsesRemovedRanges else { return resultTime }
+        var remaining = max(0, min(editedDuration, resultTime))
+        for range in retainedRanges {
+            let length = range.upperBound - range.lowerBound
+            if remaining <= length { return range.lowerBound + remaining }
+            remaining -= length
+        }
+        return retainedRanges.last?.upperBound ?? 0
+    }
+
     private func xFor(_ time: TimeInterval) -> CGFloat {
-        guard duration > 0 else { return plotRect.minX }
-        return plotRect.minX + plotRect.width * CGFloat(time / duration)
+        let visibleDuration = collapsesRemovedRanges ? editedDuration : duration
+        guard visibleDuration > 0 else { return plotRect.minX }
+        let visibleTime = collapsesRemovedRanges ? resultTime(for: time) : time
+        return plotRect.minX + plotRect.width *
+            CGFloat(visibleTime / visibleDuration)
     }
 
     private func timeFor(_ x: CGFloat) -> TimeInterval {
-        guard duration > 0, plotRect.width > 0 else { return 0 }
+        let visibleDuration = collapsesRemovedRanges ? editedDuration : duration
+        guard visibleDuration > 0, plotRect.width > 0 else { return 0 }
         let fraction = max(0, min(1, (x - plotRect.minX) / plotRect.width))
-        return TimeInterval(fraction) * duration
+        let resultTime = TimeInterval(fraction) * visibleDuration
+        return sourceTime(forResultTime: resultTime)
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -16475,7 +16536,18 @@ final class AdhkarWaveformView: NSView {
         }
         let plot = plotRect
         let midY = plot.midY
-        let barWidth = plot.width / CGFloat(samples.count)
+        let visibleSamples: [(Int, Float)] = samples.enumerated().compactMap {
+            element in
+            let index = element.offset
+            guard collapsesRemovedRanges else {
+                return (index, element.element)
+            }
+            let sampleTime = duration * TimeInterval(index) /
+                TimeInterval(samples.count)
+            return removedRanges.contains { $0.contains(sampleTime) }
+                ? nil : (index, element.element)
+        }
+        let barWidth = plot.width / CGFloat(max(1, visibleSamples.count))
         let peak = max(0.05, CGFloat(samples.max() ?? 1))
 
         // Selection band first, then bars over it.
@@ -16487,18 +16559,25 @@ final class AdhkarWaveformView: NSView {
 
         // Removed sections sit above the general selection tint. A warm,
         // translucent treatment reads as a cut without hiding the waveform.
-        for range in removedRanges {
-            let x0 = xFor(range.lowerBound)
-            let x1 = xFor(range.upperBound)
-            NSColor.systemRed.withAlphaComponent(isDark ? 0.25 : 0.18).setFill()
-            NSRect(x: x0, y: bounds.minY + 2, width: max(1, x1 - x0),
-                   height: bounds.height - 4).fill()
+        if !collapsesRemovedRanges {
+            for range in removedRanges {
+                let x0 = xFor(range.lowerBound)
+                let x1 = xFor(range.upperBound)
+                NSColor.systemRed.withAlphaComponent(
+                    isDark ? 0.25 : 0.18).setFill()
+                NSRect(x: x0, y: bounds.minY + 2,
+                       width: max(1, x1 - x0),
+                       height: bounds.height - 4).fill()
+            }
         }
 
-        for (index, sample) in samples.enumerated() {
-            let x = plot.minX + CGFloat(index) * barWidth
-            let inSelection = x >= selX0 && x <= selX1
-            let sampleTime = duration * TimeInterval(index) / TimeInterval(samples.count)
+        for (visibleIndex, element) in visibleSamples.enumerated() {
+            let (sourceIndex, sample) = element
+            let x = plot.minX + CGFloat(visibleIndex) * barWidth
+            let sampleTime = duration * TimeInterval(sourceIndex) /
+                TimeInterval(samples.count)
+            let inSelection = sampleTime >= selectionStart &&
+                sampleTime <= selectionEnd
             let isRemoved = removedRanges.contains { $0.contains(sampleTime) }
             let height = max(1.2, plot.height * 0.48 * CGFloat(sample) / peak)
             (isRemoved
@@ -16508,6 +16587,21 @@ final class AdhkarWaveformView: NSView {
                     : NSColor.secondaryLabelColor.withAlphaComponent(0.55))).setFill()
             NSRect(x: x, y: midY - height, width: max(0.8, barWidth - 0.6),
                    height: height * 2).fill()
+        }
+
+        // A subtle seam marks where retained ranges were physically joined.
+        // It is informational only; no deleted samples remain on screen.
+        if collapsesRemovedRanges, retainedRanges.count > 1,
+           editedDuration > 0 {
+            var elapsed: TimeInterval = 0
+            for range in retainedRanges.dropLast() {
+                elapsed += range.upperBound - range.lowerBound
+                let x = plot.minX + plot.width *
+                    CGFloat(elapsed / editedDuration)
+                NSColor.separatorColor.withAlphaComponent(0.75).setFill()
+                NSRect(x: x - 0.5, y: plot.minY,
+                       width: 1, height: plot.height).fill()
+            }
         }
 
         // Handles.
@@ -17363,7 +17457,8 @@ final class AdhanAudioStudioController: NSViewController {
                 self.drafts[target] = AdhanAudioCut(ranges: usable,
                     generatedFileName: saved?.generatedFileName,
                     displayName: saved?.displayName)
-                self.usesSegmentEditing[target] = usable.count > 1
+                self.usesSegmentEditing[target] =
+                    saved?.generatedFileName != nil || usable.count > 1
                 let selected = usable.first ?? (0...duration)
                 self.selectionDrafts[target] = AdhanAudioSegment(
                     start: selected.lowerBound, end: selected.upperBound)
@@ -17396,6 +17491,16 @@ final class AdhanAudioStudioController: NSViewController {
         waveform.playhead = nil
         refreshEditPresentation()
         refreshLabels()
+    }
+
+    private func selectEntireResult(_ segments: [ClosedRange<TimeInterval>]) {
+        guard let first = segments.first, let last = segments.last else { return }
+        isRestoringSelection = true
+        waveform.selectionStart = first.lowerBound
+        waveform.selectionEnd = last.upperBound
+        isRestoringSelection = false
+        selectionDrafts[currentTarget] = AdhanAudioSegment(
+            start: first.lowerBound, end: last.upperBound)
     }
 
     private func normalizedSegments(_ ranges: [ClosedRange<TimeInterval>])
@@ -17472,13 +17577,17 @@ final class AdhanAudioStudioController: NSViewController {
         let segments = normalizedSegments(drafts[currentTarget]?.ranges ?? [])
         waveform.removedRanges = usesSegmentEditing[currentTarget] == true
             ? removedSegments(from: segments) : []
+        waveform.collapsesRemovedRanges =
+            usesSegmentEditing[currentTarget] == true
         if usesSegmentEditing[currentTarget] == true {
             let kept = String(format: adhkarModeText("studio.kept"),
                               segments.count)
             let removed = String(format: adhkarModeText("studio.removed"),
                                  waveform.removedRanges.count)
+            let duration = "\(adhanStudioText("result_duration")) "
+                + formatAdhanCutTime(waveform.editedDuration)
             statusLabel.stringValue = applyingArabicDigitPreference(
-                "\(kept) · \(removed)",
+                "\(duration) · \(kept) · \(removed)",
                 languageCode: Localizer.shared.current.code)
             statusLabel.textColor = .secondaryLabelColor
         }
@@ -17486,9 +17595,11 @@ final class AdhanAudioStudioController: NSViewController {
 
     private func refreshLabels() {
         guard selectionLabel != nil else { return }
+        let resultStart = waveform.resultTime(for: waveform.selectionStart)
+        let resultEnd = waveform.resultTime(for: waveform.selectionEnd)
         selectionLabel.stringValue = "\(adhanStudioText("selection")): "
-            + "\(formatAdhanCutTime(waveform.selectionStart)) — "
-            + formatAdhanCutTime(waveform.selectionEnd)
+            + "\(formatAdhanCutTime(resultStart)) — "
+            + formatAdhanCutTime(resultEnd)
     }
 
     private func ensurePlayer() -> AVAudioPlayer? {
@@ -17597,6 +17708,9 @@ final class AdhanAudioStudioController: NSViewController {
         }
         drafts[currentTarget] = AdhanAudioCut(ranges: remaining)
         usesSegmentEditing[currentTarget] = true
+        waveform.removedRanges = removedSegments(from: remaining)
+        waveform.collapsesRemovedRanges = true
+        selectEntireResult(remaining)
         refreshEditPresentation()
     }
 
@@ -17621,6 +17735,9 @@ final class AdhanAudioStudioController: NSViewController {
         }
         drafts[currentTarget] = AdhanAudioCut(ranges: kept)
         usesSegmentEditing[currentTarget] = true
+        waveform.removedRanges = removedSegments(from: kept)
+        waveform.collapsesRemovedRanges = true
+        selectEntireResult(kept)
         refreshEditPresentation()
     }
 
