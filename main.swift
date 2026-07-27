@@ -126,7 +126,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.36.0"
+let kAppVersion          = "3.36.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -19768,7 +19768,7 @@ final class CompactAdhkarView: FlippedView {
 // ============================================================================
 class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                    UNUserNotificationCenterDelegate,
-                   AVAudioPlayerDelegate {
+                   AVAudioPlayerDelegate, NSPopoverDelegate {
 
     /// One application-wide Adhkar session. Scheduled audio starts here in
     /// the background; the compact popup and full reader are merely two
@@ -19781,6 +19781,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     var stopAdhanStatusItem: NSStatusItem?
     var popover: NSPopover!
     var loader: WKWebView!
+    /// `NSStatusItem.button.window` can continue to describe the primary
+    /// menu-bar window when macOS mirrors menu-bar extras across displays.
+    /// Anchor the popover to a tiny transparent panel at the real click
+    /// location instead, so it opens on the display the user is working on.
+    private var statusPopoverAnchorWindow: NSPanel?
+    private var statusPopoverAnchorPoint: NSPoint?
 
     /// Floating adhkar window. Lazily instantiated on first use (auto-trigger
     /// or manual menu open) so it costs nothing until needed.
@@ -20329,6 +20335,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     func applyThemeChange() {
         syncSystemControlAccent()
         let wasShown = popover?.isShown ?? false
+        let anchorPoint = statusPopoverAnchorPoint
         pickerView = nil
         settingsView = nil
         popover.contentViewController = buildContent()
@@ -20336,17 +20343,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         adhkarPanel?.reloadForPreferences()
         updateUI()
         tick()
-        if wasShown, let btn = statusItem.button {
-            popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
+        if wasShown {
+            showStatusPopover(at: anchorPoint)
         }
     }
 
     func togglePopover() {
-        guard let btn = statusItem.button else { return }
         if popover.isShown { popover.performClose(nil); return }
-        popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
+        showStatusPopover(at: NSEvent.mouseLocation)
+    }
+
+    /// Shows the compact popup on the screen containing `point`. A transparent
+    /// two-point panel provides a real AppKit anchor in that screen's
+    /// coordinate space; this avoids `NSStatusItem`'s primary-screen bias on
+    /// Macs whose menu bar is available on more than one display.
+    private func showStatusPopover(at point: NSPoint?) {
+        let requestedPoint = point ?? NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: {
+            NSMouseInRect(requestedPoint, $0.frame, false)
+        }) ?? NSScreen.main ?? NSScreen.screens.first else { return }
+
+        let visibleFrame = screen.visibleFrame
+        let horizontalInset: CGFloat = 12
+        let safeX = min(max(requestedPoint.x,
+                            visibleFrame.minX + horizontalInset),
+                        visibleFrame.maxX - horizontalInset)
+        let anchorPoint = NSPoint(x: safeX, y: visibleFrame.maxY)
+
+        statusPopoverAnchorWindow?.orderOut(nil)
+
+        let anchor = NSPanel(
+            contentRect: NSRect(x: anchorPoint.x - 1,
+                                y: anchorPoint.y,
+                                width: 2,
+                                height: 2),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false,
+            screen: screen)
+        anchor.isOpaque = false
+        anchor.backgroundColor = .clear
+        anchor.hasShadow = false
+        anchor.ignoresMouseEvents = true
+        anchor.hidesOnDeactivate = false
+        anchor.level = .statusBar
+        anchor.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary,
+                                     .stationary]
+        let anchorView = NSView(frame: NSRect(x: 0, y: 0, width: 2, height: 2))
+        anchorView.wantsLayer = true
+        anchorView.layer?.backgroundColor = NSColor.clear.cgColor
+        anchor.contentView = anchorView
+        anchor.orderFrontRegardless()
+
+        statusPopoverAnchorWindow = anchor
+        statusPopoverAnchorPoint = anchorPoint
+        popover.show(relativeTo: anchorView.bounds,
+                     of: anchorView,
+                     preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
         updateUI()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        statusPopoverAnchorWindow?.orderOut(nil)
+        statusPopoverAnchorWindow = nil
+        statusPopoverAnchorPoint = nil
     }
 
     // --------------------------------------------------------- popover
@@ -20354,6 +20415,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         popover = NSPopover()
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
         popover.contentSize = NSSize(width: 280, height: 490)
         popover.contentViewController = buildContent()
     }
@@ -20920,8 +20982,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         mainContent.isHidden = false
         setCompactAdhkarMode(true)
         compactAdhkarView?.present(collection: collection, autoPlay: autoPlay)
-        guard !popover.isShown, let button = statusItem.button else { return }
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        guard !popover.isShown else { return }
+        showStatusPopover(at: NSEvent.mouseLocation)
     }
 
     func showPicker() {
@@ -20998,6 +21060,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// every label, font, and RTL mirror reflects the new choice.
     func applyLanguageChange() {
         let wasShown = popover?.isShown ?? false
+        let anchorPoint = statusPopoverAnchorPoint
         // Drop cached sub-panels so they re-build with the new strings on next open.
         pickerView = nil
         settingsView = nil
@@ -21006,8 +21069,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         adhkarPanel?.reloadForPreferences()
         updateUI()
         tick()
-        if wasShown, let btn = statusItem.button {
-            popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
+        if wasShown {
+            showStatusPopover(at: anchorPoint)
         }
     }
 
