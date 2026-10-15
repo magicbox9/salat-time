@@ -127,7 +127,7 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.42.0"
+let kAppVersion          = "3.43.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -669,6 +669,67 @@ struct MosqueInfo: Codable {
     var sunset: String? = nil
     var date: String = ""
     var sourceURL: String = ""
+    /// The mosque's full-year timetable: calendar[month-1][day-1] =
+    /// [fajr, shuruq, dhuhr, asr, maghrib, isha]. Optional so older caches
+    /// still decode; filled on the next refresh from Mawaqit.
+    var calendar: [[[String]]]? = nil
+    /// Matching iqama calendar, [month-1][day-1] = five values that are
+    /// either offsets ("+10") or explicit times.
+    var iqamaCalendar: [[[String]]]? = nil
+    /// Mosque coordinates (for the Qibla direction).
+    var latitude: Double? = nil
+    var longitude: Double? = nil
+    /// Day offset the mosque applies to the Hijri calendar.
+    var hijriAdjustment: Int? = nil
+    /// Minutes before Fajr that the mosque marks as imsak.
+    var imsakMinutes: Int? = nil
+}
+
+extension MosqueInfo {
+    /// The mosque's published row for a date, or nil without a calendar.
+    func calendarRow(for date: Date) -> [String]? {
+        let parts = Calendar.current.dateComponents([.month, .day], from: date)
+        guard let month = parts.month, let day = parts.day,
+              let months = calendar, months.indices.contains(month - 1),
+              months[month - 1].indices.contains(day - 1) else { return nil }
+        let row = months[month - 1][day - 1]
+        return row.count >= 6 ? row : nil
+    }
+
+    /// Iqama values for a date (offsets or times), or nil.
+    func iqamaRow(for date: Date) -> [String]? {
+        let parts = Calendar.current.dateComponents([.month, .day], from: date)
+        guard let month = parts.month, let day = parts.day,
+              let months = iqamaCalendar, months.indices.contains(month - 1),
+              months[month - 1].indices.contains(day - 1) else { return nil }
+        let row = months[month - 1][day - 1]
+        return row.count >= 5 ? row : nil
+    }
+}
+
+/// "HH:mm" → minutes since midnight.
+func clockMinutes(_ hhmm: String) -> Int? {
+    let parts = hhmm.split(separator: ":")
+    guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]),
+          (0..<48).contains(h), (0..<60).contains(m) else { return nil }
+    return h * 60 + m
+}
+
+/// Minutes since midnight (wrapping) → "HH:mm".
+func clockString(_ minutes: Int) -> String {
+    let value = ((minutes % 1440) + 1440) % 1440
+    return String(format: "%02d:%02d", value / 60, value % 60)
+}
+
+/// Resolve an iqama value ("+10", "-5", or "HH:mm") against its adhan.
+func resolvedIqama(_ raw: String, adhan: String) -> String? {
+    let value = raw.trimmingCharacters(in: .whitespaces)
+    guard !value.isEmpty else { return nil }
+    if value.hasPrefix("+") || value.hasPrefix("-") {
+        guard let offset = Int(value), let base = clockMinutes(adhan) else { return nil }
+        return clockString(base + offset)
+    }
+    return clockMinutes(value) == nil ? nil : value
 }
 
 struct MosqueRef: Codable, Equatable {
@@ -7627,2297 +7688,6 @@ final class PrayerInfoViewController: NSViewController {
     }
 }
 
-/// A 24-hour visualization that makes the relationship between the obligatory
-/// prayers and the Nawafil windows visible at a glance. The overview remains
-/// available for users who prefer a conventional list.
-final class PrayerDayTimelineView: NSControl {
-    private let info: MosqueInfo
-    private let prayerNames: [String]
-    private let showsNawafil: Bool
-    private let events: [PrayerScheduleEvent]
-    var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
-    private var markerPoints: [(point: NSPoint, name: String, raw: String,
-                                event: PrayerScheduleEvent?)] = []
-    private var hoveredMarker: Int?
-    private var selectedMarker: Int?
-    private var trackingAreaRef: NSTrackingArea?
-    private var minuteTimer: Timer?
-
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-
-    init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
-         showsNawafil: Bool, events: [PrayerScheduleEvent] = [],
-         onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
-        self.info = info
-        self.prayerNames = prayerNames
-        self.showsNawafil = showsNawafil
-        self.events = events
-        self.onSelectEvent = onSelectEvent
-        super.init(frame: frame)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(featureText("full.timeline.title"))
-        let summary = zip(prayerNames, info.times).map {
-            "\($0.0) \(displayTime($0.1))"
-        }.joined(separator: ", ")
-        setAccessibilityValue(summary)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    deinit { minuteTimer?.invalidate() }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        minuteTimer?.invalidate()
-        guard window != nil else { return }
-        window?.acceptsMouseMovedEvents = true
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            self?.needsDisplay = true
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        minuteTimer = timer
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseMoved, .mouseEnteredAndExited,
-                                            .activeInActiveApp, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingAreaRef = area
-    }
-
-    private func nearestMarker(to point: NSPoint) -> Int? {
-        markerPoints.enumerated().min(by: {
-            hypot($0.element.point.x - point.x, $0.element.point.y - point.y)
-              < hypot($1.element.point.x - point.x, $1.element.point.y - point.y)
-        }).flatMap {
-            hypot($0.element.point.x - point.x, $0.element.point.y - point.y) <= 30
-                ? $0.offset : nil
-        }
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        hoveredMarker = nearestMarker(to: convert(event.locationInWindow, from: nil))
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hoveredMarker = nil
-        needsDisplay = true
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        selectedMarker = nearestMarker(to: convert(event.locationInWindow, from: nil))
-        if let selectedMarker, markerPoints.indices.contains(selectedMarker),
-           let scheduleEvent = markerPoints[selectedMarker].event {
-            onSelectEvent?(scheduleEvent, self)
-        }
-        needsDisplay = true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        guard event.keyCode == 123 || event.keyCode == 124, !markerPoints.isEmpty else {
-            super.keyDown(with: event)
-            return
-        }
-        let delta = event.keyCode == 123 ? -1 : 1
-        selectedMarker = ((selectedMarker ?? (delta > 0 ? -1 : 0)) + delta
-                          + markerPoints.count) % markerPoints.count
-        needsDisplay = true
-    }
-
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        if (event.keyCode == 36 || event.characters == " "),
-           let selectedMarker, markerPoints.indices.contains(selectedMarker),
-           let scheduleEvent = markerPoints[selectedMarker].event {
-            onSelectEvent?(scheduleEvent, self)
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-
-    private func minute(_ hhmm: String) -> Int? {
-        let parts = hhmm.split(separator: ":")
-        guard parts.count == 2, let hour = Int(parts[0]),
-              let minute = Int(parts[1]) else { return nil }
-        return max(0, min(1439, hour * 60 + minute))
-    }
-
-    private func drawText(_ value: String, in rect: NSRect, size: CGFloat,
-                          weight: NSFont.Weight = .regular,
-                          color: NSColor = .labelColor,
-                          alignment: NSTextAlignment = .left,
-                          lineBreak: NSLineBreakMode = .byTruncatingTail) {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = alignment
-        paragraph.lineBreakMode = lineBreak
-        paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        let font = Localizer.shared.font(size: size, weight: weight)
-        let lines = value.contains("\n") ? 2 : 1
-        let drawingRect = localizedTextFrame(rect, text: value, font: font,
-                                             maximumLines: lines)
-        NSAttributedString(string: value, attributes: [
-            .font: font,
-            .foregroundColor: color,
-            .paragraphStyle: paragraph,
-        ]).draw(with: drawingRect,
-                options: [.usesLineFragmentOrigin, .usesFontLeading])
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
-                                xRadius: 16, yRadius: 16)
-        (isDark ? NSColor(white: 1, alpha: 0.07)
-                : NSColor(white: 1, alpha: 0.86)).setFill()
-        card.fill()
-        (isDark ? NSColor.white.withAlphaComponent(0.13)
-                : NSColor.black.withAlphaComponent(0.10)).setStroke()
-        card.lineWidth = 0.7
-        card.stroke()
-
-        let leading = Localizer.shared.isRTL ? NSTextAlignment.right : .left
-        drawText(featureText("full.timeline.title"),
-                 in: NSRect(x: 22, y: 18, width: bounds.width - 44, height: 26),
-                 size: 20, weight: .semibold, alignment: leading)
-        drawText(featureText("full.guidance"),
-                 in: NSRect(x: 22, y: 46, width: bounds.width - 44, height: 18),
-                 size: 11, color: .secondaryLabelColor, alignment: leading)
-
-        let left: CGFloat = 38
-        let right: CGFloat = bounds.width - 38
-        let timelineWidth = max(1, right - left)
-        func xFor(_ value: Int) -> CGFloat {
-            let fraction = CGFloat(max(0, min(1440, value))) / 1440
-            return Localizer.shared.isRTL
-                ? right - timelineWidth * fraction
-                : left + timelineWidth * fraction
-        }
-        func drawBand(from start: Int, to end: Int, color: NSColor,
-                      title: String, showsTitle: Bool = true) {
-            guard end > start else { return }
-            let startX = xFor(start)
-            let endX = xFor(end)
-            let rect = NSRect(x: min(startX, endX), y: 82,
-                              width: max(3, abs(endX - startX)), height: 25)
-            color.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 6, yRadius: 6).fill()
-            if showsTitle && rect.width > 44 {
-                drawText(title, in: rect.insetBy(dx: 5, dy: 5), size: 8.5,
-                         weight: .semibold,
-                         color: isDark ? .white : .labelColor,
-                         alignment: .center)
-            }
-        }
-
-        let fajr = info.times.indices.contains(0) ? minute(info.times[0]) : nil
-        let dhuhr = info.times.indices.contains(1) ? minute(info.times[1]) : nil
-        let maghrib = info.times.indices.contains(3) ? minute(info.times[3]) : nil
-        let isha = info.times.indices.contains(4) ? minute(info.times[4]) : nil
-        let shuruq = minute(info.shuruq)
-        if showsNawafil {
-            let nightColor = NSColor.systemIndigo.withAlphaComponent(isDark ? 0.30 : 0.16)
-            if let fajr { drawBand(from: 0, to: fajr, color: nightColor,
-                                   title: featureText("nawafil.qiyam"), showsTitle: fajr > 100) }
-            if let isha { drawBand(from: isha, to: 1440, color: nightColor,
-                                   title: featureText("nawafil.qiyam")) }
-            if let shuruq, let dhuhr {
-                drawBand(from: min(1440, shuruq + 20), to: max(0, dhuhr - 10),
-                         color: NSColor.appAccent.withAlphaComponent(isDark ? 0.28 : 0.17),
-                         title: featureText("nawafil.duha"))
-            }
-        }
-
-        let lineY: CGFloat = 184
-        let line = NSBezierPath()
-        line.move(to: NSPoint(x: left, y: lineY))
-        line.line(to: NSPoint(x: right, y: lineY))
-        (isDark ? NSColor.white.withAlphaComponent(0.30)
-                : NSColor.black.withAlphaComponent(0.24)).setStroke()
-        line.lineWidth = 1.2
-        line.stroke()
-
-        let gold = NSColor(red: 0.79, green: 0.57, blue: 0.18, alpha: 1)
-        func rawatib(_ start: Int, _ end: Int) {
-            let startX = xFor(max(0, start))
-            let endX = xFor(min(1440, end))
-            let rect = NSRect(x: min(startX, endX), y: lineY - 12,
-                              width: max(3, abs(endX - startX)),
-                              height: 4)
-            gold.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 2, yRadius: 2).fill()
-        }
-        if showsNawafil {
-            if let fajr { rawatib(fajr - 35, fajr - 5) }
-            if let dhuhr { rawatib(dhuhr - 50, dhuhr - 5); rawatib(dhuhr + 5, dhuhr + 30) }
-            if let maghrib { rawatib(maghrib + 5, maghrib + 32) }
-            if let isha { rawatib(isha + 5, isha + 35) }
-        }
-
-        var points: [(name: String, raw: String, minute: Int, sunrise: Bool)] = []
-        for index in 0..<min(5, info.times.count, prayerNames.count) {
-            if let value = minute(info.times[index]) {
-                points.append((prayerNames[index], info.times[index], value, false))
-            }
-        }
-        if let value = shuruq, !info.shuruq.isEmpty {
-            points.append((t("adhkar.editor.schedule.shuruq"), info.shuruq, value, true))
-        }
-        points.sort { $0.minute < $1.minute }
-
-        markerPoints.removeAll(keepingCapacity: true)
-        for (index, point) in points.enumerated() {
-            let x = xFor(point.minute)
-            let upper = !index.isMultiple(of: 2)
-            let stem = NSBezierPath()
-            stem.move(to: NSPoint(x: x, y: lineY))
-            stem.line(to: NSPoint(x: x, y: upper ? 132 : 214))
-            (point.sunrise ? gold : NSColor.appAccent).withAlphaComponent(0.78).setStroke()
-            stem.lineWidth = 1
-            stem.stroke()
-
-            let marker = NSBezierPath(ovalIn: NSRect(x: x - 4.5, y: lineY - 4.5,
-                                                     width: 9, height: 9))
-            (point.sunrise ? gold : NSColor.appAccent).setFill()
-            marker.fill()
-            let scheduleEvent = events.first {
-                $0.kind == .obligatory && $0.prayerIndex.flatMap {
-                    prayerNames.indices.contains($0) ? prayerNames[$0] : nil
-                } == point.name
-            }
-            markerPoints.append((NSPoint(x: x, y: lineY), point.name,
-                                 point.raw, scheduleEvent))
-            let labelX = max(8, min(bounds.width - 98, x - 45))
-            let labelY: CGFloat = upper ? 112 : 220
-            drawText("\(point.name)\n\(displayTime(point.raw))",
-                     in: NSRect(x: labelX, y: labelY, width: 90, height: 38),
-                     size: 11, weight: .medium,
-                     color: point.sunrise ? gold : .labelColor,
-                     alignment: .center, lineBreak: .byWordWrapping)
-        }
-
-        // A live cursor turns this from a static chart into a day-at-a-glance
-        // instrument. Hover or click a marker to inspect it; arrow keys move
-        // the selection while the control has focus.
-        let calendar = Calendar.current
-        let now = Date()
-        let nowMinute = calendar.component(.hour, from: now) * 60
-                      + calendar.component(.minute, from: now)
-        let nowX = xFor(nowMinute)
-        let cursor = NSBezierPath()
-        cursor.move(to: NSPoint(x: nowX, y: 73))
-        cursor.line(to: NSPoint(x: nowX, y: 286))
-        NSColor.systemRed.withAlphaComponent(0.72).setStroke()
-        cursor.lineWidth = 1
-        cursor.stroke()
-
-        if let index = hoveredMarker ?? selectedMarker,
-           markerPoints.indices.contains(index) {
-            let item = markerPoints[index]
-            let calloutW: CGFloat = 150
-            let calloutX = max(12, min(bounds.width - calloutW - 12,
-                                       item.point.x - calloutW / 2))
-            let callout = NSRect(x: calloutX, y: 292, width: calloutW, height: 38)
-            (isDark ? NSColor(white: 0.16, alpha: 0.98)
-                    : NSColor(white: 0.98, alpha: 0.98)).setFill()
-            NSBezierPath(roundedRect: callout, xRadius: 8, yRadius: 8).fill()
-            drawText("\(item.name)  \(displayTime(item.raw))", in: callout,
-                     size: 12, weight: .semibold, alignment: .center)
-        }
-
-        for hour in stride(from: 0, through: 24, by: 6) {
-            let x = xFor(hour * 60)
-            let tick = NSBezierPath()
-            tick.move(to: NSPoint(x: x, y: lineY - 4))
-            tick.line(to: NSPoint(x: x, y: lineY + 4))
-            NSColor.secondaryLabelColor.setStroke()
-            tick.lineWidth = 0.7
-            tick.stroke()
-            let labelX = max(5, min(bounds.width - 39, x - 18))
-            drawText(localizedInterfaceDigits(String(format: "%02d:00", hour % 24)),
-                     in: NSRect(x: labelX, y: 272, width: 36, height: 14),
-                     size: 9.5, color: .tertiaryLabelColor, alignment: .center)
-        }
-
-        if showsNawafil {
-            gold.setFill()
-            NSBezierPath(roundedRect: NSRect(x: 22, y: 310, width: 24, height: 4),
-                         xRadius: 2, yRadius: 2).fill()
-            drawText(featureText("nawafil.rawatib"),
-                     in: NSRect(x: 54, y: 303, width: bounds.width - 76, height: 18),
-                     size: 11, color: .secondaryLabelColor, alignment: leading)
-        }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-}
-
-/// An actionable virtual button for events drawn inside a custom prayer view.
-/// The owner keeps these elements alive so VoiceOver can enumerate prayers
-/// and invoke the same info action as a pointer click.
-final class PrayerEventAccessibilityElement: NSAccessibilityElement {
-    private let pressHandler: () -> Void
-
-    init(parent: NSView, frame: NSRect, label: String, help: String,
-         pressHandler: @escaping () -> Void) {
-        self.pressHandler = pressHandler
-        super.init()
-        setAccessibilityEnabled(true)
-        setAccessibilityRole(.button)
-        setAccessibilityParent(parent)
-        setAccessibilityFrameInParentSpace(frame)
-        setAccessibilityLabel(label)
-        setAccessibilityHelp(help)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func accessibilityPerformPress() -> Bool {
-        pressHandler()
-        return true
-    }
-}
-
-/// Interactive, zoomable prayer-day instrument. It deliberately renders only
-/// `PrayerScheduleEvent` values from the shared builder: no visual-only prayer
-/// windows or guessed Rawatib offsets are introduced here.
-final class InteractivePrayerDayTimelineView: NSControl {
-    private struct EventTarget {
-        let visualRect: NSRect
-        let hitRect: NSRect
-        let event: PrayerScheduleEvent
-    }
-
-    private let info: MosqueInfo
-    private let prayerNames: [String]
-    private let showsNawafil: Bool
-    private let events: [PrayerScheduleEvent]
-    var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
-    var onStateChange: ((CGFloat, CGFloat, String?) -> Void)?
-
-    private var controlRail: NSStackView!
-    private var trackingAreaRef: NSTrackingArea?
-    private var eventTargets: [EventTarget] = []
-    private var selectedEventID: String?
-    private var hoveredEventID: String?
-    private var hoverMinute: CGFloat?
-    private var hoverFocusStartedAt: TimeInterval = 0
-    private var selectionPulseStartedAt: TimeInterval?
-    private var plotRect: NSRect = .zero
-    private var visibleStart: CGFloat = 0
-    private var visibleDuration: CGFloat = 1440
-    private var dragOriginX: CGFloat?
-    private var mouseDownPoint: NSPoint?
-    private var dragStartMinute: CGFloat = 0
-    private var pendingTarget: EventTarget?
-    private var didDrag = false
-    private var liveTimer: Timer?
-    private var accessibilityEventElements: [PrayerEventAccessibilityElement] = []
-    private var accessibilityGeometrySignature = ""
-    private lazy var nowText: String = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = preferredInterfaceLocale()
-        formatter.dateTimeStyle = .named
-        formatter.unitsStyle = .full
-        return formatter.localizedString(fromTimeInterval: 0)
-    }()
-
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-
-    static func preferredHeight(for width: CGFloat) -> CGFloat {
-        width < 760 ? 500 : 530
-    }
-
-    init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
-         showsNawafil: Bool, events: [PrayerScheduleEvent],
-         initialVisibleStart: CGFloat = 0,
-         initialVisibleDuration: CGFloat = 1440,
-         initialSelectedEventID: String? = nil,
-         onStateChange: ((CGFloat, CGFloat, String?) -> Void)? = nil,
-         onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
-        self.info = info
-        self.prayerNames = prayerNames
-        self.showsNawafil = showsNawafil
-        self.events = events
-        let duration = max(240, min(1440, initialVisibleDuration))
-        self.visibleDuration = duration
-        self.visibleStart = max(0, min(1440 - duration, initialVisibleStart))
-        self.selectedEventID = events.contains {
-            $0.id == initialSelectedEventID
-                && (showsNawafil || $0.kind == .obligatory)
-        } ? initialSelectedEventID : nil
-        self.onStateChange = onStateChange
-        self.onSelectEvent = onSelectEvent
-        super.init(frame: frame)
-
-        let earlierSymbol = Localizer.shared.isRTL ? "chevron.right" : "chevron.left"
-        let laterSymbol = Localizer.shared.isRTL ? "chevron.left" : "chevron.right"
-        let controls: [(String, String, Selector)] = [
-            (earlierSymbol, prayerInfoText("timeline.earlier"), #selector(showEarlier(_:))),
-            ("minus.magnifyingglass", prayerInfoText("timeline.zoom_out"), #selector(zoomOut(_:))),
-            ("arrow.left.and.right", prayerInfoText("timeline.fit"), #selector(fitDay(_:))),
-            ("scope", nowText, #selector(showNow(_:))),
-            ("plus.magnifyingglass", prayerInfoText("timeline.zoom_in"), #selector(zoomIn(_:))),
-            (laterSymbol, prayerInfoText("timeline.later"), #selector(showLater(_:))),
-        ]
-        let buttons = controls.map { symbol, label, action -> NSView in
-            let button = HoverIconButton(symbol: symbol, toolTip: label,
-                                         target: self, action: action,
-                                         pointSize: 14,
-                                         size: NSSize(width: 44, height: 44))
-            button.setAccessibilityLabel(label)
-            button.setAccessibilityHelp(featureText("full.timeline.title"))
-            return button
-        }
-        controlRail = NSStackView(views: buttons)
-        controlRail.orientation = .horizontal
-        controlRail.alignment = .centerY
-        controlRail.spacing = 2
-        controlRail.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        addSubview(controlRail)
-
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(featureText("full.timeline.title"))
-        setAccessibilityHelp(prayerInfoText("timeline.accessibility_help"))
-        updateAccessibilityValue()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-    deinit { liveTimer?.invalidate() }
-
-    override func layout() {
-        super.layout()
-        let railWidth: CGFloat = 44 * 6 + 2 * 5
-        controlRail.frame = NSRect(
-            x: Localizer.shared.isRTL ? 16 : bounds.width - railWidth - 16,
-            y: 10, width: railWidth, height: 44)
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        liveTimer?.invalidate()
-        guard window != nil else { return }
-        window?.acceptsMouseMovedEvents = true
-        let reduced = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let interval: TimeInterval = reduced ? 30 : (1.0 / 12.0)
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            guard let self, let window = self.window,
-                  window.occlusionState.contains(.visible) else { return }
-            self.needsDisplay = true
-        }
-        timer.tolerance = reduced ? 1 : 0.015
-        RunLoop.main.add(timer, forMode: .common)
-        liveTimer = timer
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseMoved, .mouseEnteredAndExited,
-                                            .activeInActiveApp, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingAreaRef = area
-    }
-
-    private var displayedEvents: [PrayerScheduleEvent] {
-        events.filter { showsNawafil || $0.kind == .obligatory }
-    }
-
-    private func updateAccessibilityValue() {
-        let selected = displayedEvents.first { $0.id == selectedEventID }
-        if let selected {
-            setAccessibilityValue("\(selected.knowledge.title). \(selected.knowledge.whenText)")
-        } else {
-            let summary = zip(prayerNames, info.times).map {
-                "\($0.0) \(displayTime($0.1))"
-            }.joined(separator: ", ")
-            setAccessibilityValue(summary)
-        }
-    }
-
-    private func setViewport(start: CGFloat, duration: CGFloat) {
-        let nextDuration = max(240, min(1440, duration))
-        let nextStart = max(0, min(1440 - nextDuration, start))
-        visibleDuration = nextDuration
-        visibleStart = nextStart
-        onStateChange?(visibleStart, visibleDuration, selectedEventID)
-        needsDisplay = true
-    }
-
-    private func zoom(by factor: CGFloat, anchoredAt anchor: CGFloat? = nil) {
-        let focus = anchor ?? (visibleStart + visibleDuration / 2)
-        let fraction = max(0, min(1, (focus - visibleStart) / visibleDuration))
-        let duration = max(240, min(1440, visibleDuration * factor))
-        setViewport(start: focus - duration * fraction, duration: duration)
-    }
-
-    private func pan(minutes: CGFloat) {
-        setViewport(start: visibleStart + minutes, duration: visibleDuration)
-    }
-
-    @objc private func zoomIn(_ sender: Any?) { zoom(by: 0.72) }
-    @objc private func zoomOut(_ sender: Any?) { zoom(by: 1.38) }
-    @objc private func fitDay(_ sender: Any?) { setViewport(start: 0, duration: 1440) }
-    @objc private func showNow(_ sender: Any?) {
-        let minute = currentMinute()
-        let duration = visibleDuration >= 1439 ? 720 : visibleDuration
-        setViewport(start: minute - duration / 2, duration: duration)
-    }
-    @objc private func showEarlier(_ sender: Any?) { pan(minutes: -visibleDuration * 0.22) }
-    @objc private func showLater(_ sender: Any?) { pan(minutes: visibleDuration * 0.22) }
-
-    override func magnify(with event: NSEvent) {
-        let factor = max(0.55, min(1.45, 1 - event.magnification))
-        let point = convert(event.locationInWindow, from: nil)
-        zoom(by: factor, anchoredAt: minute(at: point))
-    }
-
-    override func scrollWheel(with event: NSEvent) {
-        let horizontal = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
-        let shifted = event.modifierFlags.contains(.shift)
-        guard horizontal || shifted else {
-            // Preserve ordinary vertical document scrolling when the pointer
-            // happens to be above the chart.
-            super.scrollWheel(with: event)
-            return
-        }
-        let raw = horizontal ? event.scrollingDeltaX : event.scrollingDeltaY
-        let direction: CGFloat = Localizer.shared.isRTL ? -1 : 1
-        pan(minutes: raw * visibleDuration / 90 * direction)
-    }
-
-    private func target(at point: NSPoint) -> EventTarget? {
-        eventTargets.filter { $0.hitRect.contains(point) }.min {
-            hypot($0.visualRect.midX - point.x, $0.visualRect.midY - point.y)
-                < hypot($1.visualRect.midX - point.x, $1.visualRect.midY - point.y)
-        }
-    }
-
-    private func minute(at point: NSPoint) -> CGFloat? {
-        guard !plotRect.isEmpty, plotRect.contains(point) else { return nil }
-        let fraction = Localizer.shared.isRTL
-            ? (plotRect.maxX - point.x) / plotRect.width
-            : (point.x - plotRect.minX) / plotRect.width
-        return max(0, min(1440, visibleStart + fraction * visibleDuration))
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        let nextTarget = target(at: point)
-        let nextID = nextTarget?.event.id
-        if nextID != hoveredEventID {
-            hoveredEventID = nextID
-            hoverFocusStartedAt = ProcessInfo.processInfo.systemUptime
-        }
-        hoverMinute = minute(at: point)
-        if nextTarget != nil {
-            NSCursor.pointingHand.set()
-        } else if hoverMinute != nil {
-            NSCursor.crosshair.set()
-        } else {
-            NSCursor.arrow.set()
-        }
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hoveredEventID = nil
-        hoverMinute = nil
-        NSCursor.arrow.set()
-        needsDisplay = true
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        let point = convert(event.locationInWindow, from: nil)
-        guard plotRect.contains(point) else { return }
-        dragOriginX = point.x
-        mouseDownPoint = point
-        dragStartMinute = visibleStart
-        pendingTarget = target(at: point)
-        didDrag = false
-        NSCursor.closedHand.set()
-        needsDisplay = true
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let dragOriginX, let mouseDownPoint else { return }
-        let point = convert(event.locationInWindow, from: nil)
-        if hypot(point.x - mouseDownPoint.x, point.y - mouseDownPoint.y) >= 4 {
-            didDrag = true
-            pendingTarget = nil
-        }
-        guard didDrag else { return }
-        NSCursor.closedHand.set()
-        let usableWidth = max(1, plotRect.width)
-        let rtl: CGFloat = Localizer.shared.isRTL ? -1 : 1
-        let minutes = -(point.x - dragOriginX) / usableWidth * visibleDuration * rtl
-        setViewport(start: dragStartMinute + minutes, duration: visibleDuration)
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if !didDrag, let target = pendingTarget {
-            selectedEventID = target.event.id
-            selectionPulseStartedAt = ProcessInfo.processInfo.systemUptime
-            updateAccessibilityValue()
-            onStateChange?(visibleStart, visibleDuration, selectedEventID)
-            onSelectEvent?(target.event, self)
-        }
-        dragOriginX = nil
-        mouseDownPoint = nil
-        pendingTarget = nil
-        didDrag = false
-        hoverMinute = minute(at: point)
-        if target(at: point) != nil {
-            NSCursor.pointingHand.set()
-        } else if minute(at: point) != nil {
-            NSCursor.crosshair.set()
-        } else {
-            NSCursor.arrow.set()
-        }
-        needsDisplay = true
-    }
-
-    private func moveSelection(_ delta: Int) {
-        let ordered = displayedEvents.sorted {
-            $0.startMinute == $1.startMinute ? $0.id < $1.id
-                                             : $0.startMinute < $1.startMinute
-        }
-        guard !ordered.isEmpty else { return }
-        let current = ordered.firstIndex { $0.id == selectedEventID }
-        let index = ((current ?? (delta > 0 ? -1 : 0)) + delta + ordered.count)
-                  % ordered.count
-        selectedEventID = ordered[index].id
-        selectionPulseStartedAt = ProcessInfo.processInfo.systemUptime
-        let minute = CGFloat(ordered[index].startMinute % 1440)
-        if minute < visibleStart || minute > visibleStart + visibleDuration {
-            setViewport(start: minute - visibleDuration / 2,
-                        duration: visibleDuration)
-        }
-        updateAccessibilityValue()
-        onStateChange?(visibleStart, visibleDuration, selectedEventID)
-        needsDisplay = true
-    }
-
-    private func inspectSelected() -> Bool {
-        guard let selected = displayedEvents.first(where: { $0.id == selectedEventID })
-        else { return false }
-        onSelectEvent?(selected, self)
-        return true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        let rtl = Localizer.shared.isRTL
-        switch event.keyCode {
-        case 123:
-            pan(minutes: visibleDuration * (rtl ? 0.12 : -0.12))
-        case 124:
-            pan(minutes: visibleDuration * (rtl ? -0.12 : 0.12))
-        case 125: moveSelection(1)
-        case 126: moveSelection(-1)
-        case 36, 49:
-            if !inspectSelected() { super.keyDown(with: event) }
-        default:
-            switch event.charactersIgnoringModifiers {
-            case "+", "=": zoom(by: 0.72)
-            case "-", "_": zoom(by: 1.38)
-            case "0": setViewport(start: 0, duration: 1440)
-            case "n", "N": showNow(nil)
-            default: super.keyDown(with: event)
-            }
-        }
-    }
-
-    override func accessibilityPerformPress() -> Bool { inspectSelected() }
-
-    private func minute(_ hhmm: String) -> Int? {
-        let parts = hhmm.split(separator: ":")
-        guard parts.count == 2, let hour = Int(parts[0]), let minute = Int(parts[1])
-        else { return nil }
-        return max(0, min(1439, hour * 60 + minute))
-    }
-
-    private func timeLabel(_ value: Int) -> String {
-        let normalized = (value % 1440 + 1440) % 1440
-        return displayTime(String(format: "%02d:%02d",
-                                  normalized / 60, normalized % 60))
-    }
-
-    private func currentMinute(at date: Date = Date()) -> CGFloat {
-        let calendar = Calendar.current
-        let parts = calendar.dateComponents([.hour, .minute, .second, .nanosecond],
-                                            from: date)
-        return CGFloat(parts.hour ?? 0) * 60
-            + CGFloat(parts.minute ?? 0)
-            + CGFloat(parts.second ?? 0) / 60
-            + CGFloat(parts.nanosecond ?? 0) / 60_000_000_000
-    }
-
-    private func eventTimeText(_ event: PrayerScheduleEvent) -> String {
-        let start = timeLabel(event.startMinute)
-        guard let end = event.endMinute else { return start }
-        return "\(start) – \(timeLabel(end))"
-    }
-
-    private func drawText(_ value: String, in rect: NSRect, size: CGFloat,
-                          weight: NSFont.Weight = .regular,
-                          color: NSColor = .labelColor,
-                          alignment: NSTextAlignment = .left,
-                          maximumLines: Int = 1) {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = alignment
-        paragraph.lineBreakMode = .byTruncatingTail
-        paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        let font = Localizer.shared.font(size: size, weight: weight)
-        let drawingRect = localizedTextFrame(rect, text: value, font: font,
-                                             maximumLines: maximumLines)
-        NSAttributedString(string: value, attributes: [
-            .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
-        ]).draw(with: drawingRect,
-                options: [.usesLineFragmentOrigin, .usesFontLeading])
-    }
-
-    private func segments(for event: PrayerScheduleEvent) -> [(CGFloat, CGFloat?)] {
-        let start = CGFloat(event.startMinute)
-        guard let rawEnd = event.endMinute else {
-            return [(CGFloat((event.startMinute % 1440 + 1440) % 1440), nil)]
-        }
-        let end = CGFloat(rawEnd)
-        if end <= 1440 { return [(max(0, start), min(1440, end))] }
-        return [(max(0, start), 1440), (0, min(1440, end - 1440))]
-    }
-
-    private func color(for kind: PrayerScheduleKind) -> NSColor {
-        switch kind {
-        case .obligatory: return .appAccent
-        case .rawatib: return NSColor(red: 0.84, green: 0.59, blue: 0.18, alpha: 1)
-        case .duha: return .systemTeal
-        case .qiyam: return .systemIndigo
-        case .witr: return .systemPurple
-        }
-    }
-
-    private func laneIndex(for kind: PrayerScheduleKind) -> Int {
-        switch kind {
-        case .obligatory: return 0
-        case .rawatib: return 1
-        case .duha, .qiyam, .witr: return 2
-        }
-    }
-
-    private func minimumHitRect(for rect: NSRect) -> NSRect {
-        let width = max(44, rect.width)
-        let height = max(44, rect.height)
-        return NSRect(x: rect.midX - width / 2, y: rect.midY - height / 2,
-                      width: width, height: height)
-    }
-
-    private func activateEvent(_ id: String) {
-        guard let event = displayedEvents.first(where: { $0.id == id }) else { return }
-        selectedEventID = id
-        selectionPulseStartedAt = ProcessInfo.processInfo.systemUptime
-        updateAccessibilityValue()
-        onStateChange?(visibleStart, visibleDuration, selectedEventID)
-        onSelectEvent?(event, self)
-        needsDisplay = true
-    }
-
-    private func updateAccessibilityEventChildren() {
-        var unioned: [(event: PrayerScheduleEvent, rect: NSRect)] = []
-        for event in displayedEvents {
-            let rects = eventTargets.filter { $0.event.id == event.id }.map(\.hitRect)
-            guard var frame = rects.first else { continue }
-            for rect in rects.dropFirst() { frame = frame.union(rect) }
-            unioned.append((event, frame))
-        }
-        let geometry = unioned.map { item in
-            "\(item.event.id):\(Int(item.rect.minX)):\(Int(item.rect.minY)):"
-                + "\(Int(item.rect.width)):\(Int(item.rect.height))"
-        }.joined(separator: "|")
-        let signature = "\(Int(bounds.width))x\(Int(bounds.height))@"
-            + "\(Int(visibleStart))/\(Int(visibleDuration))|\(geometry)"
-        guard signature != accessibilityGeometrySignature else { return }
-        accessibilityGeometrySignature = signature
-        accessibilityEventElements = unioned.map { item in
-            let event = item.event
-            return PrayerEventAccessibilityElement(
-                parent: self, frame: item.rect,
-                label: "\(event.knowledge.title). \(eventTimeText(event)). "
-                    + event.knowledge.whenText,
-                help: prayerInfoText("info.open"),
-                pressHandler: { [weak self] in self?.activateEvent(event.id) })
-        }
-        let children: [Any] = [controlRail as Any]
-            + accessibilityEventElements.map { $0 as Any }
-        setAccessibilityChildren(children)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let reducedMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let animationTime = ProcessInfo.processInfo.systemUptime
-        if let started = selectionPulseStartedAt,
-           animationTime - started > 0.42 {
-            selectionPulseStartedAt = nil
-        }
-        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
-                                xRadius: 18, yRadius: 18)
-        (dark ? NSColor(white: 0.08, alpha: 0.96)
-              : NSColor(white: 0.985, alpha: 0.96)).setFill()
-        card.fill()
-        (dark ? NSColor.white.withAlphaComponent(0.14)
-              : NSColor.black.withAlphaComponent(0.10)).setStroke()
-        card.lineWidth = 1
-        card.stroke()
-
-        let rtl = Localizer.shared.isRTL
-        let leading: NSTextAlignment = rtl ? .right : .left
-        let titleWidth = max(180, bounds.width - 330)
-        drawText(featureText("full.timeline.title"),
-                 in: NSRect(x: rtl ? bounds.width - titleWidth - 20 : 20,
-                            y: 14, width: titleWidth, height: 28),
-                 size: 20, weight: .semibold, alignment: leading)
-        drawText(prayerInfoText("timeline.gesture_hint"),
-                 in: NSRect(x: rtl ? bounds.width - titleWidth - 20 : 20,
-                            y: 42, width: titleWidth, height: 18),
-                 size: 10.5, color: .secondaryLabelColor, alignment: leading)
-
-        let labelWidth: CGFloat = 104
-        let plot = NSRect(x: rtl ? 26 : labelWidth + 22,
-                          y: 86,
-                          width: bounds.width - labelWidth - 48,
-                          height: bounds.height - 166)
-        plotRect = plot
-        guard plot.width > 80, plot.height > 150 else {
-            plotRect = .zero
-            return
-        }
-
-        func xFor(_ minute: CGFloat) -> CGFloat {
-            let fraction = (minute - visibleStart) / visibleDuration
-            return rtl ? plot.maxX - plot.width * fraction
-                       : plot.minX + plot.width * fraction
-        }
-
-        let nowMinute = currentMinute()
-
-        // A six-part sky follows the mosque's own day landmarks. It gives
-        // panning a spatial rhythm without adding or guessing prayer windows.
-        let fajr = info.times.indices.contains(0)
-            ? minute(info.times[0]) ?? 5 * 60 : 5 * 60
-        let sunrise = max(fajr, minute(info.shuruq) ?? 6 * 60)
-        let dhuhr = max(sunrise, info.times.indices.contains(1)
-            ? minute(info.times[1]) ?? 12 * 60 : 12 * 60)
-        let maghrib = max(dhuhr, info.times.indices.contains(3)
-            ? minute(info.times[3]) ?? 18 * 60 : 18 * 60)
-        let isha = max(maghrib, info.times.indices.contains(4)
-            ? minute(info.times[4]) ?? 21 * 60 : 21 * 60)
-        let phases: [(Int, Int, NSColor)] = [
-            (0, fajr, NSColor(red: 0.19, green: 0.22, blue: 0.48, alpha: 1)),
-            (fajr, sunrise, NSColor(red: 0.91, green: 0.50, blue: 0.25, alpha: 1)),
-            (sunrise, dhuhr, NSColor(red: 0.91, green: 0.68, blue: 0.25, alpha: 1)),
-            (dhuhr, maghrib, NSColor(red: 0.18, green: 0.63, blue: 0.61, alpha: 1)),
-            (maghrib, isha, NSColor(red: 0.75, green: 0.34, blue: 0.31, alpha: 1)),
-            (isha, 1440, NSColor(red: 0.27, green: 0.22, blue: 0.49, alpha: 1)),
-        ]
-        for (start, end, color) in phases {
-            let a = max(CGFloat(start), visibleStart)
-            let b = min(CGFloat(end), visibleStart + visibleDuration)
-            guard b > a else { continue }
-            let x1 = xFor(a), x2 = xFor(b)
-            let rect = NSRect(x: min(x1, x2), y: plot.minY,
-                              width: abs(x2 - x1), height: plot.height)
-            let isCurrent = nowMinute >= CGFloat(start) && nowMinute < CGFloat(end)
-            let alpha: CGFloat = dark
-                ? (isCurrent ? 0.145 : 0.090)
-                : (isCurrent ? 0.125 : 0.075)
-            let first = color.withAlphaComponent(alpha * 0.70)
-            let second = color.withAlphaComponent(alpha)
-            if let gradient = NSGradient(starting: first, ending: second) {
-                gradient.draw(in: rect, angle: rtl ? 180 : 0)
-            } else {
-                second.setFill()
-                rect.fill()
-            }
-        }
-
-        // Quiet zellige diamonds connect the visualization to the Moroccan
-        // identity while retaining native macOS contrast and hierarchy.
-        NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(rect: plot).addClip()
-        (dark ? NSColor.white.withAlphaComponent(0.032)
-              : NSColor.appGreenAccent.withAlphaComponent(0.045)).setStroke()
-        for y in stride(from: plot.minY + 18, through: plot.maxY, by: 38) {
-            for x in stride(from: plot.minX + 18, through: plot.maxX, by: 48) {
-                let diamond = NSBezierPath()
-                diamond.move(to: NSPoint(x: x, y: y - 5))
-                diamond.line(to: NSPoint(x: x + 5, y: y))
-                diamond.line(to: NSPoint(x: x, y: y + 5))
-                diamond.line(to: NSPoint(x: x - 5, y: y))
-                diamond.close()
-                diamond.lineWidth = 0.7
-                diamond.stroke()
-            }
-        }
-        NSGraphicsContext.restoreGraphicsState()
-
-        let laneGap: CGFloat = 8
-        let laneHeight = (plot.height - laneGap * 2) / 3
-        let laneTitles = [prayerInfoText("category.obligatory"),
-                          featureText("nawafil.rawatib"),
-                          featureText("full.nawafil")]
-        for index in 0..<3 {
-            let y = plot.minY + CGFloat(index) * (laneHeight + laneGap)
-            let lane = NSRect(x: plot.minX, y: y, width: plot.width,
-                              height: laneHeight)
-            (dark ? NSColor.white.withAlphaComponent(0.045)
-                  : NSColor.white.withAlphaComponent(0.38)).setFill()
-            NSBezierPath(roundedRect: lane, xRadius: 10, yRadius: 10).fill()
-            let labelRect = NSRect(x: rtl ? plot.maxX + 8 : 14, y: y,
-                                   width: labelWidth - 18, height: laneHeight)
-            drawText(laneTitles[index], in: labelRect, size: 11,
-                     weight: .semibold, color: .secondaryLabelColor,
-                     alignment: leading)
-        }
-
-        let tickStep: Int = visibleDuration <= 360 ? 60
-            : (visibleDuration <= 720 ? 120 : 240)
-        let firstTick = Int(ceil(visibleStart / CGFloat(tickStep))) * tickStep
-        for value in stride(from: firstTick,
-                            through: Int(visibleStart + visibleDuration),
-                            by: tickStep) {
-            let x = xFor(CGFloat(value))
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: x, y: plot.minY - 5))
-            path.line(to: NSPoint(x: x, y: plot.maxY))
-            NSColor.secondaryLabelColor.withAlphaComponent(0.20).setStroke()
-            path.lineWidth = 0.7
-            path.stroke()
-            let labelWidth: CGFloat = is12HourFormat() ? 82 : 58
-            drawText(timeLabel(value),
-                     in: NSRect(x: x - labelWidth / 2, y: plot.minY - 25,
-                                width: labelWidth, height: 18),
-                     size: 10, color: .secondaryLabelColor, alignment: .center)
-        }
-
-        func easedHoverProgress(for eventID: String) -> CGFloat {
-            guard eventID == hoveredEventID else { return 0 }
-            guard !reducedMotion else { return 1 }
-            let raw = max(0, min(1,
-                CGFloat((animationTime - hoverFocusStartedAt) / 0.16)))
-            return raw * raw * (3 - 2 * raw)
-        }
-
-        func selectionPulseProgress(for eventID: String) -> CGFloat? {
-            guard eventID == selectedEventID,
-                  !reducedMotion,
-                  let started = selectionPulseStartedAt else { return nil }
-            return max(0, min(1, CGFloat((animationTime - started) / 0.42)))
-        }
-
-        func drawRoundedFocus(_ rect: NSRect, radius: CGFloat,
-                              color: NSColor, selected: Bool,
-                              hoverProgress: CGFloat,
-                              pulseProgress: CGFloat?) {
-            guard selected || hoverProgress > 0 else { return }
-            let focusRect = rect.insetBy(dx: -2, dy: -2)
-            if selected {
-                let underlay = NSBezierPath(roundedRect: focusRect,
-                                             xRadius: radius + 2,
-                                             yRadius: radius + 2)
-                (dark ? NSColor.white.withAlphaComponent(0.28)
-                      : NSColor.black.withAlphaComponent(0.22)).setStroke()
-                underlay.lineWidth = 4.5
-                underlay.stroke()
-            }
-            let outline = NSBezierPath(roundedRect: focusRect,
-                                       xRadius: radius + 2,
-                                       yRadius: radius + 2)
-            color.withAlphaComponent(selected ? 0.96 : 0.35 + 0.48 * hoverProgress)
-                .setStroke()
-            outline.lineWidth = selected ? 2.6 : 1.2 + hoverProgress
-            outline.stroke()
-            if let pulseProgress {
-                let expansion = 4 + 8 * pulseProgress
-                let pulse = NSBezierPath(roundedRect: rect.insetBy(dx: -expansion,
-                                                                   dy: -expansion),
-                                         xRadius: radius + expansion,
-                                         yRadius: radius + expansion)
-                color.withAlphaComponent(0.34 * (1 - pulseProgress)).setStroke()
-                pulse.lineWidth = 2.2
-                pulse.stroke()
-            }
-        }
-
-        func drawMarkerFocus(_ rect: NSRect, color: NSColor,
-                             selected: Bool, hoverProgress: CGFloat,
-                             pulseProgress: CGFloat?) {
-            guard selected || hoverProgress > 0 else { return }
-            let focusRect = rect.insetBy(dx: -5, dy: -5)
-            if selected {
-                let underlay = NSBezierPath(ovalIn: focusRect)
-                (dark ? NSColor.white.withAlphaComponent(0.28)
-                      : NSColor.black.withAlphaComponent(0.22)).setStroke()
-                underlay.lineWidth = 5
-                underlay.stroke()
-            }
-            let outline = NSBezierPath(ovalIn: focusRect)
-            color.withAlphaComponent(selected ? 0.96 : 0.35 + 0.48 * hoverProgress)
-                .setStroke()
-            outline.lineWidth = selected ? 3 : 1.5 + hoverProgress
-            outline.stroke()
-            if let pulseProgress {
-                let expansion = 8 + 8 * pulseProgress
-                let pulse = NSBezierPath(ovalIn: rect.insetBy(dx: -expansion,
-                                                              dy: -expansion))
-                color.withAlphaComponent(0.34 * (1 - pulseProgress)).setStroke()
-                pulse.lineWidth = 2.2
-                pulse.stroke()
-            }
-        }
-
-        eventTargets.removeAll(keepingCapacity: true)
-        for event in displayedEvents {
-            let lane = laneIndex(for: event.kind)
-            let laneY = plot.minY + CGFloat(lane) * (laneHeight + laneGap)
-            let color = color(for: event.kind)
-            let selected = event.id == selectedEventID
-            let hovered = event.id == hoveredEventID
-            let hoverProgress = easedHoverProgress(for: event.id)
-            let pulseProgress = selectionPulseProgress(for: event.id)
-            for segment in segments(for: event) {
-                let start = max(segment.0, visibleStart)
-                let segmentEnd = segment.1.map {
-                    min($0, visibleStart + visibleDuration)
-                }
-                if let segmentEnd, segmentEnd <= start { continue }
-                if segment.1 == nil,
-                   (segment.0 < visibleStart
-                    || segment.0 > visibleStart + visibleDuration) { continue }
-                let baseY: CGFloat
-                let height: CGFloat
-                switch event.kind {
-                case .obligatory: baseY = laneY + laneHeight * 0.30; height = 24
-                case .rawatib:
-                    // Before/after markers may share the same published entry
-                    // when a mosque has no iqama. Separate tracks keep both
-                    // events visible and independently actionable.
-                    baseY = event.id.hasSuffix(".before")
-                        ? laneY + laneHeight * 0.20
-                        : laneY + laneHeight * 0.62
-                    height = 16
-                case .duha: baseY = laneY + 8; height = 20
-                case .qiyam: baseY = laneY + laneHeight * 0.38; height = 20
-                case .witr: baseY = laneY + laneHeight - 23; height = 12
-                }
-                let x1 = xFor(start)
-                if let segmentEnd {
-                    let x2 = xFor(segmentEnd)
-                    let rect = NSRect(x: min(x1, x2), y: baseY,
-                                      width: max(5, abs(x2 - x1)), height: height)
-                    let opacity: CGFloat = selected ? 0.92
-                        : (hovered ? 0.60 + 0.22 * hoverProgress : 0.60)
-                    color.withAlphaComponent(opacity).setFill()
-                    NSBezierPath(roundedRect: rect, xRadius: height / 2,
-                                 yRadius: height / 2).fill()
-                    if event.precision == .instructionalMarker {
-                        let outline = NSBezierPath(roundedRect: rect, xRadius: height / 2,
-                                                   yRadius: height / 2)
-                        color.setStroke()
-                        outline.setLineDash([4, 3], count: 2, phase: 0)
-                        outline.lineWidth = selected ? 2.5 : 1.2
-                        outline.stroke()
-                    }
-                    drawRoundedFocus(rect, radius: height / 2,
-                                     color: color, selected: selected,
-                                     hoverProgress: hoverProgress,
-                                     pulseProgress: pulseProgress)
-                    if rect.width > 76 {
-                        drawText(event.knowledge.title,
-                                 in: rect.insetBy(dx: 8, dy: 1), size: 10,
-                                 weight: .semibold,
-                                 color: dark ? .white : .labelColor,
-                                 alignment: .center)
-                    }
-                    eventTargets.append(EventTarget(
-                        visualRect: rect,
-                        hitRect: minimumHitRect(for: rect).intersection(plot),
-                        event: event))
-                } else {
-                    let markerRect = NSRect(x: x1 - 7, y: baseY - 2,
-                                            width: 14, height: 14)
-                    color.setFill()
-                    let shape = NSBezierPath()
-                    if event.kind == .rawatib && event.id.hasSuffix(".before") {
-                        shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.maxY))
-                        shape.line(to: NSPoint(x: markerRect.minX, y: markerRect.maxY))
-                        shape.close()
-                    } else if event.kind == .rawatib {
-                        shape.move(to: NSPoint(x: markerRect.minX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
-                        shape.close()
-                    } else if event.kind == .witr {
-                        shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.midY))
-                        shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
-                        shape.line(to: NSPoint(x: markerRect.minX, y: markerRect.midY))
-                        shape.close()
-                    } else {
-                        shape.appendOval(in: markerRect)
-                    }
-                    shape.fill()
-                    drawMarkerFocus(markerRect, color: color,
-                                    selected: selected,
-                                    hoverProgress: hoverProgress,
-                                    pulseProgress: pulseProgress)
-                    let hit = NSRect(x: x1 - 22, y: baseY - 17,
-                                     width: 44, height: 44).intersection(plot)
-                    eventTargets.append(EventTarget(visualRect: markerRect,
-                                                    hitRect: hit,
-                                                    event: event))
-                }
-            }
-        }
-        updateAccessibilityEventChildren()
-
-        func drawPill(_ text: String, centerX: CGFloat, y: CGFloat,
-                      background: NSColor, foreground: NSColor) {
-            let font = Localizer.shared.font(size: 10.5, weight: .semibold)
-            let measured = (text as NSString).size(withAttributes: [.font: font])
-            let width = min(plot.width - 12, max(72, ceil(measured.width) + 22))
-            let rect = NSRect(x: max(plot.minX + 6,
-                                     min(plot.maxX - width - 6,
-                                         centerX - width / 2)),
-                              y: y, width: width, height: 24)
-            background.setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12).fill()
-            drawText(text, in: rect.insetBy(dx: 10, dy: 4), size: 10.5,
-                     weight: .semibold, color: foreground, alignment: .center)
-        }
-
-        // The day-progress rail and fractional-minute cursor make the chart a
-        // live instrument. Reduce Motion keeps the same information but uses
-        // a static orb and the slower lifecycle timer configured above.
-        let railY = plot.minY + 2
-        let rail = NSBezierPath()
-        rail.move(to: NSPoint(x: plot.minX, y: railY))
-        rail.line(to: NSPoint(x: plot.maxX, y: railY))
-        NSColor.secondaryLabelColor.withAlphaComponent(dark ? 0.24 : 0.18).setStroke()
-        rail.lineWidth = 3
-        rail.lineCapStyle = .round
-        rail.stroke()
-
-        if nowMinute > visibleStart {
-            let progressMinute = min(nowMinute, visibleStart + visibleDuration)
-            let x1 = xFor(visibleStart)
-            let x2 = xFor(progressMinute)
-            let progress = NSBezierPath()
-            progress.move(to: NSPoint(x: x1, y: railY))
-            progress.line(to: NSPoint(x: x2, y: railY))
-            NSColor.appAccent.withAlphaComponent(0.74).setStroke()
-            progress.lineWidth = 3.4
-            progress.lineCapStyle = .round
-            progress.stroke()
-        }
-
-        if nowMinute >= visibleStart,
-           nowMinute <= visibleStart + visibleDuration {
-            let x = xFor(nowMinute)
-            let gold = NSColor(red: 0.92, green: 0.64, blue: 0.20, alpha: 1)
-            let cursor = NSBezierPath()
-            cursor.move(to: NSPoint(x: x, y: railY))
-            cursor.line(to: NSPoint(x: x, y: plot.maxY))
-            gold.withAlphaComponent(0.70).setStroke()
-            cursor.lineWidth = 1.8
-            cursor.stroke()
-
-            let pulse = reducedMotion ? 0 : CGFloat(
-                (sin(animationTime * 2 * Double.pi / 1.8) + 1) / 2)
-            let haloRadius = 9 + 4 * pulse
-            gold.withAlphaComponent(reducedMotion ? 0.20 : 0.10 + 0.12 * (1 - pulse))
-                .setFill()
-            NSBezierPath(ovalIn: NSRect(x: x - haloRadius,
-                                        y: railY - haloRadius,
-                                        width: haloRadius * 2,
-                                        height: haloRadius * 2)).fill()
-            gold.setFill()
-            NSBezierPath(ovalIn: NSRect(x: x - 5.5, y: railY - 5.5,
-                                        width: 11, height: 11)).fill()
-            let label = "\(nowText) · \(timeLabel(Int(floor(nowMinute))))"
-            drawPill(label, centerX: x, y: plot.minY + 9,
-                     background: gold.withAlphaComponent(dark ? 0.92 : 0.96),
-                     foreground: NSColor.black.withAlphaComponent(0.82))
-        }
-
-        if let hoverMinute, dragOriginX == nil {
-            let x = xFor(hoverMinute)
-            let guide = NSBezierPath()
-            guide.move(to: NSPoint(x: x, y: plot.minY + 4))
-            guide.line(to: NSPoint(x: x, y: plot.maxY))
-            guide.setLineDash([3, 4], count: 2, phase: 0)
-            NSColor.labelColor.withAlphaComponent(dark ? 0.38 : 0.28).setStroke()
-            guide.lineWidth = 1
-            guide.stroke()
-            drawPill(timeLabel(Int(floor(hoverMinute))), centerX: x,
-                     y: plot.maxY - 29,
-                     background: dark
-                        ? NSColor(white: 0.15, alpha: 0.96)
-                        : NSColor(white: 1, alpha: 0.96),
-                     foreground: .labelColor)
-        }
-
-        if let id = hoveredEventID ?? selectedEventID,
-           let event = displayedEvents.first(where: { $0.id == id }) {
-            let ribbon = NSRect(x: 20, y: bounds.height - 66,
-                                width: bounds.width - 40, height: 50)
-            (dark ? NSColor.white.withAlphaComponent(0.09)
-                  : NSColor.black.withAlphaComponent(0.045)).setFill()
-            NSBezierPath(roundedRect: ribbon, xRadius: 10, yRadius: 10).fill()
-            drawText("\(event.knowledge.title) · \(eventTimeText(event))",
-                     in: NSRect(x: ribbon.minX + 12, y: ribbon.minY + 5,
-                                width: ribbon.width - 24, height: 18),
-                     size: 12, weight: .semibold, alignment: leading)
-            drawText(event.knowledge.whenText,
-                     in: NSRect(x: ribbon.minX + 12, y: ribbon.minY + 25,
-                                width: ribbon.width - 24, height: 17),
-                     size: 10.5, color: .secondaryLabelColor,
-                     alignment: leading)
-        }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-}
-
-/// A live analog clock with two prayer rings: AM events sit on the outer
-/// ring and PM events on the inner ring. This preserves conventional
-/// clockwise clock behavior in Arabic while the labels and surrounding UI
-/// still follow RTL.
-final class PrayerAnalogClockView: NSControl {
-    private let info: MosqueInfo
-    private let prayerNames: [String]
-    private let showsNawafil: Bool
-    private let events: [PrayerScheduleEvent]
-    var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
-    private var timer: Timer?
-    private var trackingAreaRef: NSTrackingArea?
-    private var markerPoints: [(point: NSPoint, title: String, raw: String,
-                                event: PrayerScheduleEvent?)] = []
-    private var hoveredMarker: Int?
-
-    override var isFlipped: Bool { true }
-
-    init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
-         showsNawafil: Bool, events: [PrayerScheduleEvent] = [],
-         onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
-        self.info = info
-        self.prayerNames = prayerNames
-        self.showsNawafil = showsNawafil
-        self.events = events
-        self.onSelectEvent = onSelectEvent
-        super.init(frame: frame)
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(featureText("full.clock.accessibility"))
-        let summary = zip(prayerNames, info.times).map {
-            "\($0.0) \(displayTime($0.1))"
-        }.joined(separator: ", ")
-        setAccessibilityValue(summary)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-    deinit { timer?.invalidate() }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        timer?.invalidate()
-        guard window != nil else { return }
-        window?.acceptsMouseMovedEvents = true
-        let next = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
-            self?.needsDisplay = true
-        }
-        RunLoop.main.add(next, forMode: .common)
-        timer = next
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseMoved, .mouseEnteredAndExited,
-                                            .activeInActiveApp, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingAreaRef = area
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        hoveredMarker = markerPoints.enumerated().min(by: {
-            hypot($0.element.point.x - point.x, $0.element.point.y - point.y)
-              < hypot($1.element.point.x - point.x, $1.element.point.y - point.y)
-        }).flatMap {
-            hypot($0.element.point.x - point.x, $0.element.point.y - point.y) < 34
-                ? $0.offset : nil
-        }
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hoveredMarker = nil
-        needsDisplay = true
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        guard let index = markerPoints.enumerated().min(by: {
-            hypot($0.element.point.x - point.x, $0.element.point.y - point.y)
-              < hypot($1.element.point.x - point.x, $1.element.point.y - point.y)
-        }).flatMap({
-            hypot($0.element.point.x - point.x, $0.element.point.y - point.y) < 34
-                ? $0.offset : nil
-        }), markerPoints.indices.contains(index),
-              let scheduleEvent = markerPoints[index].event else { return }
-        onSelectEvent?(scheduleEvent, self)
-    }
-
-    private func minute(_ value: String) -> Int? {
-        let parts = value.split(separator: ":")
-        guard parts.count == 2, let h = Int(parts[0]), let m = Int(parts[1]) else {
-            return nil
-        }
-        return h * 60 + m
-    }
-
-    private func point(center: NSPoint, radius: CGFloat, minute: Int) -> NSPoint {
-        let twelveHourMinute = minute % 720
-        let angle = CGFloat(twelveHourMinute) / 720 * 2 * .pi - .pi / 2
-        return NSPoint(x: center.x + cos(angle) * radius,
-                       y: center.y + sin(angle) * radius)
-    }
-
-    private func drawText(_ string: String, rect: NSRect, size: CGFloat,
-                          weight: NSFont.Weight = .regular,
-                          color: NSColor = .labelColor,
-                          alignment: NSTextAlignment = .center) {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = alignment
-        paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        let font = Localizer.shared.font(size: size, weight: weight)
-        let drawingRect = localizedTextFrame(rect, text: string, font: font)
-        NSAttributedString(string: string, attributes: [
-            .font: font,
-            .foregroundColor: color,
-            .paragraphStyle: paragraph,
-        ]).draw(with: drawingRect,
-                options: [.usesLineFragmentOrigin, .usesFontLeading])
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
-                                xRadius: 18, yRadius: 18)
-        (dark ? NSColor(white: 1, alpha: 0.065)
-              : NSColor(white: 1, alpha: 0.88)).setFill()
-        card.fill()
-        (dark ? NSColor.white.withAlphaComponent(0.13)
-              : NSColor.black.withAlphaComponent(0.10)).setStroke()
-        card.lineWidth = 0.8
-        card.stroke()
-
-        let center = NSPoint(x: bounds.midX, y: bounds.midY + 8)
-        let outer = min(bounds.width * 0.31, bounds.height * 0.41)
-        let inner = outer * 0.76
-
-        for radius in [outer, inner] {
-            let ring = NSBezierPath(ovalIn: NSRect(x: center.x - radius,
-                                                   y: center.y - radius,
-                                                   width: radius * 2,
-                                                   height: radius * 2))
-            NSColor.secondaryLabelColor.withAlphaComponent(0.26).setStroke()
-            ring.lineWidth = radius == outer ? 1.6 : 0.7
-            ring.stroke()
-        }
-
-        // Hour ticks and numerals follow a physical clock in every language.
-        for hour in 1...12 {
-            let minute = hour * 60
-            let tickOuter = point(center: center, radius: outer, minute: minute)
-            let tickInner = point(center: center, radius: outer - 8, minute: minute)
-            let tick = NSBezierPath()
-            tick.move(to: tickOuter)
-            tick.line(to: tickInner)
-            NSColor.secondaryLabelColor.setStroke()
-            tick.lineWidth = hour.isMultiple(of: 3) ? 1.8 : 0.8
-            tick.stroke()
-            let numeral = point(center: center, radius: outer - 20, minute: minute)
-            drawText(localizedInterfaceDigits(String(hour)),
-                     rect: NSRect(x: numeral.x - 12, y: numeral.y - 9,
-                                               width: 24, height: 18),
-                     size: 10, color: .secondaryLabelColor)
-        }
-
-        if showsNawafil {
-            func arc(from start: Int, to end: Int, radius: CGFloat, color: NSColor) {
-                guard end > start else { return }
-                let path = NSBezierPath()
-                path.appendArc(withCenter: center, radius: radius,
-                               startAngle: 90 - CGFloat(end % 720) / 2,
-                               endAngle: 90 - CGFloat(start % 720) / 2,
-                               clockwise: false)
-                color.setStroke()
-                path.lineWidth = 6
-                path.stroke()
-            }
-            if let sunrise = minute(info.shuruq),
-               info.times.indices.contains(1), let dhuhr = minute(info.times[1]) {
-                arc(from: sunrise + 20, to: dhuhr - 10, radius: outer + 8,
-                    color: NSColor.appAccent.withAlphaComponent(0.46))
-            }
-            if info.times.indices.contains(4), let isha = minute(info.times[4]) {
-                arc(from: isha, to: 1439, radius: inner - 8,
-                    color: NSColor.systemIndigo.withAlphaComponent(0.42))
-            }
-        }
-
-        markerPoints.removeAll(keepingCapacity: true)
-        for index in 0..<min(5, info.times.count, prayerNames.count) {
-            guard let value = minute(info.times[index]) else { continue }
-            let radius = value < 720 ? outer : inner
-            let marker = point(center: center, radius: radius, minute: value)
-            markerPoints.append((marker, prayerNames[index], info.times[index],
-                                 events.first {
-                                     $0.kind == .obligatory
-                                         && $0.prayerIndex == index
-                                 }))
-            NSColor.appAccent.setFill()
-            NSBezierPath(ovalIn: NSRect(x: marker.x - 5, y: marker.y - 5,
-                                        width: 10, height: 10)).fill()
-            let labelPoint = point(center: center,
-                                   radius: radius == outer ? outer + 27 : inner - 27,
-                                   minute: value)
-            drawText(prayerNames[index], rect: NSRect(x: labelPoint.x - 48,
-                                                       y: labelPoint.y - 11,
-                                                       width: 96, height: 22),
-                     size: 11.5, weight: .semibold)
-        }
-
-        let now = Date()
-        let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: now)
-        let minuteValue = calendar.component(.minute, from: now)
-        let second = calendar.component(.second, from: now)
-        func hand(length: CGFloat, minute: Double, width: CGFloat, color: NSColor) {
-            let angle = CGFloat(minute / 720 * 2 * Double.pi) - .pi / 2
-            let path = NSBezierPath()
-            path.move(to: center)
-            path.line(to: NSPoint(x: center.x + cos(angle) * length,
-                                  y: center.y + sin(angle) * length))
-            color.setStroke()
-            path.lineCapStyle = .round
-            path.lineWidth = width
-            path.stroke()
-        }
-        hand(length: inner * 0.55,
-             minute: Double((hour % 12) * 60 + minuteValue) + Double(second) / 60,
-             width: 4.5, color: .labelColor)
-        hand(length: inner * 0.78,
-             minute: Double(minuteValue * 12) + Double(second) / 5,
-             width: 2.6, color: .labelColor)
-        hand(length: inner * 0.84, minute: Double(second * 12),
-             width: 1.2, color: .systemRed)
-        NSColor.appAccent.setFill()
-        NSBezierPath(ovalIn: NSRect(x: center.x - 5, y: center.y - 5,
-                                    width: 10, height: 10)).fill()
-
-        let liveFormatter = DateFormatter()
-        liveFormatter.locale = preferredInterfaceLocale()
-        liveFormatter.dateStyle = .none
-        liveFormatter.timeStyle = .medium
-        let nowString = liveFormatter.string(from: now)
-        drawText(nowString, rect: NSRect(x: center.x - 80, y: center.y + 38,
-                                         width: 160, height: 24),
-                 size: 16, weight: .semibold)
-        drawText(featureText("full.clock.am_outer"),
-                 rect: NSRect(x: 18, y: bounds.height - 36,
-                              width: bounds.width - 36, height: 18),
-                 size: 10.5, color: .secondaryLabelColor)
-
-        if let hoveredMarker, markerPoints.indices.contains(hoveredMarker) {
-            let marker = markerPoints[hoveredMarker]
-            drawText("\(marker.title) · \(displayTime(marker.raw))",
-                     rect: NSRect(x: 24, y: 18, width: bounds.width - 48, height: 26),
-                     size: 14, weight: .semibold, color: .appGreenAccent)
-        }
-    }
-}
-
-/// A high-legibility dual-ring clock. The outer ring is AM and the inner ring
-/// is PM; every Nawafil arc and marker comes from the shared daily schedule.
-final class PrayerRingClockView: NSControl {
-    private let info: MosqueInfo
-    private let prayerNames: [String]
-    private let showsNawafil: Bool
-    private let events: [PrayerScheduleEvent]
-    var onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)?
-    var onStateChange: ((String?) -> Void)?
-
-    private var controlRail: NSStackView!
-    private var infoButton: HoverIconButton!
-    private var legendButtons: [NSButton] = []
-    private var legendEvents: [PrayerScheduleEvent] = []
-    private var trackingAreaRef: NSTrackingArea?
-    private var timer: Timer?
-    private var eventTargets: [(rect: NSRect, event: PrayerScheduleEvent)] = []
-    private var selectedEventID: String?
-    private var hoveredEventID: String?
-    private var accessibilityEventElements: [PrayerEventAccessibilityElement] = []
-    private var accessibilityGeometrySignature = ""
-
-    override var isFlipped: Bool { true }
-    override var acceptsFirstResponder: Bool { true }
-
-    static func preferredHeight(for width: CGFloat) -> CGFloat {
-        max(600, min(680, width * 0.74))
-    }
-
-    init(frame: NSRect, info: MosqueInfo, prayerNames: [String],
-         showsNawafil: Bool, events: [PrayerScheduleEvent],
-         initialSelectedEventID: String? = nil,
-         onStateChange: ((String?) -> Void)? = nil,
-         onSelectEvent: ((PrayerScheduleEvent, NSView) -> Void)? = nil) {
-        self.info = info
-        self.prayerNames = prayerNames
-        self.showsNawafil = showsNawafil
-        self.events = events
-        self.selectedEventID = events.contains {
-            $0.id == initialSelectedEventID
-                && (showsNawafil || $0.kind == .obligatory)
-        } ? initialSelectedEventID : nil
-        self.onStateChange = onStateChange
-        self.onSelectEvent = onSelectEvent
-        super.init(frame: frame)
-
-        let previousSymbol = Localizer.shared.isRTL ? "chevron.right" : "chevron.left"
-        let nextSymbol = Localizer.shared.isRTL ? "chevron.left" : "chevron.right"
-        let previous = HoverIconButton(symbol: previousSymbol,
-            toolTip: prayerInfoText("clock.previous"), target: self,
-            action: #selector(selectPrevious(_:)), pointSize: 14,
-            size: NSSize(width: 44, height: 44))
-        previous.setAccessibilityLabel(prayerInfoText("clock.previous"))
-        infoButton = HoverIconButton(symbol: "info.circle",
-            toolTip: prayerInfoText("info.open"), target: self,
-            action: #selector(inspectSelection(_:)), pointSize: 15,
-            size: NSSize(width: 44, height: 44))
-        infoButton.setAccessibilityLabel(prayerInfoText("info.open"))
-        infoButton.isEnabled = false
-        let next = HoverIconButton(symbol: nextSymbol,
-            toolTip: prayerInfoText("clock.next"), target: self,
-            action: #selector(selectNext(_:)), pointSize: 14,
-            size: NSSize(width: 44, height: 44))
-        next.setAccessibilityLabel(prayerInfoText("clock.next"))
-        controlRail = NSStackView(views: [previous, infoButton, next])
-        controlRail.orientation = .horizontal
-        controlRail.alignment = .centerY
-        controlRail.spacing = 2
-        controlRail.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        addSubview(controlRail)
-
-        legendEvents = showsNawafil ? events.filter { $0.kind != .obligatory } : []
-        for (index, event) in legendEvents.enumerated() {
-            let button = NSButton(title: legendTitle(for: event), target: self,
-                                  action: #selector(legendEventTapped(_:)))
-            button.tag = index
-            button.isBordered = false
-            button.bezelStyle = .recessed
-            button.setButtonType(.momentaryChange)
-            button.font = Localizer.shared.font(size: 11.5, weight: .semibold)
-            button.alignment = Localizer.shared.isRTL ? .right : .left
-            button.userInterfaceLayoutDirection = Localizer.shared.isRTL
-                ? .rightToLeft : .leftToRight
-            button.image = templateSymbol(legendSymbol(for: event), pointSize: 13,
-                                          weight: .semibold)
-            button.imagePosition = Localizer.shared.isRTL ? .imageRight : .imageLeft
-            button.contentTintColor = color(for: event.kind)
-            button.toolTip = event.knowledge.whenText
-            button.lineBreakMode = .byWordWrapping
-            button.cell?.wraps = true
-            button.setAccessibilityLabel(
-                "\(legendTitle(for: event)). \(event.knowledge.whenText)")
-            button.setAccessibilityHelp(prayerInfoText("info.open"))
-            button.wantsLayer = true
-            button.layer?.cornerRadius = 8
-            addSubview(button)
-            legendButtons.append(button)
-        }
-        infoButton.isEnabled = selectedEventID != nil
-
-        setAccessibilityElement(true)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(featureText("full.clock.accessibility"))
-        setAccessibilityHelp(prayerInfoText("clock.accessibility_help"))
-        updateAccessibilityValue()
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-    deinit { timer?.invalidate() }
-
-    override func layout() {
-        super.layout()
-        let width: CGFloat = 44 * 3 + 4
-        controlRail.frame = NSRect(
-            x: Localizer.shared.isRTL ? 16 : bounds.width - width - 16,
-            y: 10, width: width, height: 44)
-        guard !legendButtons.isEmpty else { return }
-        let legend = legendRect()
-        let rowHeight: CGFloat = 44
-        let gap: CGFloat = 3
-        for (index, button) in legendButtons.enumerated() {
-            button.frame = NSRect(x: legend.minX + 8,
-                                  y: legend.minY + 34
-                                     + CGFloat(index) * (rowHeight + gap),
-                                  width: legend.width - 16, height: rowHeight)
-        }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        timer?.invalidate()
-        guard window != nil else { return }
-        window?.acceptsMouseMovedEvents = true
-        let interval: TimeInterval = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-            ? 30 : 1
-        let next = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            self?.needsDisplay = true
-        }
-        RunLoop.main.add(next, forMode: .common)
-        timer = next
-    }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let trackingAreaRef { removeTrackingArea(trackingAreaRef) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseMoved, .mouseEnteredAndExited,
-                                            .activeInActiveApp, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        trackingAreaRef = area
-    }
-
-    private var displayedEvents: [PrayerScheduleEvent] {
-        events.filter { showsNawafil || $0.kind == .obligatory }
-    }
-
-    private var orderedEvents: [PrayerScheduleEvent] {
-        displayedEvents.sorted {
-            $0.startMinute == $1.startMinute ? $0.id < $1.id
-                                             : $0.startMinute < $1.startMinute
-        }
-    }
-
-    private func legendRect() -> NSRect {
-        guard !legendButtons.isEmpty else { return .zero }
-        let width = min(270, max(230, bounds.width * 0.29))
-        let height = 42 + CGFloat(legendButtons.count) * 47
-        return NSRect(x: Localizer.shared.isRTL ? 16 : bounds.width - width - 16,
-                      y: 72, width: width,
-                      height: min(bounds.height - 142, height))
-    }
-
-    private func formattedMinute(_ minute: Int) -> String {
-        let normalized = (minute % 1440 + 1440) % 1440
-        return displayTime(String(format: "%02d:%02d", normalized / 60,
-                                  normalized % 60))
-    }
-
-    private func eventTimeText(_ event: PrayerScheduleEvent) -> String {
-        let start = formattedMinute(event.startMinute)
-        if let end = event.endMinute {
-            return "\(start) – \(formattedMinute(end))"
-        }
-        return "◇ \(start)"
-    }
-
-    private func legendTitle(for event: PrayerScheduleEvent) -> String {
-        var name = event.knowledge.title
-        if event.kind == .rawatib {
-            let prayer = event.prayerIndex.flatMap {
-                prayerNames.indices.contains($0) ? prayerNames[$0] : nil
-            } ?? ""
-            let relation = event.id.hasSuffix(".before")
-                ? prayerInfoText("rawatib.before") : prayerInfoText("rawatib.after")
-            name = [name, prayer, relation].filter { !$0.isEmpty }
-                .joined(separator: " · ")
-        }
-        return "\(name)\n\(eventTimeText(event))"
-    }
-
-    private func legendSymbol(for event: PrayerScheduleEvent) -> String {
-        switch event.kind {
-        case .obligatory: return "circle.fill"
-        case .rawatib:
-            return event.id.hasSuffix(".before") ? "arrow.up.to.line"
-                                                  : "arrow.down.to.line"
-        case .duha: return "sun.max.fill"
-        case .qiyam: return "moon.stars.fill"
-        case .witr: return "diamond.fill"
-        }
-    }
-
-    private func updateAccessibilityValue() {
-        if let selected = displayedEvents.first(where: { $0.id == selectedEventID }) {
-            setAccessibilityValue("\(selected.knowledge.title). \(selected.knowledge.whenText)")
-            infoButton?.setAccessibilityLabel(
-                "\(prayerInfoText("info.open")): \(selected.knowledge.title)")
-        } else {
-            setAccessibilityValue(zip(prayerNames, info.times).map {
-                "\($0.0) \(displayTime($0.1))"
-            }.joined(separator: ", "))
-        }
-    }
-
-    private func moveSelection(_ delta: Int) {
-        let items = orderedEvents
-        guard !items.isEmpty else { return }
-        let current = items.firstIndex { $0.id == selectedEventID }
-        let index = ((current ?? (delta > 0 ? -1 : 0)) + delta + items.count)
-                  % items.count
-        selectedEventID = items[index].id
-        infoButton.isEnabled = true
-        updateAccessibilityValue()
-        onStateChange?(selectedEventID)
-        needsDisplay = true
-    }
-
-    @objc private func selectPrevious(_ sender: Any?) { moveSelection(-1) }
-    @objc private func selectNext(_ sender: Any?) { moveSelection(1) }
-    @objc private func inspectSelection(_ sender: Any?) { _ = inspectSelected() }
-
-    @objc private func legendEventTapped(_ sender: NSButton) {
-        guard legendEvents.indices.contains(sender.tag) else { return }
-        let event = legendEvents[sender.tag]
-        selectedEventID = event.id
-        infoButton.isEnabled = true
-        updateAccessibilityValue()
-        onStateChange?(selectedEventID)
-        onSelectEvent?(event, sender)
-        needsDisplay = true
-    }
-
-    private func inspectSelected() -> Bool {
-        guard let selected = displayedEvents.first(where: { $0.id == selectedEventID })
-        else { return false }
-        onSelectEvent?(selected, infoButton ?? self)
-        return true
-    }
-
-    private func target(at point: NSPoint) -> PrayerScheduleEvent? {
-        eventTargets.filter { $0.rect.contains(point) }.min {
-            hypot($0.rect.midX - point.x, $0.rect.midY - point.y)
-                < hypot($1.rect.midX - point.x, $1.rect.midY - point.y)
-        }?.event
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        hoveredEventID = target(at: convert(event.locationInWindow, from: nil))?.id
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        hoveredEventID = nil
-        needsDisplay = true
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        window?.makeFirstResponder(self)
-        guard let item = target(at: convert(event.locationInWindow, from: nil)) else {
-            return
-        }
-        selectedEventID = item.id
-        infoButton.isEnabled = true
-        updateAccessibilityValue()
-        onStateChange?(selectedEventID)
-        onSelectEvent?(item, self)
-        needsDisplay = true
-    }
-
-    override func keyDown(with event: NSEvent) {
-        let rtl = Localizer.shared.isRTL
-        switch event.keyCode {
-        case 123: moveSelection(rtl ? 1 : -1)
-        case 124: moveSelection(rtl ? -1 : 1)
-        case 125: moveSelection(1)
-        case 126: moveSelection(-1)
-        case 36, 49:
-            if !inspectSelected() { super.keyDown(with: event) }
-        default: super.keyDown(with: event)
-        }
-    }
-
-    override func accessibilityPerformPress() -> Bool { inspectSelected() }
-
-    private func point(center: NSPoint, radius: CGFloat, minute: CGFloat) -> NSPoint {
-        let angle = (minute.truncatingRemainder(dividingBy: 720)) / 720
-                  * 2 * .pi - .pi / 2
-        return NSPoint(x: center.x + cos(angle) * radius,
-                       y: center.y + sin(angle) * radius)
-    }
-
-    private func radius(for minute: CGFloat, outer: CGFloat, inner: CGFloat) -> CGFloat {
-        minute.truncatingRemainder(dividingBy: 1440) < 720 ? outer : inner
-    }
-
-    private func color(for kind: PrayerScheduleKind) -> NSColor {
-        switch kind {
-        case .obligatory: return .appAccent
-        case .rawatib: return NSColor(red: 0.84, green: 0.59, blue: 0.18, alpha: 1)
-        case .duha: return .systemTeal
-        case .qiyam: return .systemIndigo
-        case .witr: return .systemPurple
-        }
-    }
-
-    private func radialOffset(for event: PrayerScheduleEvent,
-                              isAM: Bool) -> CGFloat {
-        switch event.kind {
-        case .obligatory: return 0
-        case .rawatib:
-            let distance: CGFloat = event.id.hasSuffix(".before") ? 15 : 39
-            return isAM ? distance : -distance
-        case .duha: return 29
-        case .qiyam: return isAM ? -19 : 19
-        case .witr: return isAM ? -35 : 35
-        }
-    }
-
-    private func segments(for event: PrayerScheduleEvent) -> [(CGFloat, CGFloat?)] {
-        let start = CGFloat(event.startMinute)
-        guard let rawEnd = event.endMinute else {
-            return [(CGFloat((event.startMinute % 1440 + 1440) % 1440), nil)]
-        }
-        let end = CGFloat(rawEnd)
-        var daySegments: [(CGFloat, CGFloat)] = []
-        if end <= 1440 {
-            daySegments.append((max(0, start), min(1440, end)))
-        } else {
-            daySegments.append((max(0, start), 1440))
-            daySegments.append((0, min(1440, end - 1440)))
-        }
-        var split: [(CGFloat, CGFloat?)] = []
-        for (a, b) in daySegments where b > a {
-            if a < 720, b > 720 {
-                split.append((a, 720))
-                split.append((720, b))
-            } else {
-                split.append((a, b))
-            }
-        }
-        return split
-    }
-
-    private func drawText(_ value: String, in rect: NSRect, size: CGFloat,
-                          weight: NSFont.Weight = .regular,
-                          color: NSColor = .labelColor,
-                          alignment: NSTextAlignment = .center) {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.alignment = alignment
-        paragraph.lineBreakMode = .byTruncatingTail
-        paragraph.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
-        let font = Localizer.shared.font(size: size, weight: weight)
-        let drawingRect = localizedTextFrame(rect, text: value, font: font)
-        NSAttributedString(string: value, attributes: [
-            .font: font, .foregroundColor: color, .paragraphStyle: paragraph,
-        ]).draw(with: drawingRect,
-                options: [.usesLineFragmentOrigin, .usesFontLeading])
-    }
-
-    private func drawArc(center: NSPoint, radius: CGFloat, start: CGFloat,
-                         end: CGFloat, color: NSColor, width: CGFloat,
-                         instructional: Bool) {
-        guard end > start else { return }
-        let path = NSBezierPath()
-        path.appendArc(withCenter: center, radius: radius,
-                       startAngle: 90 - end.truncatingRemainder(dividingBy: 720) / 2,
-                       endAngle: 90 - start.truncatingRemainder(dividingBy: 720) / 2,
-                       clockwise: false)
-        color.setStroke()
-        path.lineWidth = width
-        path.lineCapStyle = .round
-        if instructional { path.setLineDash([5, 4], count: 2, phase: 0) }
-        path.stroke()
-    }
-
-    private func activateEvent(_ id: String) {
-        guard let event = displayedEvents.first(where: { $0.id == id }) else { return }
-        selectedEventID = id
-        infoButton.isEnabled = true
-        updateAccessibilityValue()
-        onStateChange?(selectedEventID)
-        onSelectEvent?(event, self)
-        needsDisplay = true
-    }
-
-    private func updateAccessibilityEventChildren() {
-        let obligatory = orderedEvents.filter { $0.kind == .obligatory }
-        var geometryParts: [String] = []
-        var elements: [PrayerEventAccessibilityElement] = []
-        for event in obligatory {
-            let rects = eventTargets.filter { $0.event.id == event.id }.map(\.rect)
-            guard var frame = rects.first else { continue }
-            for rect in rects.dropFirst() { frame = frame.union(rect) }
-            geometryParts.append("\(event.id):\(Int(frame.minX)):\(Int(frame.minY)):"
-                + "\(Int(frame.width)):\(Int(frame.height))")
-            elements.append(PrayerEventAccessibilityElement(
-                parent: self, frame: frame,
-                label: "\(event.knowledge.title). \(event.knowledge.whenText)",
-                help: prayerInfoText("info.open"),
-                pressHandler: { [weak self] in self?.activateEvent(event.id) }))
-        }
-        let signature = "\(Int(bounds.width))x\(Int(bounds.height))|"
-            + geometryParts.joined(separator: "|")
-        guard signature != accessibilityGeometrySignature else { return }
-        accessibilityGeometrySignature = signature
-        accessibilityEventElements = elements
-        let children: [Any] = [controlRail as Any]
-            + legendButtons.map { $0 as Any }
-            + accessibilityEventElements.map { $0 as Any }
-        setAccessibilityChildren(children)
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1),
-                                xRadius: 18, yRadius: 18)
-        (dark ? NSColor(white: 0.08, alpha: 0.96)
-              : NSColor(white: 0.985, alpha: 0.96)).setFill()
-        card.fill()
-        (dark ? NSColor.white.withAlphaComponent(0.14)
-              : NSColor.black.withAlphaComponent(0.10)).setStroke()
-        card.lineWidth = 1
-        card.stroke()
-
-        let rtl = Localizer.shared.isRTL
-        let leading: NSTextAlignment = rtl ? .right : .left
-        drawText(featureText("full.view.clock"),
-                 in: NSRect(x: 20, y: 14, width: bounds.width - 190, height: 30),
-                 size: 20, weight: .semibold, alignment: leading)
-        drawText(featureText("full.clock.am_outer"),
-                 in: NSRect(x: 20, y: 43, width: bounds.width - 190, height: 18),
-                 size: 10.5, color: .secondaryLabelColor, alignment: leading)
-
-        let legend = legendRect()
-        if !legend.isEmpty {
-            (dark ? NSColor.white.withAlphaComponent(0.045)
-                  : NSColor.black.withAlphaComponent(0.035)).setFill()
-            NSBezierPath(roundedRect: legend, xRadius: 13, yRadius: 13).fill()
-            drawText(featureText("full.nawafil"),
-                     in: NSRect(x: legend.minX + 12, y: legend.minY + 9,
-                                width: legend.width - 24, height: 20),
-                     size: 13, weight: .bold, color: .secondaryLabelColor,
-                     alignment: leading)
-            for (index, button) in legendButtons.enumerated() {
-                let selected = legendEvents.indices.contains(index)
-                    && legendEvents[index].id == selectedEventID
-                button.layer?.backgroundColor = (selected
-                    ? NSColor.appAccent.withAlphaComponent(dark ? 0.24 : 0.13)
-                    : NSColor.clear).cgColor
-            }
-        }
-
-        let clockArea: NSRect
-        if legend.isEmpty {
-            clockArea = NSRect(x: 20, y: 70, width: bounds.width - 40,
-                               height: bounds.height - 127)
-        } else if rtl {
-            clockArea = NSRect(x: legend.maxX + 56, y: 70,
-                               width: bounds.width - legend.maxX - 76,
-                               height: bounds.height - 127)
-        } else {
-            clockArea = NSRect(x: 20, y: 70,
-                               width: legend.minX - 76,
-                               height: bounds.height - 127)
-        }
-        let center = NSPoint(x: clockArea.midX, y: clockArea.midY + 3)
-        let outer = min(clockArea.width * 0.40, clockArea.height * 0.45)
-        let inner = outer * 0.66
-
-        // Soft concentric surfaces make AM/PM separation visible in both
-        // appearances while the markers remain the primary color signals.
-        NSColor.systemIndigo.withAlphaComponent(dark ? 0.075 : 0.045).setFill()
-        NSBezierPath(ovalIn: NSRect(x: center.x - outer - 13,
-                                    y: center.y - outer - 13,
-                                    width: (outer + 13) * 2,
-                                    height: (outer + 13) * 2)).fill()
-        (dark ? NSColor(white: 0.10, alpha: 0.96)
-              : NSColor(white: 0.99, alpha: 0.96)).setFill()
-        NSBezierPath(ovalIn: NSRect(x: center.x - outer,
-                                    y: center.y - outer,
-                                    width: outer * 2, height: outer * 2)).fill()
-
-        for radius in [outer, inner] {
-            let ring = NSBezierPath(ovalIn: NSRect(x: center.x - radius,
-                                                   y: center.y - radius,
-                                                   width: radius * 2,
-                                                   height: radius * 2))
-            NSColor.secondaryLabelColor.withAlphaComponent(0.34).setStroke()
-            ring.lineWidth = radius == outer ? 3.2 : 2.2
-            ring.stroke()
-        }
-
-        for hour in 1...12 {
-            let minute = CGFloat(hour * 60)
-            let major = hour.isMultiple(of: 3)
-            let a = point(center: center, radius: outer + 1, minute: minute)
-            let b = point(center: center, radius: outer - (major ? 16 : 10),
-                          minute: minute)
-            let tick = NSBezierPath()
-            tick.move(to: a)
-            tick.line(to: b)
-            NSColor.labelColor.withAlphaComponent(major ? 0.80 : 0.50).setStroke()
-            tick.lineWidth = major ? 5 : 2
-            tick.lineCapStyle = .round
-            tick.stroke()
-            let numeral = point(center: center, radius: outer - 30, minute: minute)
-            drawText(localizedInterfaceDigits(String(hour)),
-                     in: NSRect(x: numeral.x - 18, y: numeral.y - 12,
-                                width: 36, height: 24),
-                     size: 17, weight: major ? .bold : .semibold)
-        }
-
-        eventTargets.removeAll(keepingCapacity: true)
-        for event in displayedEvents {
-            let color = color(for: event.kind)
-            let selected = event.id == selectedEventID
-            let hovered = event.id == hoveredEventID
-            for segment in segments(for: event) {
-                let isAM = segment.0 < 720
-                let baseRadius = radius(for: segment.0, outer: outer, inner: inner)
-                let radius = baseRadius + radialOffset(for: event, isAM: isAM)
-                let width: CGFloat
-                switch event.kind {
-                case .obligatory: width = 12
-                case .rawatib: width = 8
-                case .duha, .qiyam: width = 10
-                case .witr: width = 5
-                }
-                if let end = segment.1 {
-                    drawArc(center: center, radius: radius, start: segment.0,
-                            end: end, color: color.withAlphaComponent(
-                                selected ? 1 : (hovered ? 0.88 : 0.64)),
-                            width: selected ? width + 4 : width,
-                            instructional: event.precision == .instructionalMarker)
-                    // Sample the complete visible arc so every painted point
-                    // sits inside a 44pt target, not just the midpoint.
-                    let arcLength = radius * (end - segment.0) / 720 * 2 * .pi
-                    let steps = max(1, Int(ceil(arcLength / 28)))
-                    for step in 0...steps {
-                        let fraction = CGFloat(step) / CGFloat(steps)
-                        let value = segment.0 + (end - segment.0) * fraction
-                        let marker = point(center: center, radius: radius,
-                                           minute: value)
-                        eventTargets.append((NSRect(x: marker.x - 22,
-                                                    y: marker.y - 22,
-                                                    width: 44, height: 44), event))
-                    }
-                } else {
-                    let marker = point(center: center, radius: radius,
-                                       minute: segment.0)
-                    let markerRect = NSRect(x: marker.x - 7, y: marker.y - 7,
-                                            width: 14, height: 14)
-                    color.setFill()
-                    let shape = NSBezierPath()
-                    if event.kind == .rawatib && event.id.hasSuffix(".before") {
-                        shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.maxY))
-                        shape.line(to: NSPoint(x: markerRect.minX, y: markerRect.maxY))
-                        shape.close()
-                    } else if event.kind == .rawatib {
-                        shape.move(to: NSPoint(x: markerRect.minX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
-                        shape.close()
-                    } else if event.kind == .witr {
-                        shape.move(to: NSPoint(x: markerRect.midX, y: markerRect.minY))
-                        shape.line(to: NSPoint(x: markerRect.maxX, y: markerRect.midY))
-                        shape.line(to: NSPoint(x: markerRect.midX, y: markerRect.maxY))
-                        shape.line(to: NSPoint(x: markerRect.minX, y: markerRect.midY))
-                        shape.close()
-                    } else {
-                        shape.appendOval(in: markerRect)
-                    }
-                    shape.fill()
-                    if selected {
-                        color.withAlphaComponent(0.32).setStroke()
-                        let focus = NSBezierPath(ovalIn: markerRect.insetBy(dx: -6,
-                                                                           dy: -6))
-                        focus.lineWidth = 3
-                        focus.stroke()
-                    }
-                    eventTargets.append((NSRect(x: marker.x - 22, y: marker.y - 22,
-                                                width: 44, height: 44), event))
-                }
-            }
-        }
-        updateAccessibilityEventChildren()
-
-        let formatter = DateFormatter()
-        formatter.locale = preferredInterfaceLocale()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        let digitalText = formatter.string(from: Date())
-        let digitalFont = Localizer.shared.font(size: 19, weight: .bold)
-        let digitalWidth = ceil((digitalText as NSString)
-            .size(withAttributes: [.font: digitalFont]).width) + 30
-        // The digital time sits below the hub unless an afternoon/evening
-        // prayer label wants that spot (e.g. Maghrib near 7 o'clock); then
-        // above the hub; and when both are taken it moves to the card's
-        // header row so it never sits on top of a prayer name.
-        let innerLabelRects: [NSRect] = displayedEvents.compactMap { event in
-            guard event.kind == .obligatory else { return nil }
-            let value = CGFloat((event.startMinute % 1440 + 1440) % 1440)
-            guard value >= 720 else { return nil }
-            let p = point(center: center, radius: inner - 39, minute: value)
-            return NSRect(x: p.x - 40, y: p.y - 12, width: 80, height: 24)
-        }
-        let digitalCandidates = [center.y + 40, center.y - 70].map {
-            NSRect(x: center.x - digitalWidth / 2, y: $0, width: digitalWidth, height: 30)
-        }
-        let digitalRect = digitalCandidates.first { candidate in
-            !innerLabelRects.contains { $0.insetBy(dx: -6, dy: -4).intersects(candidate) }
-        } ?? NSRect(x: bounds.midX - digitalWidth / 2, y: 14,
-                    width: digitalWidth, height: 28)
-
-        // Obligatory labels remain larger than auxiliary markers and sit on
-        // their AM/PM ring, so the clock can be read without a legend hunt.
-        // Each label is measured and nudged to the nearest free spot so close
-        // prayers (Maghrib/Isha) and the digital time never overlap; a soft
-        // pill keeps it legible over arcs and markers.
-        var occupied: [NSRect] = [
-            digitalRect,
-            NSRect(x: center.x - 12, y: center.y - 12, width: 24, height: 24),
-        ]
-        let labelFont = Localizer.shared.font(size: 13, weight: .bold)
-        for event in displayedEvents where event.kind == .obligatory {
-            let value = CGFloat((event.startMinute % 1440 + 1440) % 1440)
-            let base = radius(for: value, outer: outer, inner: inner)
-            let marker = point(center: center, radius: base, minute: value)
-            NSColor.appAccent.setFill()
-            NSBezierPath(ovalIn: NSRect(x: marker.x - 8, y: marker.y - 8,
-                                        width: 16, height: 16)).fill()
-
-            let title = event.knowledge.title
-            let textSize = (title as NSString).size(withAttributes: [.font: labelFont])
-            let labelSize = NSSize(width: ceil(textSize.width) + 16,
-                                   height: max(22, ceil(textSize.height) + 2))
-            let isAM = value < 720
-            let baseRadius = isAM ? outer + 42 : inner - 39
-            let radialSteps: [CGFloat] = isAM ? [0, 14, 28] : [0, -14, 14, -26, 26, -38]
-            func rect(radius: CGFloat, minute: CGFloat) -> NSRect {
-                let p = point(center: center, radius: radius, minute: minute)
-                return NSRect(x: p.x - labelSize.width / 2, y: p.y - labelSize.height / 2,
-                              width: labelSize.width, height: labelSize.height)
-            }
-            var labelRect = rect(radius: baseRadius, minute: value)
-            search: for dr in radialSteps {
-                for dm: CGFloat in [0, -20, 20, -40, 40] {
-                    let candidate = rect(radius: baseRadius + dr, minute: value + dm)
-                    if !occupied.contains(where: {
-                        $0.insetBy(dx: -8, dy: -5).intersects(candidate)
-                    }) {
-                        labelRect = candidate
-                        break search
-                    }
-                }
-            }
-            occupied.append(labelRect)
-            (dark ? NSColor(white: 0.08, alpha: 0.82)
-                  : NSColor(white: 0.985, alpha: 0.86)).setFill()
-            NSBezierPath(roundedRect: labelRect,
-                         xRadius: labelRect.height / 2,
-                         yRadius: labelRect.height / 2).fill()
-            drawText(title, in: labelRect, size: 13, weight: .bold,
-                     color: .labelColor)
-        }
-
-        let now = Date()
-        let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: now)
-        let minuteValue = calendar.component(.minute, from: now)
-        let second = calendar.component(.second, from: now)
-        func hand(length: CGFloat, clockMinute: Double, width: CGFloat,
-                  color: NSColor) {
-            let angle = CGFloat(clockMinute / 720 * 2 * Double.pi) - .pi / 2
-            let path = NSBezierPath()
-            path.move(to: center)
-            path.line(to: NSPoint(x: center.x + cos(angle) * length,
-                                  y: center.y + sin(angle) * length))
-            color.setStroke()
-            path.lineCapStyle = .round
-            path.lineWidth = width
-            path.stroke()
-        }
-        hand(length: inner * 0.54,
-             clockMinute: Double((hour % 12) * 60 + minuteValue)
-                        + Double(second) / 60,
-             width: 7, color: .labelColor)
-        hand(length: inner * 0.82,
-             clockMinute: Double(minuteValue * 12) + Double(second) / 5,
-             width: 4, color: .labelColor)
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            hand(length: inner * 0.90, clockMinute: Double(second * 12),
-                 width: 1.8, color: .systemRed)
-        }
-        NSColor.appAccent.setFill()
-        NSBezierPath(ovalIn: NSRect(x: center.x - 7, y: center.y - 7,
-                                    width: 14, height: 14)).fill()
-
-        drawText(digitalText, in: digitalRect,
-                 size: 19, weight: .bold, color: .appGreenAccent)
-
-        if let id = hoveredEventID ?? selectedEventID,
-           let event = displayedEvents.first(where: { $0.id == id }) {
-            let ribbon = NSRect(x: 20, y: bounds.height - 57,
-                                width: bounds.width - 40, height: 41)
-            (dark ? NSColor.white.withAlphaComponent(0.09)
-                  : NSColor.black.withAlphaComponent(0.045)).setFill()
-            NSBezierPath(roundedRect: ribbon, xRadius: 10, yRadius: 10).fill()
-            drawText("\(event.knowledge.title) · \(event.knowledge.whenText)",
-                     in: ribbon.insetBy(dx: 12, dy: 9), size: 12,
-                     weight: .semibold, alignment: leading)
-        }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-}
-
 enum DockDisplayStyle: String {
     case icons
     case iconsText
@@ -10173,6 +7943,929 @@ final class PrayerDisplayModeButton: NSButton {
 /// Stable primary navigation plus an inset destination-specific controls
 /// drawer. Main destinations remain large and constant; the selected
 /// destination reveals a smaller, tinted control group immediately beside it.
+// ============================================================================
+// MARK: Prayer views — timetable, day path, 24-hour dial
+// ============================================================================
+
+private let prayerViewTranslations: [String: [String: String]] = [
+    "en": [
+        "view.timetable": "Timetable", "view.daypath": "Day path", "view.dial": "24-hour dial",
+        "range.week": "7 days", "range.month": "Month", "day": "Day", "today": "Today",
+        "vs.yesterday": "Since yesterday (minutes)", "day.length": "Day length", "night.length": "Night length",
+        "midnight": "Middle of the night", "last.third": "Last third of the night", "imsak": "Imsak",
+        "now": "Now: %@", "left": "%@ left", "between": "Between prayers",
+        "forbidden": "Times to avoid voluntary prayer (approximate)",
+        "forbidden.note": "Estimated around sunrise, the sun's zenith, and sunset. Follow local scholarly guidance.",
+        "qibla": "Qibla", "qibla.detail": "%@° from north · %@", "next": "Next: %@ %@",
+        "no.calendar": "The full timetable appears after the next refresh from Mawaqit.",
+        "day.legend": "Day", "night.legend": "Night", "iqama.legend": "Iqama",
+        "dir.0": "North", "dir.1": "Northeast", "dir.2": "East", "dir.3": "Southeast",
+        "dir.4": "South", "dir.5": "Southwest", "dir.6": "West", "dir.7": "Northwest",
+        "previous.month": "Previous month", "next.month": "Next month", "minutes": "%@ min",
+    ],
+    "fr": [
+        "view.timetable": "Calendrier", "view.daypath": "Course du jour", "view.dial": "Cadran 24 h",
+        "range.week": "7 jours", "range.month": "Mois", "day": "Jour", "today": "Aujourd’hui",
+        "vs.yesterday": "Depuis hier (minutes)", "day.length": "Durée du jour", "night.length": "Durée de la nuit",
+        "midnight": "Milieu de la nuit", "last.third": "Dernier tiers de la nuit", "imsak": "Imsak",
+        "now": "En cours : %@", "left": "Reste %@", "between": "Entre les prières",
+        "forbidden": "Moments où éviter la prière surérogatoire (approximatifs)",
+        "forbidden.note": "Estimés autour du lever du soleil, du zénith et du coucher. Suivez l’avis des savants de votre région.",
+        "qibla": "Qibla", "qibla.detail": "%@° depuis le nord · %@", "next": "Prochaine : %@ %@",
+        "no.calendar": "Le calendrier complet apparaît après la prochaine mise à jour depuis Mawaqit.",
+        "day.legend": "Jour", "night.legend": "Nuit", "iqama.legend": "Iqama",
+        "dir.0": "Nord", "dir.1": "Nord-est", "dir.2": "Est", "dir.3": "Sud-est",
+        "dir.4": "Sud", "dir.5": "Sud-ouest", "dir.6": "Ouest", "dir.7": "Nord-ouest",
+        "previous.month": "Mois précédent", "next.month": "Mois suivant", "minutes": "%@ min",
+    ],
+    "es": [
+        "view.timetable": "Horario", "view.daypath": "Recorrido del día", "view.dial": "Esfera 24 h",
+        "range.week": "7 días", "range.month": "Mes", "day": "Día", "today": "Hoy",
+        "vs.yesterday": "Desde ayer (minutos)", "day.length": "Duración del día", "night.length": "Duración de la noche",
+        "midnight": "Mitad de la noche", "last.third": "Último tercio de la noche", "imsak": "Imsak",
+        "now": "Ahora: %@", "left": "Quedan %@", "between": "Entre oraciones",
+        "forbidden": "Momentos para evitar la oración voluntaria (aproximados)",
+        "forbidden.note": "Estimados alrededor del amanecer, el cénit y el atardecer. Sigue la orientación de los sabios locales.",
+        "qibla": "Qibla", "qibla.detail": "%@° desde el norte · %@", "next": "Siguiente: %@ %@",
+        "no.calendar": "El horario completo aparece tras la próxima actualización desde Mawaqit.",
+        "day.legend": "Día", "night.legend": "Noche", "iqama.legend": "Iqama",
+        "dir.0": "Norte", "dir.1": "Noreste", "dir.2": "Este", "dir.3": "Sureste",
+        "dir.4": "Sur", "dir.5": "Suroeste", "dir.6": "Oeste", "dir.7": "Noroeste",
+        "previous.month": "Mes anterior", "next.month": "Mes siguiente", "minutes": "%@ min",
+    ],
+    "ar": [
+        "view.timetable": "الجدول", "view.daypath": "مسار اليوم", "view.dial": "ساعة ٢٤",
+        "range.week": "٧ أيام", "range.month": "الشهر", "day": "اليوم", "today": "اليوم",
+        "vs.yesterday": "مقارنة بالأمس (بالدقائق)", "day.length": "طول النهار", "night.length": "طول الليل",
+        "midnight": "منتصف الليل", "last.third": "الثلث الأخير من الليل", "imsak": "الإمساك",
+        "now": "الوقت الحالي: %@", "left": "بقي %@", "between": "بين الصلوات",
+        "forbidden": "أوقات النهي عن النافلة (تقريبية)",
+        "forbidden.note": "تقدير حول الشروق والزوال والغروب. اتبع توجيه أهل العلم في بلدك.",
+        "qibla": "القبلة", "qibla.detail": "%@° من الشمال · %@", "next": "القادمة: %@ %@",
+        "no.calendar": "يظهر الجدول الكامل بعد التحديث التالي من مواقيت.",
+        "day.legend": "النهار", "night.legend": "الليل", "iqama.legend": "الإقامة",
+        "dir.0": "الشمال", "dir.1": "الشمال الشرقي", "dir.2": "الشرق", "dir.3": "الجنوب الشرقي",
+        "dir.4": "الجنوب", "dir.5": "الجنوب الغربي", "dir.6": "الغرب", "dir.7": "الشمال الغربي",
+        "previous.month": "الشهر السابق", "next.month": "الشهر التالي", "minutes": "%@ د",
+    ],
+    "zh": [
+        "view.timetable": "时间表", "view.daypath": "日程轨迹", "view.dial": "24小时表盘",
+        "range.week": "7天", "range.month": "月", "day": "日期", "today": "今天",
+        "vs.yesterday": "与昨天相比（分钟）", "day.length": "白昼时长", "night.length": "夜晚时长",
+        "midnight": "夜半", "last.third": "夜晚最后三分之一", "imsak": "封斋开始",
+        "now": "当前：%@", "left": "剩余 %@", "between": "两次礼拜之间",
+        "forbidden": "不宜做副功拜的时间（近似）",
+        "forbidden.note": "按日出、日中和日落前后估算。请遵循当地学者的指导。",
+        "qibla": "朝向", "qibla.detail": "距正北 %@° · %@", "next": "下一次：%@ %@",
+        "no.calendar": "下次从 Mawaqit 更新后将显示完整时间表。",
+        "day.legend": "白天", "night.legend": "夜晚", "iqama.legend": "伊卡玛",
+        "dir.0": "北", "dir.1": "东北", "dir.2": "东", "dir.3": "东南",
+        "dir.4": "南", "dir.5": "西南", "dir.6": "西", "dir.7": "西北",
+        "previous.month": "上个月", "next.month": "下个月", "minutes": "%@ 分钟",
+    ],
+    "hi": [
+        "view.timetable": "समय-सारणी", "view.daypath": "दिन का पथ", "view.dial": "24-घंटे डायल",
+        "range.week": "7 दिन", "range.month": "महीना", "day": "दिन", "today": "आज",
+        "vs.yesterday": "कल की तुलना में (मिनट)", "day.length": "दिन की लंबाई", "night.length": "रात की लंबाई",
+        "midnight": "आधी रात", "last.third": "रात का अंतिम तिहाई", "imsak": "इम्साक",
+        "now": "अभी: %@", "left": "%@ शेष", "between": "नमाज़ों के बीच",
+        "forbidden": "नफ़्ल नमाज़ से बचने के समय (अनुमानित)",
+        "forbidden.note": "सूर्योदय, दोपहर और सूर्यास्त के आसपास अनुमानित। स्थानीय विद्वानों का मार्गदर्शन मानें।",
+        "qibla": "क़िबला", "qibla.detail": "उत्तर से %@° · %@", "next": "अगली: %@ %@",
+        "no.calendar": "Mawaqit से अगले अपडेट के बाद पूरी समय-सारणी दिखेगी।",
+        "day.legend": "दिन", "night.legend": "रात", "iqama.legend": "इक़ामत",
+        "dir.0": "उत्तर", "dir.1": "उत्तर-पूर्व", "dir.2": "पूर्व", "dir.3": "दक्षिण-पूर्व",
+        "dir.4": "दक्षिण", "dir.5": "दक्षिण-पश्चिम", "dir.6": "पश्चिम", "dir.7": "उत्तर-पश्चिम",
+        "previous.month": "पिछला महीना", "next.month": "अगला महीना", "minutes": "%@ मिनट",
+    ],
+    "bn": [
+        "view.timetable": "সময়সূচি", "view.daypath": "দিনের পথ", "view.dial": "২৪ ঘণ্টার ডায়াল",
+        "range.week": "৭ দিন", "range.month": "মাস", "day": "দিন", "today": "আজ",
+        "vs.yesterday": "গতকালের তুলনায় (মিনিট)", "day.length": "দিনের দৈর্ঘ্য", "night.length": "রাতের দৈর্ঘ্য",
+        "midnight": "মধ্যরাত", "last.third": "রাতের শেষ তৃতীয়াংশ", "imsak": "ইমসাক",
+        "now": "এখন: %@", "left": "%@ বাকি", "between": "নামাজের মাঝে",
+        "forbidden": "নফল নামাজ এড়ানোর সময় (আনুমানিক)",
+        "forbidden.note": "সূর্যোদয়, মধ্যাহ্ন ও সূর্যাস্তের আশেপাশে আনুমানিক। স্থানীয় আলেমদের নির্দেশনা মানুন।",
+        "qibla": "কিবলা", "qibla.detail": "উত্তর থেকে %@° · %@", "next": "পরবর্তী: %@ %@",
+        "no.calendar": "Mawaqit থেকে পরবর্তী হালনাগাদের পর পূর্ণ সময়সূচি দেখা যাবে।",
+        "day.legend": "দিন", "night.legend": "রাত", "iqama.legend": "ইকামত",
+        "dir.0": "উত্তর", "dir.1": "উত্তর-পূর্ব", "dir.2": "পূর্ব", "dir.3": "দক্ষিণ-পূর্ব",
+        "dir.4": "দক্ষিণ", "dir.5": "দক্ষিণ-পশ্চিম", "dir.6": "পশ্চিম", "dir.7": "উত্তর-পশ্চিম",
+        "previous.month": "আগের মাস", "next.month": "পরের মাস", "minutes": "%@ মিনিট",
+    ],
+    "ru": [
+        "view.timetable": "Расписание", "view.daypath": "Ход дня", "view.dial": "Циферблат 24 ч",
+        "range.week": "7 дней", "range.month": "Месяц", "day": "День", "today": "Сегодня",
+        "vs.yesterday": "По сравнению со вчера (минуты)", "day.length": "Долгота дня", "night.length": "Долгота ночи",
+        "midnight": "Середина ночи", "last.third": "Последняя треть ночи", "imsak": "Имсак",
+        "now": "Сейчас: %@", "left": "Осталось %@", "between": "Между молитвами",
+        "forbidden": "Время, когда нежелательны добровольные молитвы (примерно)",
+        "forbidden.note": "Оценка около восхода, зенита и заката. Следуйте наставлениям местных учёных.",
+        "qibla": "Кибла", "qibla.detail": "%@° от севера · %@", "next": "Следующая: %@ %@",
+        "no.calendar": "Полное расписание появится после следующего обновления из Mawaqit.",
+        "day.legend": "День", "night.legend": "Ночь", "iqama.legend": "Икама",
+        "dir.0": "Север", "dir.1": "Северо-восток", "dir.2": "Восток", "dir.3": "Юго-восток",
+        "dir.4": "Юг", "dir.5": "Юго-запад", "dir.6": "Запад", "dir.7": "Северо-запад",
+        "previous.month": "Предыдущий месяц", "next.month": "Следующий месяц", "minutes": "%@ мин",
+    ],
+    "pt": [
+        "view.timetable": "Horário", "view.daypath": "Percurso do dia", "view.dial": "Mostrador 24 h",
+        "range.week": "7 dias", "range.month": "Mês", "day": "Dia", "today": "Hoje",
+        "vs.yesterday": "Desde ontem (minutos)", "day.length": "Duração do dia", "night.length": "Duração da noite",
+        "midnight": "Meio da noite", "last.third": "Último terço da noite", "imsak": "Imsak",
+        "now": "Agora: %@", "left": "Faltam %@", "between": "Entre orações",
+        "forbidden": "Momentos para evitar a oração voluntária (aproximados)",
+        "forbidden.note": "Estimados perto do nascer do sol, do zénite e do pôr do sol. Siga a orientação dos sábios locais.",
+        "qibla": "Qibla", "qibla.detail": "%@° a partir do norte · %@", "next": "Seguinte: %@ %@",
+        "no.calendar": "O horário completo aparece após a próxima atualização do Mawaqit.",
+        "day.legend": "Dia", "night.legend": "Noite", "iqama.legend": "Iqama",
+        "dir.0": "Norte", "dir.1": "Nordeste", "dir.2": "Este", "dir.3": "Sudeste",
+        "dir.4": "Sul", "dir.5": "Sudoeste", "dir.6": "Oeste", "dir.7": "Noroeste",
+        "previous.month": "Mês anterior", "next.month": "Mês seguinte", "minutes": "%@ min",
+    ],
+    "ur": [
+        "view.timetable": "نظام الاوقات", "view.daypath": "دن کا راستہ", "view.dial": "24 گھنٹے ڈائل",
+        "range.week": "7 دن", "range.month": "مہینہ", "day": "دن", "today": "آج",
+        "vs.yesterday": "کل کے مقابلے میں (منٹ)", "day.length": "دن کی لمبائی", "night.length": "رات کی لمبائی",
+        "midnight": "آدھی رات", "last.third": "رات کا آخری تہائی", "imsak": "امساک",
+        "now": "ابھی: %@", "left": "%@ باقی", "between": "نمازوں کے درمیان",
+        "forbidden": "نفل نماز سے بچنے کے اوقات (تقریبی)",
+        "forbidden.note": "طلوع، زوال اور غروب کے آس پاس تخمینہ۔ مقامی علماء کی رہنمائی پر عمل کریں۔",
+        "qibla": "قبلہ", "qibla.detail": "شمال سے %@° · %@", "next": "اگلی: %@ %@",
+        "no.calendar": "Mawaqit سے اگلی تازہ کاری کے بعد مکمل نظام الاوقات ظاہر ہوگا۔",
+        "day.legend": "دن", "night.legend": "رات", "iqama.legend": "اقامت",
+        "dir.0": "شمال", "dir.1": "شمال مشرق", "dir.2": "مشرق", "dir.3": "جنوب مشرق",
+        "dir.4": "جنوب", "dir.5": "جنوب مغرب", "dir.6": "مغرب", "dir.7": "شمال مغرب",
+        "previous.month": "پچھلا مہینہ", "next.month": "اگلا مہینہ", "minutes": "%@ منٹ",
+    ],
+]
+
+func prayerViewText(_ key: String, _ args: CVarArg...) -> String {
+    let code = Localizer.shared.current.code
+    let format = prayerViewTranslations[code]?[key]
+        ?? prayerViewTranslations["en"]?[key] ?? key
+    return localizedInterfaceDigits(args.isEmpty ? format : String(format: format, arguments: args))
+}
+
+let kPrayerTimetableRangeKey = "prayerTimetableRange"   // 0 = 7 days, 1 = month
+
+/// One day's prayer geometry in minutes since midnight, with the derived
+/// night points, prayer windows, and the approximate discouraged times.
+struct PrayerDayModel {
+    let names: [String]          // five prayer names
+    let times: [Int]             // fajr, dhuhr, asr, maghrib, isha
+    let shuruq: Int
+    let sunset: Int
+    let nextFajr: Int            // tomorrow's Fajr, minutes of its own day
+    let imsak: Int
+
+    init?(info: MosqueInfo, names: [String], date: Date = Date()) {
+        guard info.times.count >= 5 else { return nil }
+        let parsed = info.times.prefix(5).compactMap(clockMinutes)
+        guard parsed.count == 5, let shuruq = clockMinutes(info.shuruq) else { return nil }
+        self.names = names
+        self.times = parsed
+        self.shuruq = shuruq
+        self.sunset = (info.sunset).flatMap(clockMinutes) ?? parsed[3]
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: date) ?? date
+        self.nextFajr = info.calendarRow(for: tomorrow).flatMap { clockMinutes($0[0]) } ?? parsed[0]
+        let imsakOffset = info.imsakMinutes ?? 0
+        self.imsak = parsed[0] - (imsakOffset > 0 ? imsakOffset : 10)
+    }
+
+    var dayLength: Int { sunset - shuruq }
+    var nightLength: Int { 1440 - sunset + nextFajr }
+    var midnight: Int { (sunset + nightLength / 2) % 1440 }
+    var lastThird: Int { (sunset + nightLength * 2 / 3) % 1440 }
+
+    /// Approximate discouraged windows: sunrise, zenith, sunset.
+    var discouraged: [(Int, Int)] {
+        [(shuruq, shuruq + 15), (times[1] - 10, times[1]), (sunset - 15, sunset)]
+    }
+
+    /// Obligatory prayer windows (start, end, prayer index). Isha runs to
+    /// the next Fajr; the gap after sunrise is "between prayers".
+    var windows: [(start: Int, end: Int, index: Int)] {
+        [(times[0], shuruq, 0), (times[1], times[2], 1), (times[2], times[3], 2),
+         (times[3], times[4], 3), (times[4], 1440 + nextFajr, 4)]
+    }
+
+    /// The window containing `minute`, with the minutes left in it.
+    func current(at minute: Int) -> (index: Int?, start: Int, end: Int) {
+        if minute < times[0] {
+            return (4, times[4] - 1440, nextFajrToday)
+        }
+        for window in windows where minute >= window.start && minute < window.end {
+            return (window.index, window.start, window.end)
+        }
+        return (nil, shuruq, times[1])
+    }
+
+    /// Today's Fajr as the end of last night's Isha window.
+    private var nextFajrToday: Int { times[0] }
+}
+
+/// Qibla bearing (degrees clockwise from true north) from a coordinate.
+func qiblaBearing(latitude: Double, longitude: Double) -> Double {
+    let kaabaLat = 21.422487 * .pi / 180
+    let kaabaLon = 39.826206 * .pi / 180
+    let lat = latitude * .pi / 180
+    let lon = longitude * .pi / 180
+    let delta = kaabaLon - lon
+    let y = sin(delta)
+    let x = cos(lat) * tan(kaabaLat) - sin(lat) * cos(delta)
+    let bearing = atan2(y, x) * 180 / .pi
+    return (bearing + 360).truncatingRemainder(dividingBy: 360)
+}
+
+private func durationText(_ minutes: Int) -> String {
+    let value = max(0, minutes)
+    return localizedInterfaceDigits(String(format: "%d:%02d", value / 60, value % 60))
+}
+
+private func drawCentered(_ text: String, at point: NSPoint, font: NSFont,
+                          color: NSColor) -> NSRect {
+    let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+    let size = (text as NSString).size(withAttributes: attributes)
+    let rect = NSRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                      width: size.width, height: size.height)
+    (text as NSString).draw(in: rect, withAttributes: attributes)
+    return rect
+}
+
+private func isDarkAppearance(_ view: NSView) -> Bool {
+    view.effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+}
+
+private let dayAmber = NSColor(red: 0.94, green: 0.62, blue: 0.15, alpha: 1)
+private let nightIndigo = NSColor(red: 0.45, green: 0.42, blue: 0.85, alpha: 1)
+
+// ---------------------------------------------------------------------------
+// MARK: Timetable
+
+/// The mosque's printed timetable: one row per day, today highlighted,
+/// Hijri dates, iqama under each adhan, Jumu'a on Fridays.
+final class PrayerTimetableView: NSView {
+    struct Row {
+        let date: Date
+        let times: [String]      // fajr, shuruq, dhuhr, asr, maghrib, isha
+        let iqama: [String?]     // five, aligned with the obligatory prayers
+    }
+    var rows: [Row] = [] { didSet { invalidateIntrinsicContentSize(); needsDisplay = true } }
+    var columnTitles: [String] = []          // day + six columns
+    var hijriAdjustment = 0
+    var jumua: String = ""
+    var nextPrayer: (date: Date, column: Int)?
+    override var isFlipped: Bool { true }
+
+    static let headerHeight: CGFloat = 36
+    static func rowHeight(hasIqama: Bool) -> CGFloat { hasIqama ? 52 : 44 }
+
+    var preferredHeight: CGFloat {
+        let hasIqama = rows.contains { $0.iqama.contains { $0 != nil } }
+        return Self.headerHeight + CGFloat(rows.count) * Self.rowHeight(hasIqama: hasIqama) + 8
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let rtl = Localizer.shared.isRTL
+        let dark = isDarkAppearance(self)
+        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: 12, yRadius: 12)
+        (dark ? NSColor(white: 1, alpha: 0.05) : NSColor(white: 1, alpha: 0.92)).setFill()
+        card.fill()
+        (dark ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.07)).setStroke()
+        card.lineWidth = 0.5
+        card.stroke()
+
+        let inset: CGFloat = 12
+        let dayWidth = (bounds.width - inset * 2) * 0.27
+        let colWidth = (bounds.width - inset * 2 - dayWidth) / 6
+        func columnRect(_ column: Int, y: CGFloat, height: CGFloat) -> NSRect {
+            // column 0 = day; 1...6 = times, laid out in reading order.
+            let logicalX: CGFloat = column == 0 ? 0 : dayWidth + CGFloat(column - 1) * colWidth
+            let width = column == 0 ? dayWidth : colWidth
+            let x = rtl ? bounds.width - inset - logicalX - width : inset + logicalX
+            return NSRect(x: x, y: y, width: width, height: height)
+        }
+
+        let headerFont = Localizer.shared.font(size: 12, weight: .semibold)
+        for (column, title) in columnTitles.enumerated() {
+            let rect = columnRect(column, y: 0, height: Self.headerHeight)
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.alignment = column == 0 ? (rtl ? .right : .left) : .center
+            paragraph.lineBreakMode = .byTruncatingTail
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: headerFont, .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: paragraph]
+            let size = (title as NSString).size(withAttributes: attributes)
+            (title as NSString).draw(in: NSRect(x: rect.minX + 4, y: rect.midY - size.height / 2,
+                                                width: rect.width - 8, height: size.height),
+                                     withAttributes: attributes)
+        }
+
+        let hasIqama = rows.contains { $0.iqama.contains { $0 != nil } }
+        let rowHeight = Self.rowHeight(hasIqama: hasIqama)
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let weekday = DateFormatter()
+        weekday.locale = preferredInterfaceLocale()
+        weekday.setLocalizedDateFormatFromTemplate("EEEE d")
+        var hijriCalendar = Calendar(identifier: .islamicUmmAlQura)
+        hijriCalendar.locale = preferredInterfaceLocale()
+        let hijri = DateFormatter()
+        hijri.calendar = hijriCalendar
+        hijri.locale = preferredInterfaceLocale()
+        hijri.dateFormat = "d MMMM"
+
+        var y = Self.headerHeight
+        for row in rows {
+            let day = calendar.startOfDay(for: row.date)
+            let isToday = day == today
+            let isPast = day < today
+            let isFriday = calendar.component(.weekday, from: row.date) == 6
+            let rowRect = NSRect(x: 6, y: y, width: bounds.width - 12, height: rowHeight)
+            if isToday {
+                let highlight = NSBezierPath(roundedRect: rowRect.insetBy(dx: 0, dy: 2),
+                                             xRadius: 8, yRadius: 8)
+                NSColor.appAccent.withAlphaComponent(dark ? 0.20 : 0.12).setFill()
+                highlight.fill()
+            } else {
+                NSColor.separatorColor.withAlphaComponent(0.5).setFill()
+                NSRect(x: inset, y: y, width: bounds.width - inset * 2, height: 0.5).fill()
+            }
+            // Past days fade evenly. Plain white/black with alpha: system
+            // label colors pick up vibrancy under the glass material.
+            let ink = NSColor(white: dark ? 1 : 0, alpha: 1)
+            let primary: NSColor = isToday ? .appGreenAccent
+                : (isPast ? ink.withAlphaComponent(0.3) : .labelColor)
+            let secondary: NSColor = isPast ? ink.withAlphaComponent(0.2)
+                                            : .secondaryLabelColor
+
+            // Day cell: weekday + date, then the Hijri date (or Jumu'a).
+            let dayRect = columnRect(0, y: y, height: rowHeight).insetBy(dx: 6, dy: 0)
+            let dayParagraph = NSMutableParagraphStyle()
+            dayParagraph.alignment = rtl ? .right : .left
+            dayParagraph.lineBreakMode = .byTruncatingTail
+            var title = weekday.string(from: row.date)
+            if isToday { title += " · " + prayerViewText("today") }
+            let titleAttributes: [NSAttributedString.Key: Any] = [
+                .font: Localizer.shared.font(size: 13, weight: isToday ? .bold : .semibold),
+                .foregroundColor: primary, .paragraphStyle: dayParagraph]
+            let hijriDate = calendar.date(byAdding: .day, value: hijriAdjustment, to: row.date) ?? row.date
+            let subtitle = hijri.string(from: hijriDate)
+            let subtitleAttributes: [NSAttributedString.Key: Any] = [
+                .font: Localizer.shared.font(size: 10.5, weight: .medium),
+                .foregroundColor: secondary, .paragraphStyle: dayParagraph]
+            // Cairo's line box is tall: give each line its full height so
+            // nothing truncates, and center the pair in the row.
+            let titleHeight = ceil((title as NSString).size(withAttributes: titleAttributes).height)
+            let subtitleHeight = ceil((subtitle as NSString).size(withAttributes: subtitleAttributes).height)
+            let top = y + (rowHeight - titleHeight - subtitleHeight + 4) / 2
+            (localizedInterfaceDigits(title) as NSString).draw(
+                in: NSRect(x: dayRect.minX, y: top, width: dayRect.width, height: titleHeight),
+                withAttributes: titleAttributes)
+            (localizedInterfaceDigits(subtitle) as NSString).draw(
+                in: NSRect(x: dayRect.minX, y: top + titleHeight - 4, width: dayRect.width,
+                           height: subtitleHeight),
+                withAttributes: subtitleAttributes)
+
+            // Six time cells; iqama under the five obligatory prayers.
+            let centered = NSMutableParagraphStyle()
+            centered.alignment = .center
+            for column in 0..<6 where row.times.indices.contains(column) {
+                let cell = columnRect(column + 1, y: y, height: rowHeight)
+                let isNext = nextPrayer.map { calendar.isDate($0.date, inSameDayAs: row.date)
+                    && $0.column == column } ?? false
+                let adhanColor: NSColor = isNext ? .appGreenAccent : primary
+                let timeAttributes: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 13.5,
+                                                            weight: isNext || isToday ? .bold : .semibold),
+                    .foregroundColor: adhanColor, .paragraphStyle: centered]
+                let prayerIndex: Int? = column == 1 ? nil : (column == 0 ? 0 : column - 1)
+                var iqama = prayerIndex.flatMap { row.iqama.indices.contains($0) ? row.iqama[$0] : nil }
+                var secondLineColor = secondary
+                // On Fridays the Dhuhr column carries the Jumu'a time.
+                if isFriday, column == 2, !jumua.isEmpty {
+                    iqama = "\(t("label.jumua")) \(displayTime(jumua))"
+                    secondLineColor = isPast ? secondary : .appGreenAccent
+                }
+                let timeTop = iqama == nil ? y + (rowHeight - 18) / 2 : y + rowHeight / 2 - 19
+                (displayTime(row.times[column]) as NSString).draw(
+                    in: NSRect(x: cell.minX, y: timeTop, width: cell.width, height: 18),
+                    withAttributes: timeAttributes)
+                if let iqama {
+                    let isJumua = isFriday && column == 2 && !jumua.isEmpty
+                    let iqamaAttributes: [NSAttributedString.Key: Any] = [
+                        .font: isJumua ? Localizer.shared.font(size: 10.5, weight: .semibold)
+                                       : NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular),
+                        .foregroundColor: secondLineColor, .paragraphStyle: centered]
+                    let text = isJumua ? localizedInterfaceDigits(iqama) : displayTime(iqama)
+                    let height = ceil((text as NSString).size(withAttributes: iqamaAttributes).height)
+                    (text as NSString).draw(
+                        in: NSRect(x: cell.minX, y: y + rowHeight / 2 + 1, width: cell.width,
+                                   height: height),
+                        withAttributes: iqamaAttributes)
+                }
+                if isNext {
+                    NSColor.appGreenAccent.setFill()
+                    let dotX = rtl ? cell.maxX - 10 : cell.minX + 6
+                    NSBezierPath(ovalIn: NSRect(x: dotX, y: timeTop + 6, width: 5, height: 5)).fill()
+                }
+            }
+            y += rowHeight
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MARK: Day path
+
+/// The day as the sun travels it: a horizon, the sun's arc between sunrise
+/// and sunset (the night dipping below), each prayer placed on the path,
+/// the discouraged times shaded, and the prayer windows as a bar beneath.
+final class PrayerDayPathView: NSView {
+    var model: PrayerDayModel? { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    private var markerTips: [(NSRect, String)] = []
+    private var trackingArea: NSTrackingArea?
+
+    static let preferredHeight: CGFloat = 338
+
+    private var horizonY: CGFloat { 168 }
+    private let arcHeight: CGFloat = 120
+    private let nightDepth: CGFloat = 62
+
+    private func x(_ minute: Int) -> CGFloat {
+        let left: CGFloat = 26
+        let width = bounds.width - 52
+        let fraction = CGFloat(((minute % 1440) + 1440) % 1440) / 1440
+        return Localizer.shared.isRTL ? left + width - fraction * width : left + fraction * width
+    }
+
+    private func y(_ minute: Int, _ model: PrayerDayModel) -> CGFloat {
+        let m = ((minute % 1440) + 1440) % 1440
+        if m >= model.shuruq && m <= model.sunset {
+            let phase = CGFloat(m - model.shuruq) / CGFloat(max(1, model.dayLength))
+            return horizonY - sin(phase * .pi) * arcHeight
+        }
+        let distance = m < model.shuruq ? model.shuruq - m : m - model.sunset
+        let nightLength = max(1, 1440 - model.dayLength)
+        return horizonY + sin(CGFloat(distance) / CGFloat(nightLength) * .pi) * nightDepth
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let model else { return }
+        let dark = isDarkAppearance(self)
+        markerTips.removeAll()
+        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
+                                xRadius: 14, yRadius: 14)
+        (dark ? NSColor(white: 1, alpha: 0.05) : NSColor(white: 1, alpha: 0.92)).setFill()
+        card.fill()
+        (dark ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.07)).setStroke()
+        card.lineWidth = 0.5
+        card.stroke()
+
+        let plotTop: CGFloat = 26
+        let plotBottom = horizonY + nightDepth + 6
+
+        // Sky: day and night bands.
+        func band(_ start: Int, _ end: Int, _ color: NSColor) {
+            let a = x(start), b = x(end)
+            NSRect(x: min(a, b), y: plotTop, width: abs(b - a), height: plotBottom - plotTop).fill()
+            _ = color
+        }
+        dayAmber.withAlphaComponent(dark ? 0.07 : 0.06).setFill()
+        band(model.shuruq, model.sunset, dayAmber)
+        nightIndigo.withAlphaComponent(dark ? 0.08 : 0.05).setFill()
+        band(0, model.shuruq, nightIndigo)
+        band(model.sunset, 1439, nightIndigo)
+
+        // Discouraged times: soft hatched bands.
+        for (start, end) in model.discouraged {
+            let a = x(start), b = x(end)
+            let rect = NSRect(x: min(a, b), y: plotTop, width: max(3, abs(b - a)),
+                              height: plotBottom - plotTop)
+            NSColor.systemRed.withAlphaComponent(dark ? 0.12 : 0.08).setFill()
+            rect.fill()
+            NSGraphicsContext.saveGraphicsState()
+            NSBezierPath(rect: rect).addClip()
+            NSColor.systemRed.withAlphaComponent(0.22).setStroke()
+            var hx = rect.minX - rect.height
+            while hx < rect.maxX {
+                let hatch = NSBezierPath()
+                hatch.move(to: NSPoint(x: hx, y: rect.maxY))
+                hatch.line(to: NSPoint(x: hx + rect.height, y: rect.minY))
+                hatch.lineWidth = 0.6
+                hatch.stroke()
+                hx += 6
+            }
+            NSGraphicsContext.restoreGraphicsState()
+            markerTips.append((rect, prayerViewText("forbidden") + "\n" + prayerViewText("forbidden.note")))
+        }
+
+        // Horizon.
+        NSColor.separatorColor.setStroke()
+        let horizon = NSBezierPath()
+        horizon.move(to: NSPoint(x: 18, y: horizonY))
+        horizon.line(to: NSPoint(x: bounds.width - 18, y: horizonY))
+        horizon.lineWidth = 1
+        horizon.stroke()
+
+        // The path: solid by day, dashed by night.
+        func strokePath(from start: Int, to end: Int, color: NSColor, width: CGFloat, dashed: Bool) {
+            let path = NSBezierPath()
+            var m = start
+            path.move(to: NSPoint(x: x(m), y: y(m, model)))
+            while m < end {
+                m = min(end, m + 4)
+                path.line(to: NSPoint(x: x(m), y: y(m, model)))
+            }
+            path.lineWidth = width
+            path.lineCapStyle = .round
+            if dashed { path.setLineDash([4, 4], count: 2, phase: 0) }
+            color.setStroke()
+            path.stroke()
+        }
+        strokePath(from: 0, to: model.shuruq, color: nightIndigo.withAlphaComponent(0.8), width: 1.6, dashed: true)
+        strokePath(from: model.sunset, to: 1439, color: nightIndigo.withAlphaComponent(0.8), width: 1.6, dashed: true)
+        strokePath(from: model.shuruq, to: model.sunset, color: dayAmber, width: 3, dashed: false)
+
+        // Hour axis.
+        let axisFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        for hour in stride(from: 0, through: 24, by: 3) {
+            let px = x(hour == 24 ? 1439 : hour * 60)
+            NSColor.secondaryLabelColor.withAlphaComponent(0.6).setFill()
+            NSRect(x: px - 0.5, y: horizonY - 4, width: 1, height: 8).fill()
+            _ = drawCentered(localizedInterfaceDigits(String(format: "%02d", hour % 24)),
+                             at: NSPoint(x: px, y: plotBottom + 10), font: axisFont,
+                             color: .secondaryLabelColor)
+        }
+
+        // Night points.
+        for (minute, label) in [(model.midnight, prayerViewText("midnight")),
+                                (model.lastThird, prayerViewText("last.third"))] {
+            let p = NSPoint(x: x(minute), y: y(minute, model))
+            nightIndigo.setStroke()
+            let ring = NSBezierPath(ovalIn: NSRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
+            ring.lineWidth = 1.5
+            ring.stroke()
+            markerTips.append((NSRect(x: p.x - 10, y: p.y - 10, width: 20, height: 20),
+                               "\(label) · \(displayTime(clockString(minute)))"))
+        }
+
+        // Prayers on the path, labels above the arc by day, below at night.
+        let nameFont = Localizer.shared.font(size: 12, weight: .semibold)
+        let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+        var placed: [NSRect] = []
+        var markers: [(minute: Int, name: String, isPrayer: Bool)] =
+            model.times.enumerated().map {
+                (minute: $0.element, name: model.names[$0.offset], isPrayer: true)
+            }
+        markers.append((model.shuruq, t("prayer.shuruq"), false))
+        let now = Calendar.current.component(.hour, from: Date()) * 60
+            + Calendar.current.component(.minute, from: Date())
+        let current = model.current(at: now)
+        for marker in markers.sorted(by: { $0.minute < $1.minute }) {
+            let p = NSPoint(x: x(marker.minute), y: y(marker.minute, model))
+            let isCurrent = marker.isPrayer && current.index.map { model.times[$0] == marker.minute } ?? false
+            let radius: CGFloat = marker.isPrayer ? 6 : 4.5
+            (marker.isPrayer ? NSColor.appAccent : dayAmber).setFill()
+            NSBezierPath(ovalIn: NSRect(x: p.x - radius, y: p.y - radius,
+                                        width: radius * 2, height: radius * 2)).fill()
+            (dark ? NSColor(white: 0.12, alpha: 1) : NSColor.white).setStroke()
+            let outline = NSBezierPath(ovalIn: NSRect(x: p.x - radius, y: p.y - radius,
+                                                      width: radius * 2, height: radius * 2))
+            outline.lineWidth = 1.5
+            outline.stroke()
+            let above = p.y <= horizonY
+            var labelY = above ? p.y - 30 : p.y + 22
+            let width: CGFloat = 70
+            var rect = NSRect(x: p.x - width / 2, y: labelY - 9, width: width, height: 30)
+            while placed.contains(where: { $0.insetBy(dx: -2, dy: -1).intersects(rect) }) {
+                labelY += above ? -26 : 26
+                rect = NSRect(x: p.x - width / 2, y: labelY - 9, width: width, height: 30)
+            }
+            placed.append(rect)
+            _ = drawCentered(marker.name, at: NSPoint(x: p.x, y: labelY), font: nameFont,
+                             color: isCurrent ? .appGreenAccent : .labelColor)
+            _ = drawCentered(displayTime(clockString(marker.minute)),
+                             at: NSPoint(x: p.x, y: labelY + 14), font: timeFont,
+                             color: .secondaryLabelColor)
+            markerTips.append((NSRect(x: p.x - 12, y: p.y - 12, width: 24, height: 24),
+                               "\(marker.name) · \(displayTime(clockString(marker.minute)))"))
+        }
+
+        // Now: a hairline and the sun (or moon) on the path.
+        let nowPoint = NSPoint(x: x(now), y: y(now, model))
+        NSColor.appAccent.withAlphaComponent(0.45).setStroke()
+        let nowLine = NSBezierPath()
+        nowLine.move(to: NSPoint(x: nowPoint.x, y: plotTop))
+        nowLine.line(to: NSPoint(x: nowPoint.x, y: plotBottom))
+        nowLine.setLineDash([2, 3], count: 2, phase: 0)
+        nowLine.lineWidth = 1
+        nowLine.stroke()
+        let isDay = now >= model.shuruq && now <= model.sunset
+        let body = isDay ? dayAmber : nightIndigo
+        body.withAlphaComponent(0.25).setFill()
+        NSBezierPath(ovalIn: NSRect(x: nowPoint.x - 14, y: nowPoint.y - 14, width: 28, height: 28)).fill()
+        body.setFill()
+        NSBezierPath(ovalIn: NSRect(x: nowPoint.x - 8, y: nowPoint.y - 8, width: 16, height: 16)).fill()
+
+        // Prayer windows bar.
+        let barY = plotBottom + 30
+        for window in model.windows {
+            let start = x(window.start), end = x(min(window.end, 1439))
+            let isCurrent = current.index == window.index
+            let rect = NSRect(x: min(start, end), y: barY, width: max(4, abs(end - start)), height: 10)
+            NSColor.appAccent.withAlphaComponent(isCurrent ? 0.95 : 0.28).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
+            // Name each window under its segment when there's room.
+            let name = model.names[window.index]
+            let labelFont = Localizer.shared.font(size: 10.5, weight: isCurrent ? .bold : .medium)
+            let labelWidth = (name as NSString).size(withAttributes: [.font: labelFont]).width
+            if rect.width > labelWidth + 8 {
+                _ = drawCentered(name, at: NSPoint(x: rect.midX, y: barY + 22), font: labelFont,
+                                 color: isCurrent ? .appGreenAccent : .secondaryLabelColor)
+            }
+            if window.index == 4 {
+                // Isha continues past midnight up to Fajr.
+                let tail = NSRect(x: min(x(0), x(model.times[0])), y: barY,
+                                  width: abs(x(model.times[0]) - x(0)), height: 10)
+                NSColor.appAccent.withAlphaComponent(current.index == 4 ? 0.95 : 0.28).setFill()
+                NSBezierPath(roundedRect: tail, xRadius: 5, yRadius: 5).fill()
+            }
+        }
+
+        // Legend.
+        let legendFont = Localizer.shared.font(size: 10.5, weight: .medium)
+        let legend: [(NSColor, String)] = [(dayAmber, prayerViewText("day.legend")),
+                                           (nightIndigo, prayerViewText("night.legend")),
+                                           (NSColor.systemRed, prayerViewText("forbidden"))]
+        var lx: CGFloat = Localizer.shared.isRTL ? bounds.width - 26 : 26
+        let ly = barY + 48
+        for (color, text) in legend {
+            let attributes: [NSAttributedString.Key: Any] = [.font: legendFont,
+                                                             .foregroundColor: NSColor.secondaryLabelColor]
+            let size = (text as NSString).size(withAttributes: attributes)
+            let swatchX = Localizer.shared.isRTL ? lx - 8 : lx
+            color.withAlphaComponent(0.7).setFill()
+            NSBezierPath(ovalIn: NSRect(x: swatchX, y: ly - 4, width: 8, height: 8)).fill()
+            let textX = Localizer.shared.isRTL ? swatchX - 6 - size.width : swatchX + 14
+            (text as NSString).draw(at: NSPoint(x: textX, y: ly - size.height / 2),
+                                    withAttributes: attributes)
+            lx = Localizer.shared.isRTL ? textX - 18 : textX + size.width + 18
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        toolTip = markerTips.last(where: { $0.0.contains(point) })?.1
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MARK: 24-hour dial
+
+/// One ring for the whole day: midnight at the bottom, noon at the top,
+/// daylight and night arcs, every prayer and iqama on the ring, the
+/// current window's progress, and a live hand.
+final class PrayerDialView: NSView {
+    var model: PrayerDayModel? { didSet { needsDisplay = true } }
+    var iqamaMinutes: [Int?] = []
+    override var isFlipped: Bool { true }
+
+    private func angle(_ minute: Int) -> CGFloat {
+        let fraction = CGFloat(((minute % 1440) + 1440) % 1440) / 1440
+        // Morning sits on the leading side: left in LTR, right in RTL.
+        return Localizer.shared.isRTL ? .pi / 2 - fraction * 2 * .pi
+                                      : .pi / 2 + fraction * 2 * .pi
+    }
+
+    private func point(_ minute: Int, radius: CGFloat, center: NSPoint) -> NSPoint {
+        let a = angle(minute)
+        return NSPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let model else { return }
+        let dark = isDarkAppearance(self)
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let radius = min(bounds.width, bounds.height) / 2 - 64
+        let ringWidth: CGFloat = 18
+
+        func arc(from start: Int, to end: Int, radius r: CGFloat, color: NSColor, width: CGFloat) {
+            guard end > start else { return }
+            let path = NSBezierPath()
+            var m = start
+            path.move(to: point(m, radius: r, center: center))
+            while m < end {
+                m = min(end, m + 3)
+                path.line(to: point(m, radius: r, center: center))
+            }
+            path.lineWidth = width
+            path.lineCapStyle = .butt
+            color.setStroke()
+            path.stroke()
+        }
+
+        // Night base and the daylight arc.
+        arc(from: 0, to: 1440, radius: radius, color: nightIndigo.withAlphaComponent(dark ? 0.38 : 0.26),
+            width: ringWidth)
+        arc(from: model.shuruq, to: model.sunset, radius: radius,
+            color: dayAmber.withAlphaComponent(dark ? 0.62 : 0.55), width: ringWidth)
+
+        // Hour ticks and labels inside the ring.
+        let hourFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        for hour in 0..<24 {
+            let minute = hour * 60
+            let outer = point(minute, radius: radius - ringWidth / 2 - 3, center: center)
+            let inner = point(minute, radius: radius - ringWidth / 2 - (hour % 3 == 0 ? 10 : 6), center: center)
+            let tick = NSBezierPath()
+            tick.move(to: outer)
+            tick.line(to: inner)
+            tick.lineWidth = hour % 3 == 0 ? 1.6 : 1
+            NSColor.secondaryLabelColor.withAlphaComponent(hour % 3 == 0 ? 0.75 : 0.45).setStroke()
+            tick.stroke()
+            if hour % 3 == 0 {
+                _ = drawCentered(localizedInterfaceDigits(String(format: "%02d", hour)),
+                                 at: point(minute, radius: radius - ringWidth / 2 - 22, center: center),
+                                 font: hourFont, color: .secondaryLabelColor)
+            }
+        }
+
+        // Current window: progress drawn over the ring.
+        let calendar = Calendar.current
+        let now = calendar.component(.hour, from: Date()) * 60 + calendar.component(.minute, from: Date())
+        let seconds = calendar.component(.second, from: Date())
+        let current = model.current(at: now)
+        if current.index != nil {
+            let start = current.start, end = current.end
+            func wrapped(_ a: Int, _ b: Int, _ color: NSColor) {
+                if a < 0 { arc(from: 1440 + a, to: 1440, radius: radius + ringWidth / 2 + 4, color: color, width: 4)
+                           arc(from: 0, to: b, radius: radius + ringWidth / 2 + 4, color: color, width: 4) }
+                else if b > 1440 { arc(from: a, to: 1440, radius: radius + ringWidth / 2 + 4, color: color, width: 4)
+                                   arc(from: 0, to: b - 1440, radius: radius + ringWidth / 2 + 4, color: color, width: 4) }
+                else { arc(from: a, to: b, radius: radius + ringWidth / 2 + 4, color: color, width: 4) }
+            }
+            let nowLinear = now < start && start >= 0 ? now + 1440 : now
+            wrapped(start, end, NSColor.appAccent.withAlphaComponent(0.25))
+            wrapped(start, min(end, max(start, nowLinear)), NSColor.appAccent)
+        }
+
+        // Prayers and iqama on the ring; labels outside, nudged apart.
+        let nameFont = Localizer.shared.font(size: 12, weight: .semibold)
+        let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+        var occupied: [NSRect] = []
+        var markers = model.times.enumerated().map { ($0.element, model.names[$0.offset], true) }
+        markers.append((model.shuruq, t("prayer.shuruq"), false))
+        for (index, iqama) in iqamaMinutes.enumerated() {
+            guard let iqama, model.times.indices.contains(index), iqama != model.times[index] else { continue }
+            let a = point(iqama, radius: radius + ringWidth / 2 + 4, center: center)
+            let b = point(iqama, radius: radius + ringWidth / 2 + 11, center: center)
+            let tick = NSBezierPath()
+            tick.move(to: a)
+            tick.line(to: b)
+            tick.lineWidth = 2
+            NSColor.appAccent.withAlphaComponent(0.7).setStroke()
+            tick.stroke()
+        }
+        for (minute, name, isPrayer) in markers {
+            let p = point(minute, radius: radius, center: center)
+            let r: CGFloat = isPrayer ? 7 : 5
+            (isPrayer ? NSColor.appAccent : dayAmber).setFill()
+            NSBezierPath(ovalIn: NSRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)).fill()
+            (dark ? NSColor(white: 0.1, alpha: 1) : NSColor.white).setStroke()
+            let outline = NSBezierPath(ovalIn: NSRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+            outline.lineWidth = 2
+            outline.stroke()
+            var labelRadius = radius + ringWidth / 2 + 30
+            var labelPoint = point(minute, radius: labelRadius, center: center)
+            var rect = NSRect(x: labelPoint.x - 36, y: labelPoint.y - 15, width: 72, height: 30)
+            var guardCount = 0
+            while occupied.contains(where: { $0.intersects(rect) }) && guardCount < 4 {
+                labelRadius += 22
+                labelPoint = point(minute, radius: labelRadius, center: center)
+                rect = NSRect(x: labelPoint.x - 36, y: labelPoint.y - 15, width: 72, height: 30)
+                guardCount += 1
+            }
+            occupied.append(rect)
+            let isCurrent = isPrayer && current.index.map { model.times[$0] == minute } ?? false
+            _ = drawCentered(name, at: NSPoint(x: labelPoint.x, y: labelPoint.y - 6), font: nameFont,
+                             color: isCurrent ? .appGreenAccent : (isPrayer ? .labelColor : .secondaryLabelColor))
+            _ = drawCentered(displayTime(clockString(minute)),
+                             at: NSPoint(x: labelPoint.x, y: labelPoint.y + 8), font: timeFont,
+                             color: .secondaryLabelColor)
+        }
+
+        // Hand.
+        let exact = Double(now) + Double(seconds) / 60
+        let handAngle = angle(Int(exact.rounded()))
+        let tip = NSPoint(x: center.x + cos(handAngle) * (radius - ringWidth / 2 - 4),
+                          y: center.y + sin(handAngle) * (radius - ringWidth / 2 - 4))
+        let tail = NSPoint(x: center.x + cos(handAngle) * 46, y: center.y + sin(handAngle) * 46)
+        let hand = NSBezierPath()
+        hand.move(to: tail)
+        hand.line(to: tip)
+        hand.lineWidth = 3
+        hand.lineCapStyle = .round
+        NSColor.labelColor.setStroke()
+        hand.stroke()
+        let isDay = now >= model.shuruq && now <= model.sunset
+        let onRing = point(now, radius: radius, center: center)
+        (isDay ? dayAmber : nightIndigo).setFill()
+        NSBezierPath(ovalIn: NSRect(x: onRing.x - 9, y: onRing.y - 9, width: 18, height: 18)).fill()
+        (dark ? NSColor(white: 0.1, alpha: 1) : NSColor.white).setStroke()
+        let ringDot = NSBezierPath(ovalIn: NSRect(x: onRing.x - 9, y: onRing.y - 9, width: 18, height: 18))
+        ringDot.lineWidth = 2
+        ringDot.stroke()
+
+        // Center: the current window and what's left of it.
+        let windowName: String
+        let remaining: Int
+        if let index = current.index {
+            windowName = prayerViewText("now", model.names[index])
+            remaining = current.end - (now < current.start && current.start >= 0 ? now + 1440 : now)
+        } else {
+            windowName = prayerViewText("between")
+            remaining = model.times[1] - now
+        }
+        _ = drawCentered(windowName, at: NSPoint(x: center.x, y: center.y - 18),
+                         font: Localizer.shared.font(size: 12.5, weight: .medium),
+                         color: .secondaryLabelColor)
+        _ = drawCentered(prayerViewText("left", durationText(remaining)),
+                         at: NSPoint(x: center.x, y: center.y + 8),
+                         font: Localizer.shared.font(size: 22, weight: .bold), color: .labelColor)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+/// A small compass: north up, the Qibla arrow at its bearing.
+final class QiblaCompassView: NSView {
+    var bearing: Double = 0 { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let radius = min(bounds.width, bounds.height) / 2 - 8
+        NSColor.separatorColor.setStroke()
+        let ring = NSBezierPath(ovalIn: NSRect(x: center.x - radius, y: center.y - radius,
+                                               width: radius * 2, height: radius * 2))
+        ring.lineWidth = 1.2
+        ring.stroke()
+        for step in 0..<8 {
+            let a = CGFloat(step) * .pi / 4 - .pi / 2
+            let outer = NSPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius)
+            let inner = NSPoint(x: center.x + cos(a) * (radius - (step % 2 == 0 ? 7 : 4)),
+                                y: center.y + sin(a) * (radius - (step % 2 == 0 ? 7 : 4)))
+            let tick = NSBezierPath()
+            tick.move(to: outer)
+            tick.line(to: inner)
+            tick.lineWidth = 1
+            NSColor.tertiaryLabelColor.setStroke()
+            tick.stroke()
+        }
+        _ = drawCentered("N", at: NSPoint(x: center.x, y: center.y - radius + 14),
+                         font: NSFont.systemFont(ofSize: 10, weight: .bold), color: .systemRed)
+        let a = CGFloat(bearing) * .pi / 180 - .pi / 2
+        let tip = NSPoint(x: center.x + cos(a) * (radius - 10), y: center.y + sin(a) * (radius - 10))
+        let arrow = NSBezierPath()
+        arrow.move(to: center)
+        arrow.line(to: tip)
+        arrow.lineWidth = 3
+        arrow.lineCapStyle = .round
+        NSColor.appAccent.setStroke()
+        arrow.stroke()
+        let kaaba = NSRect(x: tip.x - 6, y: tip.y - 6, width: 12, height: 12)
+        NSColor.labelColor.setFill()
+        NSBezierPath(roundedRect: kaaba, xRadius: 2, yRadius: 2).fill()
+        NSColor.appAccent.setFill()
+        NSBezierPath(ovalIn: NSRect(x: center.x - 4, y: center.y - 4, width: 8, height: 8)).fill()
+    }
+}
+
 final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private weak var appDelegate: AppDelegate?
     private var scrollView: NSScrollView!
@@ -10205,10 +8898,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     }()
     private var lastRenderedWidth: CGFloat = 0
     private var didSetInitialScrollPosition = false
-    private var timelineVisibleStart: CGFloat = 0
-    private var timelineVisibleDuration: CGFloat = 1440
-    private var timelineSelectedEventID: String?
-    private var clockSelectedEventID: String?
+    // Live pieces of the Timetable / Day path / Dial views.
+    private var timetableMonthOffset = 0
+    private weak var liveDayPath: PrayerDayPathView?
+    private weak var liveDial: PrayerDialView?
+    private weak var liveWindowCaption: NSTextField?
+    private weak var liveWindowValue: NSTextField?
+    private weak var liveNextCaption: NSTextField?
+    private weak var liveNextValue: NSTextField?
 
     private struct NawafilData {
         let title: String
@@ -10266,9 +8963,9 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     // Header view modes (Overview · List · Timeline · Clock).
     var railModeItems: [(symbol: String, label: String)] {
         [("square.grid.2x2", featureText("full.view.overview")),
-         ("list.bullet", featureText("full.view.list")),
-         ("chart.xyaxis.line", featureText("full.view.timeline")),
-         ("clock", featureText("full.view.clock"))]
+         ("tablecells", prayerViewText("view.timetable")),
+         ("sun.horizon", prayerViewText("view.daypath")),
+         ("clock", prayerViewText("view.dial"))]
     }
     var railSelectedMode: Int { displayMode }
     func railDidSelectMode(_ index: Int) {
@@ -10287,6 +8984,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     /// in every display mode without rebuilding a timeline or clock.
     func refreshLiveState(now: Date = Date()) {
         guard let app = appDelegate else { return }
+        updateLiveCards(now: now)
         let mosque = app.info.name.isEmpty ? t("mosque.default") : app.info.name
         let showCountdown = UserDefaults.standard.object(forKey: kPrayerShowCountdown)
             as? Bool ?? true
@@ -10404,16 +9102,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let bodyHeight: CGFloat
         switch displayMode {
         case 0: bodyHeight = 612 + separateExtra
-        case 1: bodyHeight = (nawafilMode == 1 ? 880 : 600) + separateExtra
-        case 2:
-            let chart = InteractivePrayerDayTimelineView.preferredHeight(
-                for: contentWidth)
-            bodyHeight = chart + 190
-                + (nawafilMode == 2 ? 100 + CGFloat(separateCount) * 128 : 0)
         default:
-            let clock = PrayerRingClockView.preferredHeight(for: contentWidth)
-            bodyHeight = clock + 190
-                + (nawafilMode == 2 ? 100 + CGFloat(separateCount) * 128 : 0)
+            // Timetable, Day path, and Dial size the document after building.
+            bodyHeight = 600
+            _ = separateCount
         }
         let body = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: bodyHeight))
         body.autoresizingMask = [.width]
@@ -10428,16 +9120,28 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         pattern.autoresizingMask = [.width, .height]
         body.addSubview(pattern)
 
+        liveDayPath = nil
+        liveDial = nil
+        liveWindowCaption = nil
+        liveWindowValue = nil
+        liveNextCaption = nil
+        liveNextValue = nil
+        var usedHeight: CGFloat?
         switch displayMode {
         case 0:
             buildOverview(in: body, app: app, x: contentX, width: contentWidth)
         case 1:
-            buildList(in: body, app: app, x: contentX, width: contentWidth)
+            usedHeight = buildTimetable(in: body, app: app, x: contentX, width: contentWidth)
         case 2:
-            buildTimeline(in: body, app: app, x: contentX, width: contentWidth)
+            usedHeight = buildDayPath(in: body, app: app, x: contentX, width: contentWidth)
         default:
-            buildClock(in: body, app: app, x: contentX, width: contentWidth)
+            usedHeight = buildDial(in: body, app: app, x: contentX, width: contentWidth)
         }
+        if let usedHeight {
+            body.setFrameSize(NSSize(width: width,
+                                     height: max(scrollView.contentSize.height, usedHeight + 24)))
+        }
+        updateLiveCards(now: Date())
         if !didSetInitialScrollPosition {
             didSetInitialScrollPosition = true
             DispatchQueue.main.async { [weak self] in
@@ -10758,359 +9462,340 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         cardView.setAccessibilityLabel(featureText("full.nawafil.integrated"))
     }
 
-    private func buildTimeline(in body: NSView, app: AppDelegate,
-                               x: CGFloat, width: CGFloat) {
-        let names = (0..<5).map { app.localizedPrayerName(at: $0) }
-        let timelineHeight = InteractivePrayerDayTimelineView.preferredHeight(
-            for: width)
-        let timeline = InteractivePrayerDayTimelineView(
-            frame: NSRect(x: x, y: 8, width: width, height: timelineHeight),
-            info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
-            events: scheduleEvents,
-            initialVisibleStart: timelineVisibleStart,
-            initialVisibleDuration: timelineVisibleDuration,
-            initialSelectedEventID: timelineSelectedEventID,
-            onStateChange: { [weak self] start, duration, selectedID in
-                self?.timelineVisibleStart = start
-                self?.timelineVisibleDuration = duration
-                self?.timelineSelectedEventID = selectedID
-            },
-            onSelectEvent: { [weak self] event, source in
-                self?.showPrayerInfo(event.knowledge, from: source)
-            })
-        body.addSubview(timeline)
+    // MARK: - Timetable · Day path · Dial
 
-        var y = 8 + timelineHeight + 28
-        body.addSubview(dashboardLabel(featureText("full.landmarks"),
-            frame: NSRect(x: x, y: y, width: width, height: 26),
-            size: 17, weight: .semibold))
-        y += 38
-        addLandmarksStrip(to: body, app: app,
-                          frame: NSRect(x: x, y: y, width: width, height: 82))
-        y += 110
+    private func prayerNames(_ app: AppDelegate) -> [String] {
+        (0..<5).map { app.localizedPrayerName(at: $0) }
+    }
 
-        if nawafilMode == 2 {
-            body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: y, width: width, height: 26),
-                size: 17, weight: .semibold))
-            y += 38
-            let rows = nawafilData(app: app)
-            for row in rows {
-                addNawafilRow(to: body,
-                              frame: NSRect(x: x, y: y,
-                                            width: width, height: 116), data: row)
-                y += 128
-            }
-            addGuidance(to: body, frame: NSRect(x: x, y: y,
-                                                width: width, height: 34))
+    /// A small fact card: caption over a value. Returns both labels so live
+    /// cards can update them every second.
+    @discardableResult
+    private func addFactCard(to parent: NSView, frame: NSRect, caption: String,
+                             value: String, monospaced: Bool = false)
+        -> (caption: NSTextField, value: NSTextField) {
+        let card = AdaptiveCardView(frame: frame)
+        card.cornerRadius = 12
+        parent.addSubview(card)
+        let content = FlippedView(frame: card.bounds)
+        content.autoresizingMask = [.width, .height]
+        card.addSubview(content)
+        let captionLabel = dashboardLabel(caption,
+            frame: NSRect(x: 12, y: 10, width: frame.width - 24, height: 17),
+            size: 11.5, weight: .medium, color: .secondaryLabelColor)
+        let valueLabel = dashboardLabel(value,
+            frame: NSRect(x: 12, y: 31, width: frame.width - 24, height: 26),
+            size: 17, weight: .bold)
+        if monospaced {
+            valueLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 18, weight: .semibold)
+        }
+        content.addSubview(captionLabel)
+        content.addSubview(valueLabel)
+        return (captionLabel, valueLabel)
+    }
+
+    /// A row of equal fact cards in reading order (first on the leading side).
+    private func addFactRow(to parent: NSView, x: CGFloat, y: CGFloat, width: CGFloat,
+                            items: [(String, String, Bool)])
+        -> [(caption: NSTextField, value: NSTextField)] {
+        let gap: CGFloat = 10
+        let cardWidth = (width - gap * CGFloat(items.count - 1)) / CGFloat(items.count)
+        let rtl = Localizer.shared.isRTL
+        return items.enumerated().map { index, item in
+            let visual = rtl ? items.count - 1 - index : index
+            return addFactCard(to: parent,
+                               frame: NSRect(x: x + CGFloat(visual) * (cardWidth + gap), y: y,
+                                             width: cardWidth, height: 68),
+                               caption: item.0, value: item.1, monospaced: item.2)
         }
     }
 
-    private func buildList(in body: NSView, app: AppDelegate,
-                           x: CGFloat, width: CGFloat) {
-        // One grouped table (rows + hairlines) instead of a stack of cards.
-        let group = AdaptiveCardView(frame: NSRect(x: x, y: 8, width: width, height: 0))
-        group.cornerRadius = 12
-        body.addSubview(group)
+    private func buildTimetable(in body: NSView, app: AppDelegate,
+                                x: CGFloat, width: CGFloat) -> CGFloat {
+        let rtl = Localizer.shared.isRTL
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let range = UserDefaults.standard.integer(forKey: kPrayerTimetableRangeKey) == 1 ? 1 : 0
+        let names = prayerNames(app)
         var y: CGFloat = 8
-        var rowCount = 0
-        func separator() {
-            if rowCount > 0 {
-                let line = NSBox(frame: NSRect(x: x + 16, y: y, width: width - 32, height: 1))
-                line.boxType = .separator
-                body.addSubview(line)
-            }
-            rowCount += 1
-        }
-        func prayer(_ index: Int) {
-            separator()
-            addPrayerListRow(to: body, app: app, index: index,
-                frame: NSRect(x: x, y: y, width: width, height: 64))
-            y += 64
-        }
-        func nafl(_ kind: PrayerScheduleKind, _ title: String, _ detail: String,
-                  _ citation: String) {
-            let item = displayKnowledge(for: kind, title: title, count: detail,
-                                        window: detail, citation: citation)
-            separator()
-            addNawafilListRow(to: body, title: title, detail: detail,
-                knowledge: item,
-                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 56))
-            y += 56
-        }
-        func landmark(_ title: String, _ raw: String, _ symbol: String) {
-            separator()
-            addLandmarkListRow(to: body, title: title, raw: raw, symbol: symbol,
-                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 52))
-            y += 52
-        }
 
-        if nawafilMode == 1 {
-            nafl(.rawatib, featureText("nawafil.rawatib"),
-                 featureText("nawafil.rawatib.count"),
-                 "Jāmiʿ at-Tirmidhī 415 · Ṣaḥīḥ Muslim 725a")
-            prayer(0)
-            landmark(t("prayer.shuruq"), app.info.shuruq, "sunrise.fill")
-            nafl(.duha, featureText("nawafil.duha"),
-                 featureText("nawafil.duha.count"), "Ṣaḥīḥ Muslim 720")
-            prayer(1)
-            if !app.info.jumua.isEmpty {
-                landmark(t("label.jumua"), app.info.jumua, "person.2.fill")
+        // Dates on show: the next seven days, or a whole month.
+        var dates: [Date] = []
+        let titleFormatter = DateFormatter()
+        titleFormatter.locale = preferredInterfaceLocale()
+        if range == 1 {
+            let month = calendar.date(byAdding: .month, value: timetableMonthOffset, to: today) ?? today
+            if let interval = calendar.dateInterval(of: .month, for: month) {
+                var day = interval.start
+                while day < interval.end {
+                    dates.append(day)
+                    day = calendar.date(byAdding: .day, value: 1, to: day) ?? interval.end
+                }
             }
-            nafl(.rawatib, featureText("nawafil.rawatib"),
-                 featureText("nawafil.rawatib.best"), "Jāmiʿ at-Tirmidhī 415")
-            prayer(2)
-            let sunset = (app.info.sunset ?? "").isEmpty
-                ? (app.info.times.indices.contains(3) ? app.info.times[3] : "")
-                : app.info.sunset!
-            landmark(featureText("full.sunset"), sunset, "sunset.fill")
-            prayer(3)
-            nafl(.rawatib, featureText("nawafil.rawatib"),
-                 featureText("nawafil.rawatib.best"), "Jāmiʿ at-Tirmidhī 415")
-            prayer(4)
-            nafl(.qiyam, featureText("nawafil.qiyam"),
-                 featureText("nawafil.qiyam.best"),
-                 "Ṣaḥīḥ Muslim 1163a · Ṣaḥīḥ al-Bukhārī 1145")
-            nafl(.witr, featureText("nawafil.witr"),
-                 featureText("nawafil.witr.best"), "Ṣaḥīḥ Muslim 751b")
-            group.frame.size.height = y - 8
-            y += 20
+            titleFormatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
         } else {
-            for index in 0..<5 { prayer(index) }
-            group.frame.size.height = y - 8
-            y += 20
-            body.addSubview(dashboardLabel(featureText("full.landmarks"),
-                frame: NSRect(x: x, y: y, width: width, height: 26),
-                size: 17, weight: .semibold))
-            y += 34
-            addLandmarksStrip(to: body, app: app,
-                              frame: NSRect(x: x, y: y, width: width, height: 82))
-            y += 110
+            dates = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+            titleFormatter.setLocalizedDateFormatFromTemplate("d MMMM")
         }
-
-        if nawafilMode == 2 {
-            body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: y, width: width, height: 26),
-                size: 17, weight: .semibold))
-            y += 38
-            let rows = nawafilData(app: app)
-            for row in rows {
-                addNawafilRow(to: body,
-                              frame: NSRect(x: x, y: y, width: width, height: 116),
-                              data: row)
-                y += 128
-            }
-            addGuidance(to: body, frame: NSRect(x: x, y: y,
-                                                width: width, height: 34))
+        guard let first = dates.first, let last = dates.last else { return y }
+        let title = range == 1 ? titleFormatter.string(from: first)
+            : "\(titleFormatter.string(from: first)) – \(titleFormatter.string(from: last))"
+        var hijriCalendar = Calendar(identifier: .islamicUmmAlQura)
+        hijriCalendar.locale = preferredInterfaceLocale()
+        let hijriFormatter = DateFormatter()
+        hijriFormatter.calendar = hijriCalendar
+        hijriFormatter.locale = preferredInterfaceLocale()
+        hijriFormatter.dateFormat = "MMMM yyyy"
+        let adjust = app.info.hijriAdjustment ?? 0
+        let hijriMonths = [first, last].map {
+            hijriFormatter.string(from: calendar.date(byAdding: .day, value: adjust, to: $0) ?? $0)
         }
-    }
+        let hijriTitle = hijriMonths[0] == hijriMonths[1] ? hijriMonths[0]
+            : "\(hijriMonths[0]) – \(hijriMonths[1])"
 
-    private func addPrayerListRow(to parent: NSView, app: AppDelegate, index: Int,
-                                  frame: NSRect) {
-        let card = NSView(frame: frame)
-        parent.addSubview(card)
-
-        let mode = NSButton(frame: NSRect(x: 0, y: 0, width: 44, height: 44))
-        mode.isBordered = false
-        mode.title = ""
-        mode.tag = index
-        mode.target = self
-        mode.action = #selector(prayerListModeTapped(_:))
-        mode.imagePosition = .imageOnly
-        mode.focusRingType = .default
-        mode.translatesAutoresizingMaskIntoConstraints = false
-        app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(index))
-        updatePrayerModeAccessibility(mode, index: index)
-
-        let infoView: NSView
-        if let knowledge = knowledge(forPrayer: index) {
-            let button = makeInfoButton(
-                for: knowledge,
-                frame: NSRect(x: 0, y: 0, width: 44, height: 44))
-            button.translatesAutoresizingMaskIntoConstraints = false
-            infoView = button
-        } else {
-            let placeholder = NSView()
-            placeholder.translatesAutoresizingMaskIntoConstraints = false
-            placeholder.setAccessibilityElement(false)
-            infoView = placeholder
+        // Controls on the trailing side: month steps (month view) + range.
+        let rangeControl = NSSegmentedControl(
+            labels: [prayerViewText("range.week"), prayerViewText("range.month")],
+            trackingMode: .selectOne, target: self,
+            action: #selector(timetableRangeChanged(_:)))
+        rangeControl.selectedSegment = range
+        rangeControl.font = Localizer.shared.font(size: 12, weight: .medium)
+        rangeControl.userInterfaceLayoutDirection = rtl ? .rightToLeft : .leftToRight
+        var controls: [NSView] = []
+        if range == 1 {
+            let previous = HoverIconButton(symbol: rtl ? "chevron.right" : "chevron.left",
+                                           toolTip: prayerViewText("previous.month"),
+                                           target: self, action: #selector(timetableMonthStep(_:)),
+                                           pointSize: 12, size: NSSize(width: 30, height: 26))
+            previous.tag = -1
+            let next = HoverIconButton(symbol: rtl ? "chevron.left" : "chevron.right",
+                                       toolTip: prayerViewText("next.month"),
+                                       target: self, action: #selector(timetableMonthStep(_:)),
+                                       pointSize: 12, size: NSSize(width: 30, height: 26))
+            next.tag = 1
+            controls += [previous, next]
         }
+        controls.append(rangeControl)
+        let controlStack = NSStackView(views: controls)
+        controlStack.orientation = .horizontal
+        controlStack.spacing = 6
+        controlStack.userInterfaceLayoutDirection = rtl ? .rightToLeft : .leftToRight
+        let controlSize = controlStack.fittingSize
+        controlStack.frame = NSRect(x: rtl ? x : x + width - controlSize.width, y: y + 6,
+                                    width: controlSize.width, height: controlSize.height)
+        body.addSubview(controlStack)
 
-        let isNext = app.info.times.count >= 5 && app.nextPrayer().index == index
-        let title = listLabel(app.localizedPrayerName(at: index), size: 16,
-                              weight: .semibold,
-                              color: isNext ? .appGreenAccent : .labelColor,
-                              maximumLines: 2)
-        title.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
-        let adhan = listTimeLabel(raw.isEmpty ? "—" : displayTime(raw), size: 22)
-        let iqama = app.iqamaTimeAt(index).map(displayTime) ?? "—"
-        let iqamaTitle = listLabel(t("col.iqama"), size: 10.5,
-                                   weight: .medium,
-                                   color: .secondaryLabelColor,
-                                   alignment: .center)
-        let iqamaValue = listTimeLabel(iqama, size: 15,
-                                       color: .secondaryLabelColor)
-        let iqamaStack = NSStackView(views: [iqamaTitle, iqamaValue])
-        iqamaStack.orientation = .vertical
-        iqamaStack.alignment = .centerX
-        iqamaStack.spacing = 0
-        iqamaStack.translatesAutoresizingMaskIntoConstraints = false
-
-        let row = NSStackView(views: [infoView, title, adhan, iqamaStack, mode])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 10
-        row.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        row.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 8),
-            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8),
-            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
-            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4),
-            infoView.widthAnchor.constraint(equalToConstant: 44),
-            infoView.heightAnchor.constraint(equalToConstant: 44),
-            adhan.widthAnchor.constraint(equalToConstant: 112),
-            iqamaStack.widthAnchor.constraint(equalToConstant: 132),
-            mode.widthAnchor.constraint(equalToConstant: 44),
-            mode.heightAnchor.constraint(equalToConstant: 44),
-        ])
-    }
-
-    private func addNawafilListRow(to parent: NSView, title: String, detail: String,
-                                   knowledge: PrayerKnowledge,
-                                   frame: NSRect) {
-        let card = NSView(frame: frame)
-        parent.addSubview(card)
-
-        let icon = NSImageView()
-        icon.image = templateSymbol("sparkles", pointSize: 13, weight: .semibold)
-        icon.contentTintColor = .appGreenAccent
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.setAccessibilityElement(false)
-        let info = makeInfoButton(
-            for: knowledge,
-            frame: NSRect(x: 0, y: 0, width: 44, height: 44))
-        info.translatesAutoresizingMaskIntoConstraints = false
-        let titleLabel = listLabel(title, size: 14, weight: .semibold,
-                                   color: .appGreenAccent, maximumLines: 1)
-        let detailLabel = listLabel(detail, size: 11.5,
-                                    color: .secondaryLabelColor,
-                                    maximumLines: 2)
-        let text = NSStackView(views: [titleLabel, detailLabel])
-        text.orientation = .vertical
-        text.alignment = .leading
-        text.spacing = 1
-        text.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        text.translatesAutoresizingMaskIntoConstraints = false
-        text.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        text.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-
-        let row = NSStackView(views: [icon, text, info])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 10
-        row.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        row.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
-            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -4),
-            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
-            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -6),
-            icon.widthAnchor.constraint(equalToConstant: 20),
-            icon.heightAnchor.constraint(equalToConstant: 20),
-            info.widthAnchor.constraint(equalToConstant: 44),
-            info.heightAnchor.constraint(equalToConstant: 44),
-        ])
-    }
-
-    private func addLandmarkListRow(to parent: NSView, title: String, raw: String,
-                                    symbol: String, frame: NSRect) {
-        let card = NSView(frame: frame)
-        parent.addSubview(card)
-
-        let icon = NSImageView()
-        icon.image = templateSymbol(symbol, pointSize: 13, weight: .semibold)
-        icon.contentTintColor = NSColor.systemOrange
-        icon.translatesAutoresizingMaskIntoConstraints = false
-        icon.setAccessibilityElement(false)
-        let titleLabel = listLabel(title, size: 14, weight: .semibold,
-                                   maximumLines: 2)
-        titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let shownTime = raw.isEmpty ? "—" : displayTime(raw)
-        let time = listTimeLabel(shownTime, size: 17)
-
-        let row = NSStackView(views: [icon, titleLabel, time])
-        row.orientation = .horizontal
-        row.alignment = .centerY
-        row.spacing = 10
-        row.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        row.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(row)
-        NSLayoutConstraint.activate([
-            row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
-            row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
-            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
-            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -6),
-            icon.widthAnchor.constraint(equalToConstant: 20),
-            icon.heightAnchor.constraint(equalToConstant: 20),
-            time.widthAnchor.constraint(equalToConstant: 116),
-        ])
-        card.setAccessibilityElement(true)
-        card.setAccessibilityRole(.group)
-        card.setAccessibilityLabel("\(title), \(shownTime)")
-        titleLabel.setAccessibilityElement(false)
-        time.setAccessibilityElement(false)
-    }
-
-    private func buildClock(in body: NSView, app: AppDelegate,
-                            x: CGFloat, width: CGFloat) {
-        let names = (0..<5).map { app.localizedPrayerName(at: $0) }
-        let clockHeight = PrayerRingClockView.preferredHeight(for: width)
-        let clock = PrayerRingClockView(
-            frame: NSRect(x: x, y: 8, width: width, height: clockHeight),
-            info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
-            events: scheduleEvents,
-            initialSelectedEventID: clockSelectedEventID,
-            onStateChange: { [weak self] selectedID in
-                self?.clockSelectedEventID = selectedID
-            },
-            onSelectEvent: { [weak self] event, source in
-                self?.showPrayerInfo(event.knowledge, from: source)
-            })
-        body.addSubview(clock)
-        var y = 8 + clockHeight + 28
-        body.addSubview(dashboardLabel(featureText("full.landmarks"),
-            frame: NSRect(x: x, y: y, width: width, height: 26),
+        let textWidth = width - controlSize.width - 20
+        body.addSubview(dashboardLabel(title,
+            frame: NSRect(x: rtl ? x + width - textWidth : x, y: y, width: textWidth, height: 24),
             size: 17, weight: .semibold))
-        y += 38
-        addLandmarksStrip(to: body, app: app,
-                          frame: NSRect(x: x, y: y, width: width, height: 82))
-        y += 110
+        body.addSubview(dashboardLabel(hijriTitle,
+            frame: NSRect(x: rtl ? x + width - textWidth : x, y: y + 25, width: textWidth, height: 17),
+            size: 12, color: .secondaryLabelColor))
+        y += 54
 
-        if nawafilMode == 2 {
-            body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: y, width: width, height: 26),
-                size: 17, weight: .semibold))
-            y += 38
-            let rows = nawafilData(app: app)
-            for row in rows {
-                addNawafilRow(to: body,
-                              frame: NSRect(x: x, y: y,
-                                            width: width, height: 116), data: row)
-                y += 128
+        // Rows from the mosque's own calendar (today falls back to the
+        // live times when the calendar hasn't been fetched yet).
+        var rows: [PrayerTimetableView.Row] = []
+        for date in dates {
+            if let row = app.info.calendarRow(for: date) {
+                let iqamaRow = app.info.iqamaRow(for: date)
+                let iqama: [String?] = (0..<5).map { index in
+                    guard let raw = iqamaRow?[index] else { return nil }
+                    return resolvedIqama(raw, adhan: row[index == 0 ? 0 : index + 1])
+                }
+                rows.append(.init(date: date, times: Array(row.prefix(6)), iqama: iqama))
+            } else if calendar.isDate(date, inSameDayAs: today), app.info.times.count >= 5 {
+                let times = [app.info.times[0], app.info.shuruq] + Array(app.info.times[1..<5])
+                rows.append(.init(date: date, times: times,
+                                  iqama: (0..<5).map { app.iqamaTimeAt($0) }))
             }
-            addGuidance(to: body, frame: NSRect(x: x, y: y,
-                                                width: width, height: 34))
         }
+        if app.info.calendar == nil {
+            body.addSubview(dashboardLabel(prayerViewText("no.calendar"),
+                frame: NSRect(x: x, y: y, width: width, height: 18),
+                size: 12, color: .secondaryLabelColor))
+            y += 26
+        }
+
+        let table = PrayerTimetableView(frame: NSRect(x: x, y: y, width: width, height: 100))
+        table.columnTitles = [prayerViewText("day"), names[0], t("prayer.shuruq"),
+                              names[1], names[2], names[3], names[4]]
+        table.hijriAdjustment = adjust
+        table.jumua = app.info.jumuaTimes?.first ?? app.info.jumua
+        if app.info.times.count >= 5 {
+            let next = app.nextPrayer()
+            if (0..<5).contains(next.index) {
+                let day = next.isTomorrow
+                    ? (calendar.date(byAdding: .day, value: 1, to: today) ?? today) : today
+                table.nextPrayer = (day, next.index == 0 ? 0 : next.index + 1)
+            }
+        }
+        table.rows = rows
+        table.frame.size.height = table.preferredHeight
+        body.addSubview(table)
+        y += table.frame.height + 14
+
+        // How today moved compared with yesterday.
+        if let yesterday = calendar.date(byAdding: .day, value: -1, to: today),
+           let todayRow = app.info.calendarRow(for: today),
+           let yesterdayRow = app.info.calendarRow(for: yesterday) {
+            func delta(_ index: Int) -> Int? {
+                guard let a = clockMinutes(todayRow[index]), let b = clockMinutes(yesterdayRow[index])
+                else { return nil }
+                return a - b
+            }
+            func signed(_ value: Int) -> String {
+                let sign = value > 0 ? "+" : (value < 0 ? "−" : "±")
+                // Left-to-right marks keep "+2" intact inside Arabic/Urdu text.
+                return "\u{200E}\(sign)\(localizedInterfaceDigits(String(abs(value))))\u{200E}"
+            }
+            var parts: [String] = []
+            if let fajr = delta(0) { parts.append("\(names[0]) \(signed(fajr))") }
+            if let maghrib = delta(4) { parts.append("\(names[3]) \(signed(maghrib))") }
+            if let shuruqDelta = delta(1), let maghribDelta = delta(4) {
+                parts.append("\(prayerViewText("day.length")) \(signed(maghribDelta - shuruqDelta))")
+            }
+            if !parts.isEmpty {
+                body.addSubview(dashboardLabel(
+                    "\(prayerViewText("vs.yesterday")): " + parts.joined(separator: " · "),
+                    frame: NSRect(x: x + 4, y: y, width: width - 8, height: 18),
+                    size: 12, color: .secondaryLabelColor))
+                y += 26
+            }
+        }
+        return y
+    }
+
+    @objc private func timetableRangeChanged(_ sender: NSSegmentedControl) {
+        UserDefaults.standard.set(sender.selectedSegment, forKey: kPrayerTimetableRangeKey)
+        timetableMonthOffset = 0
+        rebuild()
+    }
+
+    @objc private func timetableMonthStep(_ sender: NSButton) {
+        timetableMonthOffset = max(-11, min(11, timetableMonthOffset + sender.tag))
+        rebuild()
+    }
+
+    private func buildDayPath(in body: NSView, app: AppDelegate,
+                              x: CGFloat, width: CGFloat) -> CGFloat {
+        guard let model = PrayerDayModel(info: app.info, names: prayerNames(app)) else { return 40 }
+        let path = PrayerDayPathView(frame: NSRect(x: x, y: 8, width: width,
+                                                   height: PrayerDayPathView.preferredHeight))
+        path.model = model
+        path.setAccessibilityLabel(prayerViewText("view.daypath"))
+        body.addSubview(path)
+        liveDayPath = path
+        var y = 8 + PrayerDayPathView.preferredHeight + 14
+        let cards = addFactRow(to: body, x: x, y: y, width: width, items: [
+            ("", "", false),
+            (prayerViewText("day.length"), durationText(model.dayLength), true),
+            (prayerViewText("midnight"), displayTime(clockString(model.midnight)), true),
+            (prayerViewText("last.third"), displayTime(clockString(model.lastThird)), true),
+            (prayerViewText("imsak"), displayTime(clockString(model.imsak)), true),
+        ])
+        liveWindowCaption = cards[0].caption
+        liveWindowValue = cards[0].value
+        y += 68 + 14
+        body.addSubview(dashboardLabel(prayerViewText("forbidden.note"),
+            frame: NSRect(x: x + 4, y: y, width: width - 8, height: 18),
+            size: 11.5, color: .tertiaryLabelColor))
+        return y + 24
+    }
+
+    private func buildDial(in body: NSView, app: AppDelegate,
+                           x: CGFloat, width: CGFloat) -> CGFloat {
+        guard let model = PrayerDayModel(info: app.info, names: prayerNames(app)) else { return 40 }
+        let rtl = Localizer.shared.isRTL
+        let panelWidth = min(300, width * 0.36)
+        let dialSize = min(width - panelWidth - 24, 500)
+        let dial = PrayerDialView(frame: NSRect(x: rtl ? x + width - dialSize : x, y: 8,
+                                                width: dialSize, height: dialSize))
+        dial.model = model
+        dial.iqamaMinutes = (0..<5).map { app.iqamaTimeAt($0).flatMap(clockMinutes) }
+        dial.setAccessibilityLabel(prayerViewText("view.dial"))
+        body.addSubview(dial)
+        liveDial = dial
+
+        // Side panel: next prayer (live), Qibla, sun, night.
+        let panelX = rtl ? x : x + width - panelWidth
+        var py: CGFloat = 24
+        let next = addFactCard(to: body,
+                               frame: NSRect(x: panelX, y: py, width: panelWidth, height: 68),
+                               caption: "", value: "", monospaced: true)
+        liveNextCaption = next.caption
+        liveNextValue = next.value
+        py += 80
+
+        if let latitude = app.info.latitude, let longitude = app.info.longitude {
+            let bearing = qiblaBearing(latitude: latitude, longitude: longitude)
+            let card = AdaptiveCardView(frame: NSRect(x: panelX, y: py, width: panelWidth, height: 124))
+            card.cornerRadius = 12
+            body.addSubview(card)
+            let content = FlippedView(frame: card.bounds)
+            card.addSubview(content)
+            let compass = QiblaCompassView(frame: NSRect(x: rtl ? 12 : panelWidth - 112, y: 12,
+                                                         width: 100, height: 100))
+            compass.bearing = bearing
+            content.addSubview(compass)
+            let textX: CGFloat = rtl ? 120 : 12
+            let textWidth = panelWidth - 132
+            content.addSubview(dashboardLabel(prayerViewText("qibla"),
+                frame: NSRect(x: textX, y: 30, width: textWidth, height: 17),
+                size: 11.5, weight: .medium, color: .secondaryLabelColor))
+            let direction = prayerViewText("dir.\(Int((bearing / 45).rounded()) % 8)")
+            content.addSubview(dashboardLabel(
+                prayerViewText("qibla.detail", String(Int(bearing.rounded())), direction),
+                frame: NSRect(x: textX, y: 52, width: textWidth, height: 40),
+                size: 14, weight: .semibold, wrapping: true))
+            card.setAccessibilityElement(true)
+            card.setAccessibilityLabel("\(prayerViewText("qibla")): " +
+                prayerViewText("qibla.detail", String(Int(bearing.rounded())), direction))
+            py += 136
+        }
+
+        addFactCard(to: body, frame: NSRect(x: panelX, y: py, width: panelWidth, height: 68),
+                    caption: "\(t("prayer.shuruq")) \(displayTime(clockString(model.shuruq))) · "
+                        + "\(featureText("full.sunset")) \(displayTime(clockString(model.sunset)))",
+                    value: "\(prayerViewText("day.length")) \(durationText(model.dayLength))")
+        py += 80
+        addFactCard(to: body, frame: NSRect(x: panelX, y: py, width: panelWidth, height: 68),
+                    caption: "\(prayerViewText("midnight")) \(displayTime(clockString(model.midnight)))",
+                    value: "\(prayerViewText("last.third")) \(displayTime(clockString(model.lastThird)))")
+        py += 80
+        return max(8 + dialSize, py) + 8
+    }
+
+    /// Per-second refresh of the live cards and the dial/path drawings.
+    private func updateLiveCards(now: Date) {
+        guard let app = appDelegate,
+              let model = PrayerDayModel(info: app.info, names: prayerNames(app)) else { return }
+        let calendar = Calendar.current
+        let minute = calendar.component(.hour, from: now) * 60 + calendar.component(.minute, from: now)
+        if let caption = liveWindowCaption, let value = liveWindowValue {
+            let current = model.current(at: minute)
+            if let index = current.index {
+                let linear = minute < current.start && current.start >= 0 ? minute + 1440 : minute
+                caption.stringValue = prayerViewText("now", model.names[index])
+                value.stringValue = prayerViewText("left", durationText(current.end - linear))
+            } else {
+                caption.stringValue = prayerViewText("between")
+                value.stringValue = prayerViewText("left", durationText(model.times[1] - minute))
+            }
+        }
+        if let caption = liveNextCaption, let value = liveNextValue {
+            let next = app.info.times.count >= 5 ? app.nextPrayer() : (index: -1, date: nil, isTomorrow: false)
+            if (0..<5).contains(next.index), let date = next.date {
+                caption.stringValue = prayerViewText("next", model.names[next.index],
+                                                     displayTime(app.info.times[next.index]))
+                let seconds = max(0, Int(date.timeIntervalSince(now)))
+                value.stringValue = localizedInterfaceDigits(String(
+                    format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60))
+            }
+        }
+        liveDial?.needsDisplay = true
+        if calendar.component(.second, from: now) % 20 == 0 { liveDayPath?.needsDisplay = true }
     }
 
     private func nawafilData(app: AppDelegate) -> [NawafilData] {
@@ -23257,6 +21942,39 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                 if (d.sunset !== undefined) sunset = normTime(d.sunset);
                 else if (d.sunsetTime !== undefined) sunset = normTime(d.sunsetTime);
 
+                // Full-year calendars, normalized to [month][day] arrays.
+                function normalizeCalendar(cal, mapper) {
+                    if (!cal) return null;
+                    var months = Array.isArray(cal) ? cal.slice(cal.length >= 13 ? 1 : 0)
+                                                    : [];
+                    if (!Array.isArray(cal) && typeof cal === 'object') {
+                        for (var mi = 1; mi <= 12; mi++) months.push(cal[String(mi)] || cal[mi] || null);
+                    }
+                    if (months.length < 12) return null;
+                    var out = [];
+                    for (var m = 0; m < 12; m++) {
+                        var entry = months[m];
+                        var days = [];
+                        if (Array.isArray(entry)) {
+                            days = entry.slice(entry.length >= 32 ? 1 : 0);
+                        } else if (entry && typeof entry === 'object') {
+                            for (var di = 1; di <= 31; di++) {
+                                var row = entry[String(di)] || entry[di];
+                                if (!row) break;
+                                days.push(row);
+                            }
+                        }
+                        out.push(days.map(function(row) {
+                            return Array.isArray(row) ? row.map(mapper) : [];
+                        }));
+                    }
+                    return out;
+                }
+                var calendar = null, iqamaCalendar = null;
+                try { calendar = normalizeCalendar(d.calendar, normTime); } catch(e) {}
+                try { iqamaCalendar = normalizeCalendar(d.iqamaCalendar, mapIq); } catch(e) {}
+                function num(v) { var n = parseFloat(v); return isNaN(n) ? null : n; }
+
                 return JSON.stringify({
                     name: d.name || d.label || '',
                     localisation: d.localisation || d.association || '',
@@ -23267,7 +21985,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
                     iqama: iqama,
                     jumua: jumua,
                     jumuaTimes: jumuaTimes,
-                    sunset: sunset
+                    sunset: sunset,
+                    calendar: calendar,
+                    iqamaCalendar: iqamaCalendar,
+                    latitude: num(d.latitude),
+                    longitude: num(d.longitude),
+                    hijriAdjustment: num(d.hijriAdjustment),
+                    imsakMinutes: num(d.imsakNbMinBeforeFajr)
                 });
             } catch(e) { return null; }
         })();
@@ -23289,6 +22013,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             next.jumua        = (dict["jumua"]        as? String) ?? ""
             next.jumuaTimes   = (dict["jumuaTimes"]   as? [String])
             next.sunset       = (dict["sunset"]       as? String)
+            next.calendar     = (dict["calendar"]      as? [[[String]]])
+            next.iqamaCalendar = (dict["iqamaCalendar"] as? [[[String]]])
+            next.latitude     = (dict["latitude"]      as? NSNumber)?.doubleValue
+            next.longitude    = (dict["longitude"]     as? NSNumber)?.doubleValue
+            next.hijriAdjustment = (dict["hijriAdjustment"] as? NSNumber)?.intValue
+            next.imsakMinutes = (dict["imsakMinutes"]  as? NSNumber)?.intValue
             next.date         = self.todayString()
             next.sourceURL    = wv.url?.absoluteString ?? ""
 
