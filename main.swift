@@ -75,6 +75,9 @@ let kAdhkarMigrated      = "adhkarLibraryMigrated"
 let kAdhkarIdentityMigrated = "adhkarCollectionIdentity_v37"
 /// Adhkar playback volume (0.0–1.0). Default 1.0.
 let kAdhkarVolume        = "adhkarVolume"
+/// Adhan playback volume (0.0–1.0), used only when the adhan output device
+/// has no settable hardware volume. Default 1.0.
+let kAdhanVolume         = "adhanVolume"
 /// CoreAudio device UID for adhkar audio output ("" = system default).
 /// Mirrors kAdhanAudioDevice so adhkar can be routed to a different speaker.
 let kAdhkarAudioDevice   = "adhkarAudioDeviceUID"
@@ -126,7 +129,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.37.2"
+let kAppVersion          = "3.38.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -867,6 +870,173 @@ func listAudioOutputDevices() -> [AudioOutputDevice] {
     // call (CoreAudio does not guarantee insertion order).
     result.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     return result
+}
+
+/// The CoreAudio device the adhan actually plays on: the output chosen in
+/// Settings when it is connected, otherwise the system default output.
+func adhanOutputDeviceID() -> AudioDeviceID? {
+    let uid = UserDefaults.standard.string(forKey: kAdhanAudioDevice) ?? ""
+    if !uid.isEmpty {
+        var addr = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyTranslateUIDToDevice,
+            mScope:    kAudioObjectPropertyScopeGlobal,
+            mElement:  kAudioObjectPropertyElementMain)
+        var cfUID = uid as CFString
+        var device = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        let status = withUnsafePointer(to: &cfUID) {
+            AudioObjectGetPropertyData(UInt32(kAudioObjectSystemObject), &addr,
+                                       UInt32(MemoryLayout<CFString>.size), $0,
+                                       &size, &device)
+        }
+        if status == noErr, device != kAudioObjectUnknown { return device }
+    }
+    var addr = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope:    kAudioObjectPropertyScopeGlobal,
+        mElement:  kAudioObjectPropertyElementMain)
+    var device = AudioDeviceID(0)
+    var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+    guard AudioObjectGetPropertyData(UInt32(kAudioObjectSystemObject), &addr,
+                                     0, nil, &size, &device) == noErr,
+          device != kAudioObjectUnknown else { return nil }
+    return device
+}
+
+func audioDeviceName(_ device: AudioDeviceID) -> String? {
+    var addr = AudioObjectPropertyAddress(
+        mSelector: kAudioObjectPropertyName,
+        mScope:    kAudioObjectPropertyScopeGlobal,
+        mElement:  kAudioObjectPropertyElementMain)
+    var size = UInt32(MemoryLayout<CFString>.size)
+    var cf: Unmanaged<CFString>?
+    guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &cf) == noErr,
+          let name = cf?.takeRetainedValue() else { return nil }
+    return name as String
+}
+
+/// Hardware volume (0...1) of an output device, or nil when the device has
+/// no settable main volume (some HDMI / DisplayPort outputs). Changing it
+/// only affects that device — the system default output is left alone.
+func outputDeviceVolume(_ device: AudioDeviceID) -> Float? {
+    var addr = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+        mScope:    kAudioDevicePropertyScopeOutput,
+        mElement:  kAudioObjectPropertyElementMain)
+    var settable: DarwinBoolean = false
+    guard AudioObjectHasProperty(device, &addr),
+          AudioObjectIsPropertySettable(device, &addr, &settable) == noErr,
+          settable.boolValue else { return nil }
+    var volume = Float32(0)
+    var size = UInt32(MemoryLayout<Float32>.size)
+    guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, &volume) == noErr
+    else { return nil }
+    return volume
+}
+
+func setOutputDeviceVolume(_ volume: Float, for device: AudioDeviceID) {
+    var value = Float32(max(0, min(1, volume)))
+    var addr = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwareServiceDeviceProperty_VirtualMainVolume,
+        mScope:    kAudioDevicePropertyScopeOutput,
+        mElement:  kAudioObjectPropertyElementMain)
+    AudioObjectSetPropertyData(device, &addr, 0, nil,
+                               UInt32(MemoryLayout<Float32>.size), &value)
+    // Raising the level of a muted speaker should make it audible again.
+    var muteAddr = AudioObjectPropertyAddress(
+        mSelector: kAudioDevicePropertyMute,
+        mScope:    kAudioDevicePropertyScopeOutput,
+        mElement:  kAudioObjectPropertyElementMain)
+    var settable: DarwinBoolean = false
+    if value > 0, AudioObjectHasProperty(device, &muteAddr),
+       AudioObjectIsPropertySettable(device, &muteAddr, &settable) == noErr,
+       settable.boolValue {
+        var unmuted = UInt32(0)
+        AudioObjectSetPropertyData(device, &muteAddr, 0, nil,
+                                   UInt32(MemoryLayout<UInt32>.size), &unmuted)
+    }
+}
+
+func savedAdhanVolume() -> Float {
+    let v = UserDefaults.standard.object(forKey: kAdhanVolume) as? Float ?? 1.0
+    return max(0, min(1, v))
+}
+
+/// Right-click menu row with a slider for the speaker the adhan plays on.
+/// It drives that device's hardware volume, so e.g. the Mac mini speaker can
+/// be levelled while the system output stays on headphones. Devices without
+/// a settable volume fall back to the app's own adhan playback volume.
+final class AdhanVolumeMenuView: NSView {
+    private let device: AudioDeviceID?
+    private let usesDeviceVolume: Bool
+    private let slider = NSSlider()
+    private let percentLabel = NSTextField(labelWithString: "")
+    /// Called with the new app-level volume when the device has no hardware
+    /// volume, so a playing adhan follows the slider live.
+    var onAppVolumeChange: ((Float) -> Void)?
+
+    init() {
+        device = adhanOutputDeviceID()
+        let deviceVolume = device.flatMap(outputDeviceVolume)
+        usesDeviceVolume = deviceVolume != nil
+        super.init(frame: NSRect(x: 0, y: 0, width: 270, height: 50))
+
+        var titleText = t("menu.adhan_volume")
+        if let name = device.flatMap(audioDeviceName) { titleText += " · \(name)" }
+        let title = NSTextField(labelWithString: titleText)
+        title.font = .menuFont(ofSize: NSFont.smallSystemFontSize)
+        title.textColor = .secondaryLabelColor
+        title.lineBreakMode = .byTruncatingTail
+        title.frame = NSRect(x: 20, y: 30, width: 236, height: 16)
+        addSubview(title)
+
+        let low = NSImageView()
+        low.image = templateSymbol("speaker.fill", pointSize: 11)
+        low.contentTintColor = .secondaryLabelColor
+        low.frame = NSRect(x: 18, y: 6, width: 16, height: 18)
+        addSubview(low)
+
+        slider.minValue = 0
+        slider.maxValue = 1
+        slider.isContinuous = true
+        slider.controlSize = .small
+        slider.doubleValue = Double(deviceVolume ?? savedAdhanVolume())
+        slider.target = self
+        slider.action = #selector(sliderChanged(_:))
+        slider.frame = NSRect(x: 38, y: 6, width: 160, height: 20)
+        addSubview(slider)
+
+        let high = NSImageView()
+        high.image = templateSymbol("speaker.wave.3.fill", pointSize: 11)
+        high.contentTintColor = .secondaryLabelColor
+        high.frame = NSRect(x: 202, y: 6, width: 22, height: 18)
+        addSubview(high)
+
+        percentLabel.font = .monospacedDigitSystemFont(
+            ofSize: NSFont.smallSystemFontSize, weight: .regular)
+        percentLabel.textColor = .secondaryLabelColor
+        percentLabel.alignment = .right
+        percentLabel.frame = NSRect(x: 222, y: 8, width: 36, height: 16)
+        addSubview(percentLabel)
+        updatePercent()
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    @objc private func sliderChanged(_ sender: NSSlider) {
+        let volume = Float(sender.doubleValue)
+        if usesDeviceVolume, let device {
+            setOutputDeviceVolume(volume, for: device)
+        } else {
+            UserDefaults.standard.set(volume, forKey: kAdhanVolume)
+            onAppVolumeChange?(volume)
+        }
+        updatePercent()
+    }
+
+    private func updatePercent() {
+        percentLabel.stringValue = "\(Int((slider.doubleValue * 100).rounded()))%"
+    }
 }
 
 // ============================================================================
@@ -20392,6 +20562,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     /// location instead, so it opens on the display the user is working on.
     private var statusPopoverAnchorWindow: NSPanel?
     private var statusPopoverAnchorPoint: NSPoint?
+    /// Deferred single-click popup toggle, cancelled by a second click while
+    /// the adhan is playing (see `statusClicked`).
+    private var pendingStatusClick: DispatchWorkItem?
+    private var lastStatusLeftClick: TimeInterval = 0
 
     /// Floating adhkar window. Lazily instantiated on first use (auto-trigger
     /// or manual menu open) so it costs nothing until needed.
@@ -20713,11 +20887,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
     }
 
     @objc func statusClicked(_ sender: Any?) {
-        if NSApp.currentEvent?.type == .rightMouseUp {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp {
+            pendingStatusClick?.cancel()
+            pendingStatusClick = nil
             showContextMenu()
-        } else {
-            togglePopover()
+            return
         }
+        // While the adhan plays, a double-click silences it (e.g. during a
+        // meeting). A single click then waits out the double-click interval
+        // before opening the popup, so the popup never flashes open first.
+        guard isAdhanPlaying else { togglePopover(); return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let isDoubleClick = (event?.clickCount ?? 1) >= 2 ||
+            now - lastStatusLeftClick <= NSEvent.doubleClickInterval
+        lastStatusLeftClick = now
+        pendingStatusClick?.cancel()
+        pendingStatusClick = nil
+        if isDoubleClick {
+            lastStatusLeftClick = 0
+            if popover.isShown { popover.performClose(nil) }
+            stopAdhan()
+            return
+        }
+        let work = DispatchWorkItem { [weak self] in
+            self?.pendingStatusClick = nil
+            self?.togglePopover()
+        }
+        pendingStatusClick = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + NSEvent.doubleClickInterval,
+                                      execute: work)
     }
 
     func showContextMenu() {
@@ -20725,6 +20924,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         let n = NSMenuItem(title: info.name.isEmpty ? t("mosque.default") : info.name, action: nil, keyEquivalent: "")
         n.isEnabled = false
         menu.addItem(n)
+        menu.addItem(.separator())
+
+        // Adhan sound controls, reachable without opening Settings so the
+        // adhan can be stopped or levelled quickly (e.g. during a meeting).
+        let adhanItem = isAdhanPlaying
+            ? NSMenuItem(title: t("tooltip.stop_adhan"),
+                         action: #selector(stopAdhanFromMenuBar(_:)), keyEquivalent: "")
+            : NSMenuItem(title: t("tooltip.test_adhan"),
+                         action: #selector(menuTestAdhan), keyEquivalent: "")
+        adhanItem.image = templateSymbol(isAdhanPlaying ? "stop.circle.fill" : "play.circle",
+                                         pointSize: 13)
+        menu.addItem(adhanItem)
+        let volumeView = AdhanVolumeMenuView()
+        volumeView.onAppVolumeChange = { [weak self] volume in
+            self?.adhanPlayer?.volume = volume
+        }
+        let volumeItem = NSMenuItem()
+        volumeItem.view = volumeView
+        menu.addItem(volumeItem)
         menu.addItem(.separator())
 
         menu.addItem(NSMenuItem(title: t("menu.open"),     action: #selector(menuOpen),     keyEquivalent: ""))
@@ -20759,12 +20977,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
         menu.addItem(NSMenuItem(title: t("menu.quit"),
                                 action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "q"))
-        statusItem.menu = menu
-        statusItem.button?.performClick(nil)
-        statusItem.menu = nil
+        // Pop the menu up under the actual click rather than through
+        // `statusItem.button`, whose window can belong to the primary
+        // display's menu bar (same issue as `showStatusPopover`), which left
+        // right-clicks on a secondary display without a menu.
+        let point = NSEvent.mouseLocation
+        guard let screen = NSScreen.screens.first(where: {
+            NSMouseInRect(point, $0.frame, false)
+        }) ?? NSScreen.main ?? NSScreen.screens.first else { return }
+        let visibleFrame = screen.visibleFrame
+        let x = min(max(point.x, visibleFrame.minX),
+                    visibleFrame.maxX - menu.size.width)
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: x, y: visibleFrame.maxY),
+                   in: nil)
     }
 
     @objc func menuOpen()    { togglePopover() }
+    @objc func menuTestAdhan() { playAdhan() }
     @objc func menuRefresh() { fetchData() }
     @objc func menuChoose() { openMosqueSettings() }
     @objc func menuSettings() {
@@ -22577,7 +22807,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
             adhanPlayer = p
             p.delegate = self      // so `audioPlayerDidFinishPlaying` resets UI
             route(p)
-            p.volume = 1.0
+            p.volume = savedAdhanVolume()
             p.prepareToPlay()
             let requested = cut?.ranges ?? [0...p.duration]
             adhanPlaybackSegments = requested.compactMap {
