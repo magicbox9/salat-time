@@ -233,5 +233,12 @@ each collection row's right-click menu.
   matching verified publisher font is unavailable; draw `aya_no` separately
   and never persist or export that derivative.
 - Never introduce a Qur'an web view, remote reader, runtime download, or
-  network fallback. Bookmarks store only normalized edition/surah/ayah locators
-  (plus the legacy page for lossless migration).
+  network fallback for the Qur'an *text*. Bookmarks store only normalized
+  edition/surah/ayah locators (plus the legacy page for lossless migration).
+- Recitation audio is the one exception, approved by the project owner:
+  verse-by-verse MP3s from EveryAyah.com (Hafs numbering only) are fetched
+  only after the user presses play (current ayah first, a few ahead), stored
+  under `~/Library/Application Support/SalatTime/QuranAudio/<reciter>/`, and
+  replayed offline afterwards (`QuranRecitationPlayer`). Never stream text,
+  never fetch audio in the background without a play action, and keep
+  recitation disabled for Warsh.

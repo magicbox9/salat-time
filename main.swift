@@ -127,7 +127,7 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.40.0"
+let kAppVersion          = "3.41.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -13234,6 +13234,52 @@ private final class QuranMushafTextView: NSTextView {
 /// One surah in the navigation sidebar: star-numbered medallion, Latin name
 /// with verse count, and the Arabic calligraphic name on the far side. The
 /// sidebar stays in system materials so it reads as native macOS chrome.
+/// One row of the ayah action card: icon + label, full-width, with hover.
+private final class QuranAyahActionButton: NSButton {
+    private let handler: () -> Void
+    private var hovering = false { didSet { updateBackground() } }
+
+    init(symbol: String, title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(frame: .zero)
+        self.title = title
+        image = templateSymbol(symbol, pointSize: 13, weight: .medium)
+        imagePosition = .imageLeading
+        imageHugsTitle = true
+        isBordered = false
+        alignment = Localizer.shared.isRTL ? .right : .left
+        font = Localizer.shared.font(size: 13, weight: .medium)
+        contentTintColor = .labelColor
+        userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        wantsLayer = true
+        layer?.cornerRadius = 7
+        target = self
+        action = #selector(fire)
+        heightAnchor.constraint(equalToConstant: 30).isActive = true
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    @objc private func fire() { handler() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    private func updateBackground() {
+        let color = hovering ? NSColor.labelColor.withAlphaComponent(0.08) : .clear
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = color.cgColor
+        }
+    }
+}
+
 private final class QuranSurahListRowView: NSTableCellView {
     private let highlight = NSView()
     private let numberLabel = NSTextField(labelWithString: "")
@@ -13265,19 +13311,31 @@ private final class QuranSurahListRowView: NSTableCellView {
 
     func configure(sura: Int, arabic: String, english: String, count: Int,
                    isCurrent: Bool) {
+        configure(number: localizedInterfaceDigits(String(sura)), title: arabic,
+                  detail: english,
+                  meta: String(format: quranReaderText("verses"),
+                               localizedInterfaceDigits(String(count))),
+                  isCurrent: isCurrent)
+        setAccessibilityLabel("\(sura) · \(english)")
+    }
+
+    /// Generic navigator row (surah, juz, or bookmark): a numbered medallion,
+    /// a prominent title, and a quiet detail + meta pair.
+    func configure(number: String, title: String, detail: String, meta: String,
+                   isCurrent: Bool) {
         self.isCurrent = isCurrent
-        numberLabel.stringValue = localizedInterfaceDigits(String(sura))
-        latinLabel.stringValue = english
-        metaLabel.stringValue = String(format: quranReaderText("verses"),
-                                       localizedInterfaceDigits(String(count)))
-        arabicNameLabel.stringValue = arabic
+        numberLabel.stringValue = number
+        latinLabel.stringValue = detail
+        metaLabel.stringValue = meta
+        arabicNameLabel.stringValue = title
         highlight.layer?.backgroundColor = isCurrent
             ? NSColor.appGreenAccent.withAlphaComponent(0.16).cgColor
             : NSColor.clear.cgColor
         numberLabel.textColor = isCurrent ? .appGreenAccent : .secondaryLabelColor
         latinLabel.textColor = .labelColor
         arabicNameLabel.textColor = isCurrent ? .appGreenAccent : .labelColor
-        setAccessibilityLabel("\(sura) · \(english)")
+        setAccessibilityLabel([title, detail, meta].filter { !$0.isEmpty }
+            .joined(separator: " · "))
         needsLayout = true
         needsDisplay = true
     }
@@ -13290,19 +13348,22 @@ private final class QuranSurahListRowView: NSTableCellView {
         let numberX: CGFloat = isRTL ? bounds.width - 16 - medallion : 16
         numberLabel.frame = NSRect(x: numberX, y: (bounds.height - 16) / 2,
                                    width: medallion, height: 16)
-        let textX: CGFloat = isRTL ? 16 : 16 + medallion + 8
+        // The title sits right beside the number (the leading side); the
+        // detail and meta lines sit on the far side of the row.
         let textW = bounds.width - medallion - 32 - 8
-        let arabicW: CGFloat = min(120, textW * 0.45)
-        let latinW = textW - arabicW - 6
-        let latinX = isRTL ? textX + arabicW + 6 : textX
-        latinLabel.frame = NSRect(x: latinX, y: 9, width: latinW, height: 17)
-        metaLabel.frame = NSRect(x: latinX, y: 27, width: latinW, height: 14)
-        arabicNameLabel.frame = NSRect(x: isRTL ? textX : textX + latinW + 6,
-                                       y: (bounds.height - 22) / 2,
-                                       width: arabicW, height: 22)
-        arabicNameLabel.alignment = isRTL ? .left : .right
-        latinLabel.alignment = isRTL ? .right : .left
-        metaLabel.alignment = isRTL ? .right : .left
+        let titleW: CGFloat = min(140, textW * 0.55)
+        let detailW = textW - titleW - 6
+        let titleX: CGFloat = isRTL ? numberX - 8 - titleW : numberX + medallion + 8
+        let detailX: CGFloat = isRTL ? 16 : titleX + titleW + 6
+        arabicNameLabel.frame = NSRect(x: titleX, y: (bounds.height - 22) / 2,
+                                       width: titleW, height: 22)
+        latinLabel.frame = NSRect(x: detailX, y: 9, width: detailW, height: 17)
+        metaLabel.frame = NSRect(x: detailX, y: 27, width: detailW, height: 14)
+        arabicNameLabel.alignment = isRTL ? .right : .left
+        latinLabel.alignment = isRTL ? .left : .right
+        metaLabel.alignment = isRTL ? .left : .right
+        latinLabel.font = Localizer.shared.font(size: 11.5, weight: .medium)
+        latinLabel.textColor = .secondaryLabelColor
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -13668,6 +13729,561 @@ private final class QuranVerseRowView: NSTableCellView {
 /// content is part of this surface. The chrome follows dedicated Qur'an apps:
 /// a searchable surah sidebar, one calm toolbar, a reading-preferences
 /// popover, and a status footer carrying position and provenance.
+// ============================================================================
+// MARK: Qur'an reader — recitation, memorization, navigation, progress
+// ============================================================================
+
+private let quranStudyTranslations: [String: [String: String]] = [
+    "en": [
+        "bookmark.remove": "Remove bookmark",
+        "nav.surahs": "Surahs", "nav.juz": "Juz", "nav.bookmarks": "Bookmarks",
+        "juz.title": "Juz %@", "bookmarks.empty": "No bookmarks yet", "page.short": "Page %@",
+        "progress.today": "Pages today: %d", "progress.streak": "Day streak: %d",
+        "memorize": "Memorization mode", "memorize.hint": "Click a hidden ayah to reveal it",
+        "play.from.here": "Play from here", "reciter": "Reciter", "repeat": "Repeat each ayah",
+        "repeat.once": "Once", "downloading": "Downloading audio · %d/%d",
+        "download.failed": "Couldn't download the recitation. Check your connection and try again.",
+        "audio.hafs.only": "Recitation is available for the Hafs edition",
+        "audio.source": "Recitation audio from EveryAyah.com, saved on this Mac after the first play",
+        "details": "Translation and notes", "play.pause": "Play or pause recitation",
+    ],
+    "fr": [
+        "bookmark.remove": "Retirer le signet",
+        "nav.surahs": "Sourates", "nav.juz": "Juz", "nav.bookmarks": "Signets",
+        "juz.title": "Juz %@", "bookmarks.empty": "Aucun signet", "page.short": "Page %@",
+        "progress.today": "Pages aujourd’hui : %d", "progress.streak": "Jours d’affilée : %d",
+        "memorize": "Mode mémorisation", "memorize.hint": "Cliquez sur un verset masqué pour l’afficher",
+        "play.from.here": "Lire à partir d’ici", "reciter": "Récitateur", "repeat": "Répéter chaque verset",
+        "repeat.once": "Une fois", "downloading": "Téléchargement de l’audio · %d/%d",
+        "download.failed": "Impossible de télécharger la récitation. Vérifiez votre connexion et réessayez.",
+        "audio.hafs.only": "La récitation est disponible pour l’édition Hafs",
+        "audio.source": "Audio de récitation d’EveryAyah.com, enregistré sur ce Mac après la première écoute",
+        "details": "Traduction et notes", "play.pause": "Lire ou mettre en pause la récitation",
+    ],
+    "es": [
+        "bookmark.remove": "Quitar marcador",
+        "nav.surahs": "Suras", "nav.juz": "Yuz", "nav.bookmarks": "Marcadores",
+        "juz.title": "Yuz %@", "bookmarks.empty": "Aún no hay marcadores", "page.short": "Página %@",
+        "progress.today": "Páginas hoy: %d", "progress.streak": "Días seguidos: %d",
+        "memorize": "Modo memorización", "memorize.hint": "Haz clic en una aleya oculta para mostrarla",
+        "play.from.here": "Reproducir desde aquí", "reciter": "Recitador", "repeat": "Repetir cada aleya",
+        "repeat.once": "Una vez", "downloading": "Descargando audio · %d/%d",
+        "download.failed": "No se pudo descargar la recitación. Revisa la conexión e inténtalo de nuevo.",
+        "audio.hafs.only": "La recitación está disponible para la edición Hafs",
+        "audio.source": "Audio de EveryAyah.com, guardado en este Mac tras la primera reproducción",
+        "details": "Traducción y notas", "play.pause": "Reproducir o pausar la recitación",
+    ],
+    "ar": [
+        "bookmark.remove": "إزالة العلامة",
+        "nav.surahs": "السور", "nav.juz": "الأجزاء", "nav.bookmarks": "العلامات",
+        "juz.title": "الجزء %@", "bookmarks.empty": "لا توجد علامات بعد", "page.short": "صفحة %@",
+        "progress.today": "صفحات اليوم: %d", "progress.streak": "أيام متتالية: %d",
+        "memorize": "وضع الحفظ", "memorize.hint": "انقر على آية مخفية لإظهارها",
+        "play.from.here": "تشغيل من هنا", "reciter": "القارئ", "repeat": "تكرار كل آية",
+        "repeat.once": "مرة واحدة", "downloading": "جارٍ تنزيل التلاوة · %d/%d",
+        "download.failed": "تعذّر تنزيل التلاوة. تحقّق من الاتصال وأعد المحاولة.",
+        "audio.hafs.only": "التلاوة متاحة لرواية حفص",
+        "audio.source": "صوت التلاوة من EveryAyah.com، ويُحفظ على هذا الجهاز بعد أول تشغيل",
+        "details": "الترجمة والتفاصيل", "play.pause": "تشغيل التلاوة أو إيقافها مؤقتًا",
+    ],
+    "zh": [
+        "bookmark.remove": "移除书签",
+        "nav.surahs": "章节", "nav.juz": "卷", "nav.bookmarks": "书签",
+        "juz.title": "第%@卷", "bookmarks.empty": "还没有书签", "page.short": "第%@页",
+        "progress.today": "今日页数：%d", "progress.streak": "连续天数：%d",
+        "memorize": "背诵模式", "memorize.hint": "点击隐藏的经文以显示",
+        "play.from.here": "从这里播放", "reciter": "诵读者", "repeat": "每节重复",
+        "repeat.once": "一次", "downloading": "正在下载音频 · %d/%d",
+        "download.failed": "无法下载诵读。请检查网络后重试。",
+        "audio.hafs.only": "诵读仅适用于哈夫斯版本",
+        "audio.source": "诵读音频来自 EveryAyah.com，首次播放后保存在此 Mac 上",
+        "details": "译文与注释", "play.pause": "播放或暂停诵读",
+    ],
+    "hi": [
+        "bookmark.remove": "बुकमार्क हटाएँ",
+        "nav.surahs": "सूरह", "nav.juz": "पारे", "nav.bookmarks": "बुकमार्क",
+        "juz.title": "पारा %@", "bookmarks.empty": "अभी कोई बुकमार्क नहीं", "page.short": "पृष्ठ %@",
+        "progress.today": "आज के पृष्ठ: %d", "progress.streak": "लगातार दिन: %d",
+        "memorize": "हिफ़्ज़ मोड", "memorize.hint": "छिपी आयत दिखाने के लिए उस पर क्लिक करें",
+        "play.from.here": "यहाँ से चलाएँ", "reciter": "क़ारी", "repeat": "हर आयत दोहराएँ",
+        "repeat.once": "एक बार", "downloading": "ऑडियो डाउनलोड हो रहा है · %d/%d",
+        "download.failed": "तिलावत डाउनलोड नहीं हो सकी। कनेक्शन जाँचें और फिर कोशिश करें।",
+        "audio.hafs.only": "तिलावत हफ़्स संस्करण के लिए उपलब्ध है",
+        "audio.source": "तिलावत ऑडियो EveryAyah.com से, पहली बार चलाने के बाद इस Mac पर सहेजा जाता है",
+        "details": "अनुवाद और टिप्पणियाँ", "play.pause": "तिलावत चलाएँ या रोकें",
+    ],
+    "bn": [
+        "bookmark.remove": "বুকমার্ক সরান",
+        "nav.surahs": "সূরা", "nav.juz": "পারা", "nav.bookmarks": "বুকমার্ক",
+        "juz.title": "পারা %@", "bookmarks.empty": "এখনও কোনো বুকমার্ক নেই", "page.short": "পৃষ্ঠা %@",
+        "progress.today": "আজকের পৃষ্ঠা: %d", "progress.streak": "টানা দিন: %d",
+        "memorize": "হিফজ মোড", "memorize.hint": "লুকানো আয়াত দেখতে ক্লিক করুন",
+        "play.from.here": "এখান থেকে চালান", "reciter": "ক্বারী", "repeat": "প্রতিটি আয়াত পুনরাবৃত্তি",
+        "repeat.once": "একবার", "downloading": "অডিও ডাউনলোড হচ্ছে · %d/%d",
+        "download.failed": "তিলাওয়াত ডাউনলোড করা যায়নি। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
+        "audio.hafs.only": "তিলাওয়াত হাফস সংস্করণের জন্য উপলব্ধ",
+        "audio.source": "তিলাওয়াতের অডিও EveryAyah.com থেকে, প্রথমবার চালানোর পর এই Mac-এ সংরক্ষিত",
+        "details": "অনুবাদ ও টীকা", "play.pause": "তিলাওয়াত চালান বা থামান",
+    ],
+    "ru": [
+        "bookmark.remove": "Удалить закладку",
+        "nav.surahs": "Суры", "nav.juz": "Джузы", "nav.bookmarks": "Закладки",
+        "juz.title": "Джуз %@", "bookmarks.empty": "Закладок пока нет", "page.short": "Стр. %@",
+        "progress.today": "Страниц сегодня: %d", "progress.streak": "Дней подряд: %d",
+        "memorize": "Режим заучивания", "memorize.hint": "Нажмите на скрытый аят, чтобы показать его",
+        "play.from.here": "Слушать отсюда", "reciter": "Чтец", "repeat": "Повторять каждый аят",
+        "repeat.once": "Один раз", "downloading": "Загрузка аудио · %d/%d",
+        "download.failed": "Не удалось загрузить чтение. Проверьте подключение и повторите попытку.",
+        "audio.hafs.only": "Чтение доступно для издания Хафс",
+        "audio.source": "Аудио с EveryAyah.com, сохраняется на этом Mac после первого воспроизведения",
+        "details": "Перевод и примечания", "play.pause": "Воспроизвести или приостановить чтение",
+    ],
+    "pt": [
+        "bookmark.remove": "Remover marcador",
+        "nav.surahs": "Suras", "nav.juz": "Juz", "nav.bookmarks": "Marcadores",
+        "juz.title": "Juz %@", "bookmarks.empty": "Ainda sem marcadores", "page.short": "Página %@",
+        "progress.today": "Páginas hoje: %d", "progress.streak": "Dias seguidos: %d",
+        "memorize": "Modo de memorização", "memorize.hint": "Clique num versículo oculto para o mostrar",
+        "play.from.here": "Reproduzir a partir daqui", "reciter": "Recitador", "repeat": "Repetir cada versículo",
+        "repeat.once": "Uma vez", "downloading": "A transferir áudio · %d/%d",
+        "download.failed": "Não foi possível transferir a recitação. Verifique a ligação e tente novamente.",
+        "audio.hafs.only": "A recitação está disponível para a edição Hafs",
+        "audio.source": "Áudio de EveryAyah.com, guardado neste Mac após a primeira reprodução",
+        "details": "Tradução e notas", "play.pause": "Reproduzir ou pausar a recitação",
+    ],
+    "ur": [
+        "bookmark.remove": "بک مارک ہٹائیں",
+        "nav.surahs": "سورتیں", "nav.juz": "پارے", "nav.bookmarks": "بک مارکس",
+        "juz.title": "پارہ %@", "bookmarks.empty": "ابھی کوئی بک مارک نہیں", "page.short": "صفحہ %@",
+        "progress.today": "آج کے صفحات: %d", "progress.streak": "مسلسل دن: %d",
+        "memorize": "حفظ موڈ", "memorize.hint": "چھپی آیت دیکھنے کے لیے اس پر کلک کریں",
+        "play.from.here": "یہاں سے چلائیں", "reciter": "قاری", "repeat": "ہر آیت دہرائیں",
+        "repeat.once": "ایک بار", "downloading": "آڈیو ڈاؤن لوڈ ہو رہی ہے · %d/%d",
+        "download.failed": "تلاوت ڈاؤن لوڈ نہیں ہو سکی۔ کنکشن چیک کر کے دوبارہ کوشش کریں۔",
+        "audio.hafs.only": "تلاوت حفص روایت کے لیے دستیاب ہے",
+        "audio.source": "تلاوت کی آڈیو EveryAyah.com سے، پہلی بار چلانے کے بعد اس Mac پر محفوظ",
+        "details": "ترجمہ اور حواشی", "play.pause": "تلاوت چلائیں یا روکیں",
+    ],
+]
+
+private func quranStudyText(_ key: String, _ args: CVarArg...) -> String {
+    let code = Localizer.shared.current.code
+    let format = quranStudyTranslations[code]?[key]
+        ?? quranStudyTranslations["en"]?[key] ?? key
+    return localizedInterfaceDigits(args.isEmpty ? format : String(format: format, arguments: args))
+}
+
+/// A verse-by-verse reciter on EveryAyah.com (Hafs verse numbering).
+struct QuranReciter {
+    let id: String
+    let arabic: String
+    let latin: String
+    var displayName: String {
+        ["ar", "ur"].contains(Localizer.shared.current.code) ? arabic : latin
+    }
+}
+
+let kQuranReciters: [QuranReciter] = [
+    QuranReciter(id: "Alafasy_128kbps", arabic: "مشاري راشد العفاسي", latin: "Mishary Rashid Alafasy"),
+    QuranReciter(id: "Abdul_Basit_Murattal_192kbps", arabic: "عبد الباسط عبد الصمد (مرتّل)", latin: "Abdul Basit (Murattal)"),
+    QuranReciter(id: "Husary_128kbps", arabic: "محمود خليل الحصري", latin: "Mahmoud Khalil Al-Husary"),
+    QuranReciter(id: "Minshawy_Murattal_128kbps", arabic: "محمد صديق المنشاوي (مرتّل)", latin: "Mohamed Siddiq Al-Minshawi (Murattal)"),
+    QuranReciter(id: "Abdurrahmaan_As-Sudais_192kbps", arabic: "عبد الرحمن السديس", latin: "Abdurrahman As-Sudais"),
+    QuranReciter(id: "Saood_ash-Shuraym_128kbps", arabic: "سعود الشريم", latin: "Saud Ash-Shuraim"),
+    QuranReciter(id: "MaherAlMuaiqly128kbps", arabic: "ماهر المعيقلي", latin: "Maher Al-Muaiqly"),
+    QuranReciter(id: "Yasser_Ad-Dussary_128kbps", arabic: "ياسر الدوسري", latin: "Yasser Al-Dosari"),
+    QuranReciter(id: "Ghamadi_40kbps", arabic: "سعد الغامدي", latin: "Saad Al-Ghamdi"),
+    QuranReciter(id: "Hudhaify_128kbps", arabic: "علي الحذيفي", latin: "Ali Al-Hudhaify"),
+    QuranReciter(id: "Muhammad_Ayyoub_128kbps", arabic: "محمد أيوب", latin: "Muhammad Ayyub"),
+    QuranReciter(id: "Nasser_Alqatami_128kbps", arabic: "ناصر القطامي", latin: "Nasser Al-Qatami"),
+]
+let kQuranReciterKey = "quranReciter"
+let kQuranAyahRepeatKey = "quranAyahRepeat"
+let kQuranMemorizeKey = "quranMemorizeMode"
+let kQuranReadingLogKey = "quranReadingLogJSON"
+let kQuranNavigatorModeKey = "quranNavigatorMode"
+let kQuranAyahRepeatOptions = [1, 2, 3, 5, 10]
+
+/// Verse-by-verse recitation. Audio is fetched only when the user presses
+/// play (the current ayah first, then a few ahead), saved under Application
+/// Support, and replayed offline afterwards. The Qur'an *text* never comes
+/// from the network: it stays the verified bundled corpus.
+final class QuranRecitationPlayer: NSObject, AVAudioPlayerDelegate {
+    enum State: Equatable {
+        case idle
+        case loading(done: Int, total: Int)
+        case playing
+        case paused
+        case failed
+    }
+
+    private(set) var state: State = .idle { didSet { onStateChange?() } }
+    private(set) var current: (sura: Int, ayah: Int)?
+    var onStateChange: (() -> Void)?
+    var onAyahChange: ((Int, Int) -> Void)?
+    /// Number of ayahs per surah (Hafs), from the loaded corpus.
+    var ayahCounts: [Int: Int] = [:]
+
+    private var player: AVAudioPlayer?
+    private var playingBasmala = false
+    private var repeatsLeft = 0
+    private var generation = UUID()
+    private var inFlight: Set<String> = []
+
+    var reciter: QuranReciter {
+        let id = UserDefaults.standard.string(forKey: kQuranReciterKey)
+        return kQuranReciters.first { $0.id == id } ?? kQuranReciters[0]
+    }
+
+    var repeatCount: Int {
+        let saved = UserDefaults.standard.integer(forKey: kQuranAyahRepeatKey)
+        return kQuranAyahRepeatOptions.contains(saved) ? saved : 1
+    }
+
+    var isActive: Bool {
+        switch state {
+        case .playing, .paused, .loading: return true
+        default: return false
+        }
+    }
+
+    static func storageDirectory(for reciter: QuranReciter) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory,
+                                            in: .userDomainMask)[0]
+        return base.appendingPathComponent("SalatTime/QuranAudio/\(reciter.id)",
+                                           isDirectory: true)
+    }
+
+    private func fileName(_ sura: Int, _ ayah: Int) -> String {
+        String(format: "%03d%03d.mp3", sura, ayah)
+    }
+
+    private func localURL(_ sura: Int, _ ayah: Int) -> URL {
+        Self.storageDirectory(for: reciter).appendingPathComponent(fileName(sura, ayah))
+    }
+
+    private func isAvailable(_ sura: Int, _ ayah: Int) -> Bool {
+        FileManager.default.fileExists(atPath: localURL(sura, ayah).path)
+    }
+
+    /// Surahs other than Al-Fātiḥah (whose first ayah is the basmala) and
+    /// At-Tawbah open with the basmala recitation (EveryAyah 001001).
+    private func needsBasmala(_ sura: Int, _ ayah: Int) -> Bool {
+        ayah == 1 && sura != 1 && sura != 9
+    }
+
+    /// Download the given ayahs that aren't saved yet (three at a time).
+    private func fetch(_ items: [(Int, Int)], reportProgress: Bool,
+                       completion: @escaping (Bool) -> Void) {
+        let reciter = self.reciter
+        let missing = items.filter { !isAvailable($0.0, $0.1) }
+        guard !missing.isEmpty else { completion(true); return }
+        try? FileManager.default.createDirectory(at: Self.storageDirectory(for: reciter),
+                                                 withIntermediateDirectories: true)
+        let total = missing.count
+        var done = 0
+        var failed = false
+        if reportProgress { state = .loading(done: 0, total: total) }
+        let semaphore = DispatchSemaphore(value: 3)
+        let group = DispatchGroup()
+        for (sura, ayah) in missing {
+            let key = "\(reciter.id)/\(fileName(sura, ayah))"
+            guard !inFlight.contains(key) || reportProgress else { continue }
+            inFlight.insert(key)
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                semaphore.wait()
+                guard let self,
+                      let remote = URL(string: "https://everyayah.com/data/\(reciter.id)/\(self.fileName(sura, ayah))")
+                else { semaphore.signal(); group.leave(); return }
+                let destination = Self.storageDirectory(for: reciter)
+                    .appendingPathComponent(self.fileName(sura, ayah))
+                URLSession.shared.downloadTask(with: remote) { location, response, error in
+                    defer { semaphore.signal() }
+                    let ok = error == nil
+                        && (response as? HTTPURLResponse)?.statusCode == 200
+                        && location != nil
+                    if ok, let location {
+                        try? FileManager.default.removeItem(at: destination)
+                        try? FileManager.default.moveItem(at: location, to: destination)
+                    }
+                    DispatchQueue.main.async {
+                        self.inFlight.remove(key)
+                        if ok && FileManager.default.fileExists(atPath: destination.path) {
+                            done += 1
+                            if reportProgress, case .loading = self.state {
+                                self.state = .loading(done: done, total: total)
+                            }
+                        } else {
+                            failed = true
+                        }
+                        group.leave()
+                    }
+                }.resume()
+            }
+        }
+        group.notify(queue: .main) { completion(!failed) }
+    }
+
+    /// Start (or restart) recitation at the given ayah.
+    func play(sura: Int, ayah: Int) {
+        stopPlayer()
+        let token = UUID()
+        generation = token
+        let basmala = needsBasmala(sura, ayah)
+        var first: [(Int, Int)] = [(sura, ayah)]
+        if basmala { first.append((1, 1)) }
+        current = (sura, ayah)
+        onAyahChange?(sura, ayah)
+        fetch(first, reportProgress: true) { [weak self] ok in
+            guard let self, self.generation == token else { return }
+            guard ok else { self.state = .failed; return }
+            self.startAudio(sura: sura, ayah: ayah, basmala: basmala)
+        }
+    }
+
+    private func startAudio(sura: Int, ayah: Int, basmala: Bool) {
+        let url = basmala ? localURL(1, 1) : localURL(sura, ayah)
+        guard let player = try? AVAudioPlayer(contentsOf: url) else {
+            try? FileManager.default.removeItem(at: url)   // corrupt download
+            state = .failed
+            return
+        }
+        player.delegate = self
+        player.prepareToPlay()
+        player.play()
+        self.player = player
+        playingBasmala = basmala
+        current = (sura, ayah)
+        if !basmala { repeatsLeft = repeatCount - 1 }
+        state = .playing
+        prefetch(after: sura, ayah: ayah)
+    }
+
+    /// Keep a few ayahs ahead on disk so playback flows without waiting.
+    private func prefetch(after sura: Int, ayah: Int) {
+        var items: [(Int, Int)] = []
+        var s = sura, a = ayah
+        for _ in 0..<4 {
+            if let count = ayahCounts[s], a < count { a += 1 }
+            else if s < 114 { s += 1; a = 1 }
+            else { break }
+            items.append((s, a))
+        }
+        fetch(items, reportProgress: false) { _ in }
+    }
+
+    private func nextLocator(after sura: Int, _ ayah: Int) -> (Int, Int)? {
+        if let count = ayahCounts[sura], ayah < count { return (sura, ayah + 1) }
+        return sura < 114 ? (sura + 1, 1) : nil
+    }
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        guard player === self.player, let current else { return }
+        if playingBasmala {
+            startAudio(sura: current.sura, ayah: current.ayah, basmala: false)
+            return
+        }
+        if repeatsLeft > 0 {
+            repeatsLeft -= 1
+            player.currentTime = 0
+            player.play()
+            return
+        }
+        guard let next = nextLocator(after: current.sura, current.ayah) else {
+            stop()
+            return
+        }
+        play(sura: next.0, ayah: next.1)
+    }
+
+    func togglePause() {
+        switch state {
+        case .playing:
+            player?.pause()
+            state = .paused
+        case .paused:
+            player?.play()
+            state = .playing
+        default:
+            break
+        }
+    }
+
+    func skip(by delta: Int) {
+        guard let current else { return }
+        if delta > 0, let next = nextLocator(after: current.sura, current.ayah) {
+            play(sura: next.0, ayah: next.1)
+        } else if delta < 0 {
+            if current.ayah > 1 {
+                play(sura: current.sura, ayah: current.ayah - 1)
+            } else if current.sura > 1 {
+                play(sura: current.sura - 1, ayah: ayahCounts[current.sura - 1] ?? 1)
+            }
+        }
+    }
+
+    private func stopPlayer() {
+        player?.stop()
+        player = nil
+        playingBasmala = false
+    }
+
+    func stop() {
+        generation = UUID()
+        stopPlayer()
+        current = nil
+        state = .idle
+    }
+}
+
+/// Mini player under the Qur'an page: transport, what is playing (or the
+/// download progress), per-ayah repeat, and the reciter.
+private final class QuranPlayerBar: NSView {
+    let previousButton: HoverIconButton
+    let playButton: HoverIconButton
+    let nextButton: HoverIconButton
+    let stopButton: HoverIconButton
+    let statusLabel = NSTextField(labelWithString: "")
+    let repeatPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    let reciterPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    var palette: QuranReaderPalette = .ivory { didSet { applyPalette(); needsDisplay = true } }
+    override var isFlipped: Bool { true }
+
+    init(target: AnyObject, previous: Selector, play: Selector, next: Selector,
+         stop: Selector) {
+        let size = NSSize(width: 34, height: 30)
+        previousButton = HoverIconButton(symbol: "backward.fill",
+                                         toolTip: quranReaderText("previous"),
+                                         target: target, action: previous, pointSize: 12, size: size)
+        playButton = HoverIconButton(symbol: "play.fill",
+                                     toolTip: quranStudyText("play.pause"),
+                                     target: target, action: play, pointSize: 15,
+                                     size: NSSize(width: 40, height: 34))
+        nextButton = HoverIconButton(symbol: "forward.fill", toolTip: quranReaderText("next"),
+                                     target: target, action: next, pointSize: 12, size: size)
+        stopButton = HoverIconButton(symbol: "stop.fill", toolTip: t("adhkar.stop"),
+                                     target: target, action: stop, pointSize: 11, size: size)
+        super.init(frame: .zero)
+        for button in [previousButton, playButton, nextButton, stopButton] {
+            button.setAccessibilityLabel(button.toolTip ?? "")
+        }
+
+        statusLabel.font = Localizer.shared.font(size: 12, weight: .medium)
+        statusLabel.lineBreakMode = .byTruncatingTail
+        statusLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        statusLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        statusLabel.alignment = Localizer.shared.isRTL ? .right : .left
+        statusLabel.baseWritingDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+
+        repeatPopup.controlSize = .small
+        repeatPopup.font = Localizer.shared.font(size: 11.5)
+        for count in kQuranAyahRepeatOptions {
+            repeatPopup.addItem(withTitle: count == 1 ? quranStudyText("repeat.once")
+                                                      : localizedInterfaceDigits("× \(count)"))
+        }
+        repeatPopup.toolTip = quranStudyText("repeat")
+        repeatPopup.setAccessibilityLabel(quranStudyText("repeat"))
+        reciterPopup.controlSize = .small
+        reciterPopup.font = Localizer.shared.font(size: 11.5)
+        kQuranReciters.forEach { reciterPopup.addItem(withTitle: $0.displayName) }
+        reciterPopup.toolTip = quranStudyText("audio.source")
+        reciterPopup.setAccessibilityLabel(quranStudyText("reciter"))
+
+        // Transport controls keep their standard left-to-right order.
+        let transport = NSStackView(views: [previousButton, playButton, nextButton, stopButton])
+        transport.orientation = .horizontal
+        transport.spacing = 2
+        transport.userInterfaceLayoutDirection = .leftToRight
+        let row = NSStackView(views: [transport, statusLabel, repeatPopup, reciterPopup])
+        row.orientation = .horizontal
+        row.alignment = .centerY
+        row.spacing = 10
+        row.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            reciterPopup.widthAnchor.constraint(lessThanOrEqualToConstant: 220),
+        ])
+        applyPalette()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func applyPalette() {
+        // Controls follow the page palette (ivory/sage are light surfaces
+        // even when the app runs in dark mode), so menus stay legible.
+        appearance = NSAppearance(named: palette == .night ? .darkAqua : .aqua)
+        statusLabel.textColor = palette.secondary
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        palette.surface.withAlphaComponent(palette == .night ? 0.6 : 0.8).setFill()
+        bounds.fill()
+        palette.divider.setStroke()
+        let line = NSBezierPath()
+        line.move(to: NSPoint(x: 0, y: 0.5))
+        line.line(to: NSPoint(x: bounds.width, y: 0.5))
+        line.lineWidth = 1
+        line.stroke()
+    }
+}
+
+/// Pages the reader has opened, per day, for the "pages today" and day
+/// streak shown in the Qur'an header. Only page numbers are stored.
+enum QuranReadingLog {
+    private static func dayKey(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private static func load() -> [String: [Int]] {
+        guard let data = UserDefaults.standard.data(forKey: kQuranReadingLogKey),
+              let log = try? JSONDecoder().decode([String: [Int]].self, from: data)
+        else { return [:] }
+        return log
+    }
+
+    static func record(page: Int) {
+        var log = load()
+        let today = dayKey(Date())
+        var pages = Set(log[today] ?? [])
+        guard pages.insert(page).inserted else { return }
+        log[today] = pages.sorted()
+        // Keep roughly the last three months.
+        if log.count > 100 {
+            for key in log.keys.sorted().prefix(log.count - 100) { log[key] = nil }
+        }
+        if let data = try? JSONEncoder().encode(log) {
+            UserDefaults.standard.set(data, forKey: kQuranReadingLogKey)
+        }
+    }
+
+    static func pagesToday() -> Int { load()[dayKey(Date())]?.count ?? 0 }
+
+    /// Consecutive days with reading, counting today if read, else from
+    /// yesterday (so the streak doesn't look broken first thing in the day).
+    static func streak() -> Int {
+        let log = load()
+        let calendar = Calendar.current
+        var day = Date()
+        if (log[dayKey(day)] ?? []).isEmpty {
+            day = calendar.date(byAdding: .day, value: -1, to: day) ?? day
+        }
+        var count = 0
+        while !(log[dayKey(day)] ?? []).isEmpty {
+            count += 1
+            day = calendar.date(byAdding: .day, value: -1, to: day) ?? day
+        }
+        return count
+    }
+}
+
 final class QuranViewController: NSViewController, MainTabContent,
                                  NSTableViewDataSource, NSTableViewDelegate,
                                  NSSearchFieldDelegate {
@@ -13735,6 +14351,19 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var currentPage = 1
     private var totalPages = 604
     private var mushafRanges: [(range: NSRange, verse: OfflineQuranVerse)] = []
+
+    // Recitation, memorization, navigator, and reading progress.
+    private let recitation = QuranRecitationPlayer()
+    private var playerBar: QuranPlayerBar!
+    private var playerBarHeight: NSLayoutConstraint!
+    private var memorizeButton: HoverIconButton!
+    private var navigatorSegment: NSSegmentedControl!
+    private var navigatorMode = max(0, min(2,
+        UserDefaults.standard.integer(forKey: kQuranNavigatorModeKey)))
+    private var juzStarts: [OfflineQuranVerse] = []
+    private var revealedAyahs: Set<String> = []
+    private var ayahActionsPopover: NSPopover?
+    private var memorizeMode: Bool { UserDefaults.standard.bool(forKey: kQuranMemorizeKey) }
 
     fileprivate var isMushaf: Bool { readerModeValue == "mushaf" }
 
@@ -13827,9 +14456,15 @@ final class QuranViewController: NSViewController, MainTabContent,
                                                action: #selector(showReaderSettings(_:)),
                                                pointSize: 14, size: NSSize(width: 36, height: 32))
 
+        memorizeButton = HoverIconButton(symbol: "eye.slash",
+                                         toolTip: quranStudyText("memorize"),
+                                         target: self, action: #selector(toggleMemorize(_:)),
+                                         pointSize: 14, size: NSSize(width: 36, height: 32))
+        memorizeButton.setAccessibilityLabel(quranStudyText("memorize"))
+
         let controls = NSStackView(views: [sidebarButton, previousButton, nextButton,
                                            crumbLabel, searchField, bookmarkButton, bookmarksButton,
-                                           meaningsButton, readerSettingsButton])
+                                           meaningsButton, memorizeButton, readerSettingsButton])
         controls.orientation = .horizontal
         controls.alignment = .centerY
         controls.spacing = 6
@@ -13837,7 +14472,8 @@ final class QuranViewController: NSViewController, MainTabContent,
         controls.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(controls)
         for button in [sidebarButton!, previousButton!, nextButton!, bookmarkButton!,
-                       bookmarksButton!, meaningsButton!, readerSettingsButton!] {
+                       bookmarksButton!, meaningsButton!, memorizeButton!,
+                       readerSettingsButton!] {
             button.widthAnchor.constraint(equalToConstant: 36).isActive = true
             button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         }
@@ -13850,6 +14486,19 @@ final class QuranViewController: NSViewController, MainTabContent,
         surahFilterField.translatesAutoresizingMaskIntoConstraints = false
         surahFilterField.setAccessibilityLabel(quranReaderText("surah.filter"))
         sidebar.addSubview(surahFilterField)
+
+        navigatorSegment = NSSegmentedControl(
+            labels: [quranStudyText("nav.surahs"), quranStudyText("nav.juz"),
+                     quranStudyText("nav.bookmarks")],
+            trackingMode: .selectOne, target: self,
+            action: #selector(navigatorChanged(_:)))
+        navigatorSegment.segmentDistribution = .fillEqually
+        navigatorSegment.controlSize = .small
+        navigatorSegment.font = Localizer.shared.font(size: 11.5, weight: .medium)
+        navigatorSegment.selectedSegment = navigatorMode
+        navigatorSegment.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
+        navigatorSegment.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(navigatorSegment)
 
         surahTable = NSTableView()
         let surahColumn = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("surah"))
@@ -13896,7 +14545,27 @@ final class QuranViewController: NSViewController, MainTabContent,
 
         footer = QuranReaderFooterView()
         footer.translatesAutoresizingMaskIntoConstraints = false
+        footer.isHidden = true
         backdrop.addSubview(footer)
+
+        playerBar = QuranPlayerBar(target: self,
+                                   previous: #selector(playerPrevious(_:)),
+                                   play: #selector(playerPlayPause(_:)),
+                                   next: #selector(playerNext(_:)),
+                                   stop: #selector(playerStop(_:)))
+        playerBar.translatesAutoresizingMaskIntoConstraints = false
+        playerBar.repeatPopup.target = self
+        playerBar.repeatPopup.action = #selector(repeatChanged(_:))
+        playerBar.reciterPopup.target = self
+        playerBar.reciterPopup.action = #selector(reciterChanged(_:))
+        backdrop.addSubview(playerBar)
+        playerBarHeight = playerBar.heightAnchor.constraint(equalToConstant: 46)
+        NSLayoutConstraint.activate([
+            playerBar.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
+            playerBar.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
+            playerBar.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            playerBarHeight,
+        ])
 
         // --- Mushaf page surface (hidden in verse mode) ---
         // The Mushaf page lives inside its own scroll surface so zooming
@@ -13905,7 +14574,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         mushafPageScroll = NSScrollView()
         mushafPageScroll.drawsBackground = false
         mushafPageScroll.hasVerticalScroller = true
-        mushafPageScroll.hasHorizontalScroller = true
+        mushafPageScroll.hasHorizontalScroller = false
         mushafPageScroll.autohidesScrollers = true
         mushafPageScroll.translatesAutoresizingMaskIntoConstraints = false
         backdrop.addSubview(mushafPageScroll)
@@ -13941,7 +14610,7 @@ final class QuranViewController: NSViewController, MainTabContent,
             mushafPageScroll.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
             mushafPageScroll.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
             mushafPageScroll.topAnchor.constraint(equalTo: backdrop.topAnchor),
-            mushafPageScroll.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            mushafPageScroll.bottomAnchor.constraint(equalTo: playerBar.topAnchor),
         ])
 
         unavailableOverlay = NSVisualEffectView()
@@ -13985,7 +14654,10 @@ final class QuranViewController: NSViewController, MainTabContent,
             sidebar.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             sidebar.topAnchor.constraint(equalTo: header.bottomAnchor),
             sidebar.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            surahFilterField.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 10),
+            navigatorSegment.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 10),
+            navigatorSegment.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
+            navigatorSegment.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -12),
+            surahFilterField.topAnchor.constraint(equalTo: navigatorSegment.bottomAnchor, constant: 8),
             surahFilterField.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 12),
             surahFilterField.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -12),
             surahScroll.topAnchor.constraint(equalTo: surahFilterField.bottomAnchor, constant: 8),
@@ -13998,13 +14670,16 @@ final class QuranViewController: NSViewController, MainTabContent,
             backdrop.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             scrollView.centerXAnchor.constraint(equalTo: backdrop.centerXAnchor),
             scrollView.topAnchor.constraint(equalTo: backdrop.topAnchor, constant: 6),
-            scrollView.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: playerBar.topAnchor),
             readingWidth,
             scrollView.widthAnchor.constraint(lessThanOrEqualToConstant: 940),
             footer.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
             footer.trailingAnchor.constraint(equalTo: backdrop.trailingAnchor),
             footer.bottomAnchor.constraint(equalTo: backdrop.bottomAnchor),
-            footer.heightAnchor.constraint(equalToConstant: 30),
+            // Position now lives in the window header; the footer bar is
+            // retired so the page gets the height (provenance stays in the
+            // reader settings).
+            footer.heightAnchor.constraint(equalToConstant: 0),
             unavailableOverlay.centerXAnchor.constraint(equalTo: root.centerXAnchor),
             unavailableOverlay.centerYAnchor.constraint(equalTo: root.centerYAnchor),
             unavailableOverlay.widthAnchor.constraint(equalToConstant: 440),
@@ -14023,8 +14698,15 @@ final class QuranViewController: NSViewController, MainTabContent,
                                                object: scrollView.contentView)
         scrollView.isHidden = isMushaf
         mushafPageScroll.isHidden = !isMushaf
+        recitation.onStateChange = { [weak self] in self?.updatePlayerBar() }
+        recitation.onAyahChange = { [weak self] sura, ayah in
+            self?.followRecitation(sura: sura, ayah: ayah)
+        }
+        surahFilterField.isHidden = navigatorMode != 0
         applyPalette()
         updateTranslationAvailability()
+        updatePlayerBar()
+        updateMemorizeButton()
         loadEdition(restorePosition: true)
     }
 
@@ -14118,6 +14800,12 @@ final class QuranViewController: NSViewController, MainTabContent,
                                                      edition: selectedEdition)
                     self.totalPages = decoded.map(\.pageStart).max() ?? 604
                     self.rebuildSurahIndex()
+                    self.recitation.ayahCounts = grouped.mapValues(\.count)
+                    self.juzStarts = Dictionary(grouping: decoded, by: \.jozz)
+                        .compactMap { $0.value.min(by: { $0.id < $1.id }) }
+                        .sorted { $0.jozz < $1.jozz }
+                    if selectedEdition != "hafs" { self.recitation.stop() }
+                    self.updatePlayerBar()
                     self.loadWordMeaningsIfNeeded()
                     if !restorePosition { self.selectedAyah = 1 }
                     self.applyReaderMode()
@@ -14279,10 +14967,13 @@ final class QuranViewController: NSViewController, MainTabContent,
     private func updateChrome() {
         guard crumbLabel != nil, let first = surahVerses[selectedSurah]?.first else { return }
         let number = localizedInterfaceDigits(String(selectedSurah))
-        crumbLabel.stringValue = Localizer.shared.isRTL
-            ? "\(number) · \(first.suraNameArabic)"
-            : "\(number) · \(first.suraNameArabic) · \(first.suraNameEnglish)"
+        // The window header shows surah · juz · page and today's progress;
+        // the toolbar crumb stays as an empty flexible spacer.
+        _ = number
+        _ = first
+        crumbLabel.stringValue = ""
         updateFooterPosition()
+        (view.window as? MainWindow)?.refreshPageSubtitle()
     }
 
     private func updateFooterPosition() {
@@ -14428,6 +15119,22 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     @objc private func surahRowClicked(_ sender: Any?) {
         let row = surahTable.clickedRow >= 0 ? surahTable.clickedRow : surahTable.selectedRow
+        if navigatorMode == 1 {
+            guard juzStarts.indices.contains(row) else { return }
+            let start = juzStarts[row]
+            selectedSurah = start.suraNumber
+            selectedAyah = start.ayahNumber
+            persistLocator()
+            if isMushaf { goToPage(start.pageStart, keepSelection: true) }
+            else { rebuildVisibleVerses(scrollToSelection: true) }
+            return
+        }
+        if navigatorMode == 2 {
+            let values = sortedBookmarks()
+            guard values.indices.contains(row) else { return }
+            open(bookmark: values[row])
+            return
+        }
         guard filteredSurahs.indices.contains(row) else { return }
         let sura = filteredSurahs[row]
         selectedSurah = sura
@@ -14445,6 +15152,20 @@ final class QuranViewController: NSViewController, MainTabContent,
     // MARK: - Mushaf page mode
 
     var pageTitle: String { featureText("quran.tab") }
+
+    var pageSubtitle: String {
+        guard let verse = currentVerse() else { return "" }
+        let page = isMushaf ? currentPage : verse.pageStart
+        let name = ["ar", "ur"].contains(Localizer.shared.current.code)
+            ? verse.suraNameArabic : verse.suraNameEnglish
+        var parts = [name,
+                     quranStudyText("juz.title", String(verse.jozz)),
+                     quranStudyText("page.short", String(page)),
+                     quranStudyText("progress.today", QuranReadingLog.pagesToday())]
+        let streak = QuranReadingLog.streak()
+        if streak > 1 { parts.append(quranStudyText("progress.streak", streak)) }
+        return parts.joined(separator: " · ")
+    }
 
     // Header view modes (Verses · Mushaf).
     var railModeItems: [(symbol: String, label: String)] {
@@ -14471,8 +15192,10 @@ final class QuranViewController: NSViewController, MainTabContent,
         nextButton.toolTip = mushaf ? offlineQuranText("next") : quranReaderText("next")
         previousButton.setAccessibilityLabel(previousButton.toolTip ?? "")
         nextButton.setAccessibilityLabel(nextButton.toolTip ?? "")
+        updateMemorizeButton()
         if mushaf {
             currentPage = pageOfSelectedVerse()
+            QuranReadingLog.record(page: currentPage)
             renderMushafPage()
             view.window?.makeFirstResponder(mushafText)
         } else {
@@ -14494,7 +15217,9 @@ final class QuranViewController: NSViewController, MainTabContent,
     private func goToPage(_ page: Int, keepSelection: Bool = false) {
         guard !verses.isEmpty else { return }
         let target = max(1, min(totalPages, page))
+        if target != currentPage { revealedAyahs.removeAll() }
         currentPage = target
+        QuranReadingLog.record(page: target)
         if !keepSelection,
            let first = verses.filter({ $0.pageStart == target }).min(by: { $0.id < $1.id }) {
             selectedSurah = first.suraNumber
@@ -14904,14 +15629,37 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     private func applyMushafSelectionHighlight() {
         guard let storage = mushafText?.textStorage else { return }
-        storage.removeAttribute(.backgroundColor,
-                                range: NSRange(location: 0, length: storage.length))
+        let whole = NSRange(location: 0, length: storage.length)
+        storage.removeAttribute(.backgroundColor, range: whole)
+        storage.removeAttribute(.underlineStyle, range: whole)
+        storage.removeAttribute(.underlineColor, range: whole)
+        let hide = memorizeMode
         // A verse can occupy several printed lines, i.e. several ranges.
-        for hit in mushafRanges where hit.verse.suraNumber == selectedSurah
-            && hit.verse.ayahNumber == selectedAyah {
-            storage.addAttribute(.backgroundColor,
-                                 value: NSColor.appGreenAccent.withAlphaComponent(0.16),
-                                 range: hit.range)
+        for hit in mushafRanges {
+            let isSelected = hit.verse.suraNumber == selectedSurah
+                && hit.verse.ayahNumber == selectedAyah
+            let hidden = hide && !revealedAyahs.contains(
+                "\(hit.verse.suraNumber):\(hit.verse.ayahNumber)")
+            if hidden {
+                // Memorization: each word becomes a blank (a rule under the
+                // word only), keeping the page's shape while the reader
+                // recites; clicking the ayah reveals it.
+                storage.addAttribute(.foregroundColor, value: NSColor.clear, range: hit.range)
+                storage.addAttribute(.underlineStyle,
+                                     value: NSUnderlineStyle([.thick, .byWord]).rawValue,
+                                     range: hit.range)
+                storage.addAttribute(.underlineColor,
+                                     value: isSelected ? NSColor.appGreenAccent
+                                                       : palette.gold.withAlphaComponent(0.55),
+                                     range: hit.range)
+            } else {
+                storage.addAttribute(.foregroundColor, value: palette.primary, range: hit.range)
+                if isSelected {
+                    storage.addAttribute(.backgroundColor,
+                                         value: NSColor.appGreenAccent.withAlphaComponent(0.16),
+                                         range: hit.range)
+                }
+            }
         }
     }
 
@@ -14940,6 +15688,12 @@ final class QuranViewController: NSViewController, MainTabContent,
     fileprivate func handleMushafClick(at index: Int, clickCount: Int) {
         guard let hit = mushafRanges.first(where: { NSLocationInRange(index, $0.range) })
         else { return }
+        let key = "\(hit.verse.suraNumber):\(hit.verse.ayahNumber)"
+        if memorizeMode && !revealedAyahs.contains(key) {
+            revealedAyahs.insert(key)
+            applyMushafSelectionHighlight()
+            return
+        }
         selectedSurah = hit.verse.suraNumber
         selectedAyah = hit.verse.ayahNumber
         persistLocator()
@@ -14947,7 +15701,191 @@ final class QuranViewController: NSViewController, MainTabContent,
         updateBookmarkButton()
         updateChrome()
         syncSidebarSelection()
-        if clickCount >= 2 { showMushafVerseDetails(hit.verse, range: hit.range) }
+        if clickCount == 1 { showAyahActions(hit.verse, range: hit.range) }
+    }
+
+    /// Bounding rect of a character range of the Mushaf text, in its view.
+    private func mushafRect(for range: NSRange) -> NSRect? {
+        guard let layoutManager = mushafText.layoutManager,
+              let container = mushafText.textContainer else { return nil }
+        let glyphRange = layoutManager.glyphRange(forCharacterRange: range,
+                                                  actualCharacterRange: nil)
+        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: container)
+        rect.origin.x += mushafText.textContainerOrigin.x
+        rect.origin.y += mushafText.textContainerOrigin.y
+        return rect
+    }
+
+    /// Tarteel-style action card for the clicked ayah.
+    private func showAyahActions(_ verse: OfflineQuranVerse, range: NSRange) {
+        guard let rect = mushafRect(for: range) else { return }
+        ayahActionsPopover?.close()
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+
+        var rows: [(String, String, () -> Void)] = []
+        if edition == "hafs" {
+            rows.append(("play.fill", quranStudyText("play.from.here"), { [weak self] in
+                self?.recitation.play(sura: verse.suraNumber, ayah: verse.ayahNumber)
+            }))
+        }
+        let marked = isBookmarked(verse)
+        rows.append((marked ? "bookmark.fill" : "bookmark",
+                     marked ? quranStudyText("bookmark.remove") : quranReaderText("bookmark.add"),
+                     { [weak self] in self?.toggleBookmark(nil) }))
+        rows.append(("doc.on.doc", quranReaderText("copy"),
+                     { [weak self] in self?.copyVerse(verse) }))
+        rows.append(("text.book.closed", quranStudyText("details"), { [weak self] in
+            self?.showMushafVerseDetails(verse, range: range)
+        }))
+        if edition == "hafs" {
+            rows.append(("character.book.closed", quranReaderText("word.meanings"),
+                         { [weak self] in
+                guard let self else { return }
+                self.showWordMeanings(self.meaningsButton)
+            }))
+        }
+
+        let title = NSTextField(labelWithString:
+            "\(verse.suraNameArabic) · \(localizedInterfaceDigits("\(verse.suraNumber):\(verse.ayahNumber)"))")
+        title.font = Localizer.shared.font(size: 12, weight: .semibold)
+        title.textColor = .secondaryLabelColor
+        title.alignment = Localizer.shared.isRTL ? .right : .left
+        var views: [NSView] = [title]
+        for row in rows {
+            let button = QuranAyahActionButton(symbol: row.0, title: row.1) { [weak popover] in
+                popover?.close()
+                row.2()
+            }
+            views.append(button)
+        }
+        let stack = NSStackView(views: views)
+        stack.orientation = .vertical
+        stack.alignment = .width
+        stack.spacing = 2
+        stack.edgeInsets = NSEdgeInsets(top: 10, left: 8, bottom: 8, right: 8)
+        stack.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        let controller = NSViewController()
+        controller.view = stack
+        stack.frame = NSRect(x: 0, y: 0, width: 240, height: stack.fittingSize.height)
+        controller.preferredContentSize = NSSize(width: 240, height: stack.fittingSize.height)
+        popover.contentViewController = controller
+        popover.show(relativeTo: rect, of: mushafText, preferredEdge: .maxY)
+        ayahActionsPopover = popover
+    }
+
+    // MARK: - recitation
+
+    private func updatePlayerBar() {
+        guard playerBar != nil else { return }
+        let available = edition == "hafs"
+        playerBar.isHidden = !available
+        playerBarHeight.constant = available ? 46 : 0
+        playerBar.palette = palette
+        let reciter = recitation.reciter
+        playerBar.reciterPopup.selectItem(at: kQuranReciters.firstIndex { $0.id == reciter.id } ?? 0)
+        playerBar.repeatPopup.selectItem(at:
+            kQuranAyahRepeatOptions.firstIndex(of: recitation.repeatCount) ?? 0)
+        let playing = recitation.state == .playing
+        playerBar.playButton.image = templateSymbol(playing ? "pause.fill" : "play.fill",
+                                                    pointSize: 15, weight: .semibold)
+        playerBar.playButton.contentTintColor = recitation.isActive ? .appGreenAccent
+                                                                    : playerBar.playButton.idleTint
+        for button in [playerBar.previousButton, playerBar.nextButton, playerBar.stopButton] {
+            button.isEnabled = recitation.isActive
+            button.alphaValue = recitation.isActive ? 1 : 0.45
+        }
+        switch recitation.state {
+        case let .loading(done, total):
+            playerBar.statusLabel.stringValue = quranStudyText("downloading", done, total)
+        case .failed:
+            playerBar.statusLabel.stringValue = quranStudyText("download.failed")
+        case .playing, .paused:
+            if let current = recitation.current,
+               let name = surahVerses[current.sura]?.first?.suraNameArabic {
+                playerBar.statusLabel.stringValue = "\(reciter.displayName) · \(name) "
+                    + localizedInterfaceDigits(String(current.ayah))
+            } else {
+                playerBar.statusLabel.stringValue = reciter.displayName
+            }
+        case .idle:
+            playerBar.statusLabel.stringValue = reciter.displayName
+        }
+        playerBar.toolTip = available ? quranStudyText("audio.source")
+                                      : quranStudyText("audio.hafs.only")
+    }
+
+    /// Keep the page and highlight on the ayah being recited.
+    private func followRecitation(sura: Int, ayah: Int) {
+        guard !verses.isEmpty else { return }
+        selectedSurah = sura
+        selectedAyah = ayah
+        persistLocator()
+        if isMushaf {
+            let page = pageOfSelectedVerse()
+            if page != currentPage {
+                goToPage(page, keepSelection: true)
+            } else {
+                applyMushafSelectionHighlight()
+                updateChrome()
+            }
+        } else if let row = visibleVerses.firstIndex(where: {
+            $0.suraNumber == sura && $0.ayahNumber == ayah
+        }) {
+            tableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+            tableView.scrollRowToVisible(row)
+        } else {
+            rebuildVisibleVerses(scrollToSelection: true)
+        }
+        updateBookmarkButton()
+        updatePlayerBar()
+    }
+
+    @objc private func playerPlayPause(_ sender: Any?) {
+        switch recitation.state {
+        case .playing, .paused: recitation.togglePause()
+        case .loading: break
+        case .idle, .failed: recitation.play(sura: selectedSurah, ayah: selectedAyah)
+        }
+    }
+    @objc private func playerPrevious(_ sender: Any?) { recitation.skip(by: -1) }
+    @objc private func playerNext(_ sender: Any?) { recitation.skip(by: 1) }
+    @objc private func playerStop(_ sender: Any?) { recitation.stop() }
+    @objc private func repeatChanged(_ sender: NSPopUpButton) {
+        guard kQuranAyahRepeatOptions.indices.contains(sender.indexOfSelectedItem) else { return }
+        UserDefaults.standard.set(kQuranAyahRepeatOptions[sender.indexOfSelectedItem],
+                                  forKey: kQuranAyahRepeatKey)
+    }
+    @objc private func reciterChanged(_ sender: NSPopUpButton) {
+        guard kQuranReciters.indices.contains(sender.indexOfSelectedItem) else { return }
+        UserDefaults.standard.set(kQuranReciters[sender.indexOfSelectedItem].id,
+                                  forKey: kQuranReciterKey)
+        if let current = recitation.current, recitation.isActive {
+            recitation.play(sura: current.sura, ayah: current.ayah)
+        }
+        updatePlayerBar()
+    }
+
+    // MARK: - memorization
+
+    @objc private func toggleMemorize(_ sender: Any?) {
+        UserDefaults.standard.set(!memorizeMode, forKey: kQuranMemorizeKey)
+        revealedAyahs.removeAll()
+        updateMemorizeButton()
+        if isMushaf { applyMushafSelectionHighlight() }
+    }
+
+    private func updateMemorizeButton() {
+        guard memorizeButton != nil else { return }
+        let on = memorizeMode
+        memorizeButton.isHidden = !isMushaf
+        memorizeButton.image = templateSymbol(on ? "eye.slash.fill" : "eye.slash",
+                                              pointSize: 14, weight: .semibold)
+        memorizeButton.contentTintColor = on ? .appGreenAccent : memorizeButton.idleTint
+        memorizeButton.toolTip = on
+            ? "\(quranStudyText("memorize")) — \(quranStudyText("memorize.hint"))"
+            : quranStudyText("memorize")
     }
 
     /// Double-click detail popover: reference, translation of meanings (when
@@ -15171,6 +16109,7 @@ final class QuranViewController: NSViewController, MainTabContent,
     }
 
     @objc private func paletteChanged(_ sender: NSButton) {
+        defer { updatePlayerBar() }
         guard let swatch = sender as? QuranPaletteSwatchButton else { return }
         UserDefaults.standard.set(swatch.paletteValue.rawValue, forKey: kQuranReaderPalette)
         paletteSwatches.forEach { $0.isSelectedSwatch = $0.paletteValue == swatch.paletteValue }
@@ -15333,7 +16272,24 @@ final class QuranViewController: NSViewController, MainTabContent,
     // MARK: - tables
 
     func numberOfRows(in tableView: NSTableView) -> Int {
-        tableView === surahTable ? filteredSurahs.count : visibleVerses.count
+        guard tableView === surahTable else { return visibleVerses.count }
+        switch navigatorMode {
+        case 1: return juzStarts.count
+        case 2: return max(1, sortedBookmarks().count)
+        default: return filteredSurahs.count
+        }
+    }
+
+    private func sortedBookmarks() -> [OfflineQuranBookmark] {
+        bookmarks.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    @objc private func navigatorChanged(_ sender: NSSegmentedControl) {
+        navigatorMode = max(0, min(2, sender.selectedSegment))
+        UserDefaults.standard.set(navigatorMode, forKey: kQuranNavigatorModeKey)
+        surahFilterField.isHidden = navigatorMode != 0
+        surahTable.reloadData()
+        syncSidebarSelection()
     }
 
     func tableView(_ tableView: NSTableView,
@@ -15343,11 +16299,37 @@ final class QuranViewController: NSViewController, MainTabContent,
             let cell = (tableView.makeView(withIdentifier: identifier, owner: self)
                         as? QuranSurahListRowView) ?? QuranSurahListRowView()
             cell.identifier = identifier
-            guard filteredSurahs.indices.contains(row),
-                  let entry = surahIndex.first(where: { $0.sura == filteredSurahs[row] })
-            else { return cell }
-            cell.configure(sura: entry.sura, arabic: entry.arabic, english: entry.english,
-                           count: entry.count, isCurrent: entry.sura == selectedSurah)
+            switch navigatorMode {
+            case 1:
+                guard juzStarts.indices.contains(row) else { return cell }
+                let start = juzStarts[row]
+                let current = currentVerse()?.jozz == start.jozz
+                cell.configure(number: localizedInterfaceDigits(String(start.jozz)),
+                               title: quranStudyText("juz.title", String(start.jozz)),
+                               detail: "\(start.suraNameArabic) \(localizedInterfaceDigits(String(start.ayahNumber)))",
+                               meta: quranStudyText("page.short", String(start.pageStart)),
+                               isCurrent: current)
+            case 2:
+                let values = sortedBookmarks()
+                guard values.indices.contains(row) else {
+                    cell.configure(number: "", title: quranStudyText("bookmarks.empty"),
+                                   detail: "", meta: "", isCurrent: false)
+                    return cell
+                }
+                let bookmark = values[row]
+                cell.configure(number: localizedInterfaceDigits(String(row + 1)),
+                               title: bookmark.title,
+                               detail: quranReaderText(bookmark.edition == "warsh" ? "exact.warsh" : "exact.hafs"),
+                               meta: quranStudyText("page.short", String(bookmark.page)),
+                               isCurrent: bookmark.sura == selectedSurah
+                                   && bookmark.ayah == selectedAyah)
+            default:
+                guard filteredSurahs.indices.contains(row),
+                      let entry = surahIndex.first(where: { $0.sura == filteredSurahs[row] })
+                else { return cell }
+                cell.configure(sura: entry.sura, arabic: entry.arabic, english: entry.english,
+                               count: entry.count, isCurrent: entry.sura == selectedSurah)
+            }
             return cell
         }
         guard visibleVerses.indices.contains(row) else { return nil }
@@ -15414,10 +16396,12 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         selectedSurah = visibleVerses[row].suraNumber
         selectedAyah = visibleVerses[row].ayahNumber
+        QuranReadingLog.record(page: visibleVerses[row].pageStart)
         persistLocator()
         updateBookmarkButton()
         refreshCurrentRows(previous: previousRow, current: row)
         updateFooterPosition()
+        (view.window as? MainWindow)?.refreshPageSubtitle()
     }
 
     private func persistLocator() {
@@ -15471,6 +16455,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         }
         saveBookmarks()
         updateBookmarkButton()
+        if navigatorMode == 2 { surahTable.reloadData() }
         if !isMushaf, let row = visibleVerses.firstIndex(where: {
             $0.suraNumber == verse.suraNumber && $0.ayahNumber == verse.ayahNumber
         }), row < tableView.numberOfRows {
@@ -15511,6 +16496,10 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     @objc private func openBookmark(_ sender: NSMenuItem) {
         guard let bookmark = bookmarkMenuItems[sender.tag] else { return }
+        open(bookmark: bookmark)
+    }
+
+    private func open(bookmark: OfflineQuranBookmark) {
         edition = bookmark.edition == "warsh" ? "warsh" : "hafs"
         editionSegment?.selectedSegment = edition == "warsh" ? 1 : 0
         selectedSurah = bookmark.sura ?? selectedSurah
