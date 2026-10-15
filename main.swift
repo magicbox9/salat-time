@@ -129,7 +129,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.38.0"
+let kAppVersion          = "3.39.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -1459,7 +1459,7 @@ func adhkarAudioOptions() -> [AdhkarAudioOption] {
             if seen.insert(item.audio_file).inserted {
                 let ref = "bundled:\(item.audio_file)"
                 out.append(AdhkarAudioOption(id: ref,
-                                              displayName: "Bundled · \(item.audio_file)",
+                                              displayName: "\(featureText("audio.bundled")) · \(item.audio_file)",
                                               isBundled: true))
             }
         }
@@ -1472,7 +1472,7 @@ func adhkarAudioOptions() -> [AdhkarAudioOption] {
             guard lower.hasSuffix(".mp3") || lower.hasSuffix(".m4a") || lower.hasSuffix(".aac") || lower.hasSuffix(".wav") else { continue }
             let ref = "imported:\(name)"
             out.append(AdhkarAudioOption(id: ref,
-                                          displayName: "Imported · \(name)",
+                                          displayName: "\(featureText("audio.imported")) · \(name)",
                                           isBundled: false))
         }
     }
@@ -2683,6 +2683,7 @@ func t(_ key: String) -> String { Localizer.shared.t(key) }
 private let featureTranslations: [String: [String: String]] = [
     "en": [
         "full.open_more": "More controls…", "full.nawafil": "Nawafil prayers",
+        "audio.bundled": "Built-in", "audio.imported": "Imported",
         "full.rakahs": "Rak‘ahs", "full.window": "Time window", "full.best": "Best time",
         "full.guidance": "Calculated from today’s mosque times. Treat these windows as guidance and follow local scholarly advice.",
         "nawafil.rawatib": "Sunnah Rawatib", "nawafil.rawatib.count": "12 total",
@@ -2722,6 +2723,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "fr": [
         "full.open_more": "Plus de contrôles…", "full.nawafil": "Prières surérogatoires",
+        "audio.bundled": "Intégré", "audio.imported": "Importé",
         "full.rakahs": "Rak‘āt", "full.window": "Plage horaire", "full.best": "Meilleur moment",
         "full.guidance": "Calculé selon les horaires de la mosquée aujourd’hui. Ces plages sont indicatives ; suivez les conseils religieux locaux.",
         "nawafil.rawatib": "Sunan Rawātib", "nawafil.rawatib.count": "12 au total",
@@ -2761,6 +2763,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "es": [
         "full.open_more": "Más controles…", "full.nawafil": "Oraciones voluntarias",
+        "audio.bundled": "Integrado", "audio.imported": "Importado",
         "full.rakahs": "Rak‘āt", "full.window": "Franja horaria", "full.best": "Mejor momento",
         "full.guidance": "Calculado con los horarios de la mezquita de hoy. Usa estas franjas como guía y sigue el consejo religioso local.",
         "nawafil.rawatib": "Sunan Rawātib", "nawafil.rawatib.count": "12 en total",
@@ -2800,6 +2803,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "ar": [
         "full.open_more": "مزيد من التحكم…", "full.nawafil": "صلوات النوافل",
+        "audio.bundled": "مدمج", "audio.imported": "مستورد",
         "full.rakahs": "الركعات", "full.window": "وقت الصلاة", "full.best": "أفضل وقت",
         "full.guidance": "محسوب وفق مواقيت مسجدك اليوم. هذه الأوقات إرشادية، فاتبع توجيه أهل العلم في بلدك.",
         "nawafil.rawatib": "السنن الرواتب", "nawafil.rawatib.count": "١٢ ركعة",
@@ -2839,6 +2843,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "zh": [
         "full.open_more": "更多控制…", "full.nawafil": "副功拜",
+        "audio.bundled": "内置", "audio.imported": "已导入",
         "full.rakahs": "拜数", "full.window": "时间范围", "full.best": "最佳时间",
         "full.guidance": "根据今日清真寺礼拜时间计算，仅供参考；请遵循当地学者的指导。",
         "nawafil.rawatib": "常行圣行拜", "nawafil.rawatib.count": "共12拜",
@@ -2878,6 +2883,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "hi": [
         "full.open_more": "और नियंत्रण…", "full.nawafil": "नफ़्ल नमाज़ें",
+        "audio.bundled": "अंतर्निहित", "audio.imported": "आयातित",
         "full.rakahs": "रकअत", "full.window": "समय सीमा", "full.best": "बेहतर समय",
         "full.guidance": "आज की मस्जिद के समयों से गणना की गई है। इसे मार्गदर्शन मानें और स्थानीय आलिम की सलाह का पालन करें।",
         "nawafil.rawatib": "सुन्नत रावतिब", "nawafil.rawatib.count": "कुल 12",
@@ -2917,6 +2923,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "bn": [
         "full.open_more": "আরও নিয়ন্ত্রণ…", "full.nawafil": "নফল নামাজ",
+        "audio.bundled": "অন্তর্নির্মিত", "audio.imported": "আমদানি করা",
         "full.rakahs": "রাকাত", "full.window": "সময়সীমা", "full.best": "উত্তম সময়",
         "full.guidance": "আজকের মসজিদের সময় থেকে হিসাব করা। এগুলো নির্দেশনা হিসেবে নিন এবং স্থানীয় আলেমের পরামর্শ অনুসরণ করুন।",
         "nawafil.rawatib": "সুন্নাতে রাওয়াতিব", "nawafil.rawatib.count": "মোট ১২",
@@ -2956,6 +2963,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "ru": [
         "full.open_more": "Больше настроек…", "full.nawafil": "Дополнительные молитвы",
+        "audio.bundled": "Встроенный", "audio.imported": "Импортированный",
         "full.rakahs": "Ракааты", "full.window": "Период", "full.best": "Лучшее время",
         "full.guidance": "Рассчитано по сегодняшнему расписанию мечети. Используйте как ориентир и следуйте местным религиозным рекомендациям.",
         "nawafil.rawatib": "Сунна-рауатиб", "nawafil.rawatib.count": "Всего 12",
@@ -2995,6 +3003,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "pt": [
         "full.open_more": "Mais controlos…", "full.nawafil": "Orações voluntárias",
+        "audio.bundled": "Integrado", "audio.imported": "Importado",
         "full.rakahs": "Rak‘āt", "full.window": "Janela de tempo", "full.best": "Melhor momento",
         "full.guidance": "Calculado com os horários da mesquita de hoje. Use como orientação e siga o aconselhamento religioso local.",
         "nawafil.rawatib": "Sunan Rawātib", "nawafil.rawatib.count": "12 no total",
@@ -3034,6 +3043,7 @@ private let featureTranslations: [String: [String: String]] = [
     ],
     "ur": [
         "full.open_more": "مزید کنٹرول…", "full.nawafil": "نفل نمازیں",
+        "audio.bundled": "بلٹ اِن", "audio.imported": "درآمد شدہ",
         "full.rakahs": "رکعات", "full.window": "وقت کی حد", "full.best": "بہترین وقت",
         "full.guidance": "آج کے مسجد کے اوقات سے حساب کیا گیا ہے۔ اسے رہنمائی سمجھیں اور مقامی علما کی ہدایت پر عمل کریں۔",
         "nawafil.rawatib": "سننِ رواتب", "nawafil.rawatib.count": "کل ۱۲",
@@ -4295,6 +4305,280 @@ enum MosquePickerPresentation {
     case settings
 }
 
+/// Mosque picker status copy. Counts use neutral "Label: N" phrasing so no
+/// language needs English-style plural rules.
+private let mosquePickerTranslations: [String: [String: String]] = [
+    "en": [
+        "favorites.empty": "No favorites yet. Add one from Search or Nearby.",
+        "favorites.count": "Favorites: %d",
+        "countries.prompt": "Pick a country to see its cities",
+        "cities.filter": "Filter cities in %@",
+        "cities.loading": "Loading cities in %@…",
+        "cities.back": "Back to cities",
+        "countries.back": "Back to countries",
+        "mosques.in_city": "Mosques in %@, %@: %d",
+        "cities.none": "No city matches “%@” in %@ yet. Keep typing…",
+        "cities.summary": "%@ · Cities: %d · Mosques: %d. Choose a city",
+        "other": "Other",
+        "nearby.prompt": "Type your city or tap the location button to detect it.",
+        "nearby.saved": "Using your saved city “%@” while checking your location…",
+        "nearby.requesting": "Requesting your location…",
+        "nearby.denied": "Location access is off. Type your city above, or allow Location in System Settings → Privacy.",
+        "nearby.identifying": "Identifying your city…",
+        "nearby.unidentified": "Couldn't identify your city. Type it in the field above.",
+        "nearby.no_city": "No city name for this location. Type one above.",
+        "nearby.error": "Location error: %@. Type your city above.",
+        "nearby.searching": "Searching mosques in “%@”…",
+        "nearby.none_city": "No mosques found for “%@”. Try a nearby city name.",
+        "nearby.none": "No mosques found near you.",
+        "nearby.summary": "Mosques near %@: %d",
+        "nearby.summary.sorted": "Mosques near %@: %d · sorted by distance",
+    ],
+    "fr": [
+        "favorites.empty": "Aucun favori pour l’instant. Ajoutez-en un depuis Recherche ou À proximité.",
+        "favorites.count": "Favoris : %d",
+        "countries.prompt": "Choisissez un pays pour voir ses villes",
+        "cities.filter": "Filtrer les villes : %@",
+        "cities.loading": "Chargement des villes : %@…",
+        "cities.back": "Retour aux villes",
+        "countries.back": "Retour aux pays",
+        "mosques.in_city": "Mosquées à %@, %@ : %d",
+        "cities.none": "Aucune ville ne correspond à « %@ » (%@). Continuez à taper…",
+        "cities.summary": "%@ · Villes : %d · Mosquées : %d. Choisissez une ville",
+        "other": "Autre",
+        "nearby.prompt": "Tapez votre ville ou utilisez le bouton de localisation.",
+        "nearby.saved": "Ville enregistrée « %@ » utilisée pendant la localisation…",
+        "nearby.requesting": "Demande de votre position…",
+        "nearby.denied": "Localisation désactivée. Tapez votre ville ci-dessus ou autorisez la localisation dans Réglages Système → Confidentialité.",
+        "nearby.identifying": "Identification de votre ville…",
+        "nearby.unidentified": "Impossible d’identifier votre ville. Tapez-la ci-dessus.",
+        "nearby.no_city": "Aucun nom de ville pour cette position. Tapez-en un ci-dessus.",
+        "nearby.error": "Erreur de localisation : %@. Tapez votre ville ci-dessus.",
+        "nearby.searching": "Recherche des mosquées à « %@ »…",
+        "nearby.none_city": "Aucune mosquée trouvée pour « %@ ». Essayez une ville voisine.",
+        "nearby.none": "Aucune mosquée trouvée près de vous.",
+        "nearby.summary": "Mosquées près de %@ : %d",
+        "nearby.summary.sorted": "Mosquées près de %@ : %d · triées par distance",
+    ],
+    "es": [
+        "favorites.empty": "Aún no hay favoritos. Añade uno desde Buscar o Cercanas.",
+        "favorites.count": "Favoritos: %d",
+        "countries.prompt": "Elige un país para ver sus ciudades",
+        "cities.filter": "Filtrar ciudades: %@",
+        "cities.loading": "Cargando ciudades: %@…",
+        "cities.back": "Volver a ciudades",
+        "countries.back": "Volver a países",
+        "mosques.in_city": "Mezquitas en %@, %@: %d",
+        "cities.none": "Ninguna ciudad coincide con «%@» (%@). Sigue escribiendo…",
+        "cities.summary": "%@ · Ciudades: %d · Mezquitas: %d. Elige una ciudad",
+        "other": "Otra",
+        "nearby.prompt": "Escribe tu ciudad o pulsa el botón de ubicación.",
+        "nearby.saved": "Usando tu ciudad guardada «%@» mientras se comprueba tu ubicación…",
+        "nearby.requesting": "Solicitando tu ubicación…",
+        "nearby.denied": "La ubicación está desactivada. Escribe tu ciudad arriba o permite la ubicación en Ajustes del Sistema → Privacidad.",
+        "nearby.identifying": "Identificando tu ciudad…",
+        "nearby.unidentified": "No se pudo identificar tu ciudad. Escríbela arriba.",
+        "nearby.no_city": "No hay nombre de ciudad para esta ubicación. Escribe uno arriba.",
+        "nearby.error": "Error de ubicación: %@. Escribe tu ciudad arriba.",
+        "nearby.searching": "Buscando mezquitas en «%@»…",
+        "nearby.none_city": "No se encontraron mezquitas para «%@». Prueba una ciudad cercana.",
+        "nearby.none": "No se encontraron mezquitas cerca de ti.",
+        "nearby.summary": "Mezquitas cerca de %@: %d",
+        "nearby.summary.sorted": "Mezquitas cerca de %@: %d · por distancia",
+    ],
+    "ar": [
+        "favorites.empty": "لا توجد مساجد مفضلة بعد. أضف مسجدًا من البحث أو القريب.",
+        "favorites.count": "المفضلة: %d",
+        "countries.prompt": "اختر دولة لعرض مدنها",
+        "cities.filter": "تصفية المدن: %@",
+        "cities.loading": "جارٍ تحميل المدن: %@…",
+        "cities.back": "العودة إلى المدن",
+        "countries.back": "العودة إلى الدول",
+        "mosques.in_city": "المساجد في %@، %@: %d",
+        "cities.none": "لا توجد مدينة تطابق «%@» في %@ بعد. تابع الكتابة…",
+        "cities.summary": "%@ · المدن: %d · المساجد: %d. اختر مدينة",
+        "other": "أخرى",
+        "nearby.prompt": "اكتب مدينتك أو اضغط زر الموقع لتحديدها.",
+        "nearby.saved": "تُستخدم مدينتك المحفوظة «%@» أثناء التحقق من موقعك…",
+        "nearby.requesting": "جارٍ طلب موقعك…",
+        "nearby.denied": "الوصول إلى الموقع غير مفعّل. اكتب مدينتك أعلاه أو فعّل الموقع من إعدادات النظام ← الخصوصية.",
+        "nearby.identifying": "جارٍ تحديد مدينتك…",
+        "nearby.unidentified": "تعذّر تحديد مدينتك. اكتبها في الحقل أعلاه.",
+        "nearby.no_city": "لا يوجد اسم مدينة لهذا الموقع. اكتب اسمًا أعلاه.",
+        "nearby.error": "خطأ في الموقع: %@. اكتب مدينتك أعلاه.",
+        "nearby.searching": "جارٍ البحث عن المساجد في «%@»…",
+        "nearby.none_city": "لم يُعثر على مساجد لـ«%@». جرّب مدينة قريبة.",
+        "nearby.none": "لم يُعثر على مساجد قريبة منك.",
+        "nearby.summary": "المساجد القريبة من %@: %d",
+        "nearby.summary.sorted": "المساجد القريبة من %@: %d · مرتبة حسب المسافة",
+    ],
+    "zh": [
+        "favorites.empty": "还没有收藏。可从“搜索”或“附近”添加。",
+        "favorites.count": "收藏：%d",
+        "countries.prompt": "选择国家以查看城市",
+        "cities.filter": "筛选城市：%@",
+        "cities.loading": "正在加载城市：%@…",
+        "cities.back": "返回城市",
+        "countries.back": "返回国家",
+        "mosques.in_city": "%@，%@ 的清真寺：%d",
+        "cities.none": "%2$@ 中暂无匹配“%1$@”的城市，请继续输入…",
+        "cities.summary": "%@ · 城市：%d · 清真寺：%d。请选择城市",
+        "other": "其他",
+        "nearby.prompt": "输入城市，或点按定位按钮自动检测。",
+        "nearby.saved": "检查位置期间使用已保存的城市“%@”…",
+        "nearby.requesting": "正在请求您的位置…",
+        "nearby.denied": "定位已关闭。请在上方输入城市，或在“系统设置 → 隐私”中允许定位。",
+        "nearby.identifying": "正在识别您的城市…",
+        "nearby.unidentified": "无法识别您的城市，请在上方输入。",
+        "nearby.no_city": "此位置没有城市名称，请在上方输入。",
+        "nearby.error": "定位错误：%@。请在上方输入城市。",
+        "nearby.searching": "正在搜索“%@”的清真寺…",
+        "nearby.none_city": "未找到“%@”的清真寺，请尝试附近的城市。",
+        "nearby.none": "附近未找到清真寺。",
+        "nearby.summary": "%@ 附近的清真寺：%d",
+        "nearby.summary.sorted": "%@ 附近的清真寺：%d · 按距离排序",
+    ],
+    "hi": [
+        "favorites.empty": "अभी कोई पसंदीदा नहीं। खोज या आस-पास से जोड़ें।",
+        "favorites.count": "पसंदीदा: %d",
+        "countries.prompt": "शहर देखने के लिए देश चुनें",
+        "cities.filter": "शहर फ़िल्टर करें: %@",
+        "cities.loading": "शहर लोड हो रहे हैं: %@…",
+        "cities.back": "शहरों पर वापस",
+        "countries.back": "देशों पर वापस",
+        "mosques.in_city": "%@, %@ में मस्जिदें: %d",
+        "cities.none": "“%@” से मेल खाता कोई शहर %@ में अभी नहीं। लिखते रहें…",
+        "cities.summary": "%@ · शहर: %d · मस्जिदें: %d। शहर चुनें",
+        "other": "अन्य",
+        "nearby.prompt": "अपना शहर लिखें या लोकेशन बटन दबाएँ।",
+        "nearby.saved": "लोकेशन जाँचते समय सहेजा गया शहर “%@” उपयोग हो रहा है…",
+        "nearby.requesting": "आपकी लोकेशन माँगी जा रही है…",
+        "nearby.denied": "लोकेशन बंद है। ऊपर शहर लिखें या सिस्टम सेटिंग्स → गोपनीयता में लोकेशन की अनुमति दें।",
+        "nearby.identifying": "आपका शहर पहचाना जा रहा है…",
+        "nearby.unidentified": "आपका शहर पहचाना नहीं जा सका। ऊपर लिखें।",
+        "nearby.no_city": "इस लोकेशन का कोई शहर नाम नहीं। ऊपर लिखें।",
+        "nearby.error": "लोकेशन त्रुटि: %@। ऊपर अपना शहर लिखें।",
+        "nearby.searching": "“%@” में मस्जिदें खोजी जा रही हैं…",
+        "nearby.none_city": "“%@” के लिए कोई मस्जिद नहीं मिली। पास का शहर आज़माएँ।",
+        "nearby.none": "आपके पास कोई मस्जिद नहीं मिली।",
+        "nearby.summary": "%@ के पास मस्जिदें: %d",
+        "nearby.summary.sorted": "%@ के पास मस्जिदें: %d · दूरी के अनुसार",
+    ],
+    "bn": [
+        "favorites.empty": "এখনও কোনো প্রিয় নেই। অনুসন্ধান বা কাছাকাছি থেকে যোগ করুন।",
+        "favorites.count": "প্রিয়: %d",
+        "countries.prompt": "শহর দেখতে একটি দেশ বেছে নিন",
+        "cities.filter": "শহর ফিল্টার: %@",
+        "cities.loading": "শহর লোড হচ্ছে: %@…",
+        "cities.back": "শহরে ফিরুন",
+        "countries.back": "দেশে ফিরুন",
+        "mosques.in_city": "%@, %@-এ মসজিদ: %d",
+        "cities.none": "“%@” মেলে এমন কোনো শহর %@-এ এখনও নেই। লিখতে থাকুন…",
+        "cities.summary": "%@ · শহর: %d · মসজিদ: %d। একটি শহর বেছে নিন",
+        "other": "অন্যান্য",
+        "nearby.prompt": "আপনার শহর লিখুন বা লোকেশন বোতাম চাপুন।",
+        "nearby.saved": "লোকেশন যাচাইয়ের সময় সংরক্ষিত শহর “%@” ব্যবহার হচ্ছে…",
+        "nearby.requesting": "আপনার লোকেশন চাওয়া হচ্ছে…",
+        "nearby.denied": "লোকেশন বন্ধ। উপরে শহর লিখুন বা সিস্টেম সেটিংস → গোপনীয়তায় লোকেশন চালু করুন।",
+        "nearby.identifying": "আপনার শহর শনাক্ত হচ্ছে…",
+        "nearby.unidentified": "আপনার শহর শনাক্ত করা যায়নি। উপরে লিখুন।",
+        "nearby.no_city": "এই লোকেশনের কোনো শহরের নাম নেই। উপরে লিখুন।",
+        "nearby.error": "লোকেশন ত্রুটি: %@। উপরে আপনার শহর লিখুন।",
+        "nearby.searching": "“%@”-এ মসজিদ খোঁজা হচ্ছে…",
+        "nearby.none_city": "“%@”-এর জন্য কোনো মসজিদ পাওয়া যায়নি। কাছের শহর চেষ্টা করুন।",
+        "nearby.none": "আপনার কাছে কোনো মসজিদ পাওয়া যায়নি।",
+        "nearby.summary": "%@-এর কাছে মসজিদ: %d",
+        "nearby.summary.sorted": "%@-এর কাছে মসজিদ: %d · দূরত্ব অনুযায়ী",
+    ],
+    "ru": [
+        "favorites.empty": "Избранного пока нет. Добавьте мечеть из Поиска или Рядом.",
+        "favorites.count": "Избранное: %d",
+        "countries.prompt": "Выберите страну, чтобы увидеть города",
+        "cities.filter": "Фильтр городов: %@",
+        "cities.loading": "Загрузка городов: %@…",
+        "cities.back": "Назад к городам",
+        "countries.back": "Назад к странам",
+        "mosques.in_city": "Мечети в %@, %@: %d",
+        "cities.none": "Нет города, совпадающего с «%@» (%@). Продолжайте ввод…",
+        "cities.summary": "%@ · Городов: %d · Мечетей: %d. Выберите город",
+        "other": "Другое",
+        "nearby.prompt": "Введите город или нажмите кнопку геолокации.",
+        "nearby.saved": "Пока определяется местоположение, используется сохранённый город «%@»…",
+        "nearby.requesting": "Запрос местоположения…",
+        "nearby.denied": "Доступ к геолокации выключен. Введите город выше или разрешите геолокацию в Системных настройках → Конфиденциальность.",
+        "nearby.identifying": "Определение города…",
+        "nearby.unidentified": "Не удалось определить город. Введите его выше.",
+        "nearby.no_city": "Для этого места нет названия города. Введите его выше.",
+        "nearby.error": "Ошибка геолокации: %@. Введите город выше.",
+        "nearby.searching": "Поиск мечетей в «%@»…",
+        "nearby.none_city": "Мечети для «%@» не найдены. Попробуйте соседний город.",
+        "nearby.none": "Рядом мечетей не найдено.",
+        "nearby.summary": "Мечети рядом с %@: %d",
+        "nearby.summary.sorted": "Мечети рядом с %@: %d · по расстоянию",
+    ],
+    "pt": [
+        "favorites.empty": "Ainda não há favoritos. Adicione um em Pesquisar ou Próximas.",
+        "favorites.count": "Favoritos: %d",
+        "countries.prompt": "Escolha um país para ver as cidades",
+        "cities.filter": "Filtrar cidades: %@",
+        "cities.loading": "A carregar cidades: %@…",
+        "cities.back": "Voltar às cidades",
+        "countries.back": "Voltar aos países",
+        "mosques.in_city": "Mesquitas em %@, %@: %d",
+        "cities.none": "Nenhuma cidade corresponde a «%@» (%@). Continue a escrever…",
+        "cities.summary": "%@ · Cidades: %d · Mesquitas: %d. Escolha uma cidade",
+        "other": "Outra",
+        "nearby.prompt": "Escreva a sua cidade ou toque no botão de localização.",
+        "nearby.saved": "A usar a cidade guardada «%@» enquanto verifica a localização…",
+        "nearby.requesting": "A pedir a sua localização…",
+        "nearby.denied": "A localização está desativada. Escreva a cidade acima ou permita a localização em Definições do Sistema → Privacidade.",
+        "nearby.identifying": "A identificar a sua cidade…",
+        "nearby.unidentified": "Não foi possível identificar a cidade. Escreva-a acima.",
+        "nearby.no_city": "Sem nome de cidade para esta localização. Escreva um acima.",
+        "nearby.error": "Erro de localização: %@. Escreva a cidade acima.",
+        "nearby.searching": "A procurar mesquitas em «%@»…",
+        "nearby.none_city": "Nenhuma mesquita encontrada para «%@». Tente uma cidade próxima.",
+        "nearby.none": "Nenhuma mesquita encontrada perto de si.",
+        "nearby.summary": "Mesquitas perto de %@: %d",
+        "nearby.summary.sorted": "Mesquitas perto de %@: %d · por distância",
+    ],
+    "ur": [
+        "favorites.empty": "ابھی کوئی پسندیدہ نہیں۔ تلاش یا قریبی سے شامل کریں۔",
+        "favorites.count": "پسندیدہ: %d",
+        "countries.prompt": "شہر دیکھنے کے لیے ملک منتخب کریں",
+        "cities.filter": "شہر فلٹر کریں: %@",
+        "cities.loading": "شہر لوڈ ہو رہے ہیں: %@…",
+        "cities.back": "شہروں پر واپس",
+        "countries.back": "ممالک پر واپس",
+        "mosques.in_city": "%@، %@ میں مساجد: %d",
+        "cities.none": "“%@” سے ملتا کوئی شہر %@ میں ابھی نہیں۔ لکھتے رہیں…",
+        "cities.summary": "%@ · شہر: %d · مساجد: %d۔ شہر منتخب کریں",
+        "other": "دیگر",
+        "nearby.prompt": "اپنا شہر لکھیں یا مقام کا بٹن دبائیں۔",
+        "nearby.saved": "مقام کی جانچ کے دوران محفوظ شہر “%@” استعمال ہو رہا ہے…",
+        "nearby.requesting": "آپ کا مقام طلب کیا جا رہا ہے…",
+        "nearby.denied": "مقام کی رسائی بند ہے۔ اوپر شہر لکھیں یا سسٹم سیٹنگز → پرائیویسی میں مقام کی اجازت دیں۔",
+        "nearby.identifying": "آپ کا شہر شناخت کیا جا رہا ہے…",
+        "nearby.unidentified": "آپ کا شہر شناخت نہیں ہو سکا۔ اوپر لکھیں۔",
+        "nearby.no_city": "اس مقام کا کوئی شہر نام نہیں۔ اوپر لکھیں۔",
+        "nearby.error": "مقام کی خرابی: %@۔ اوپر اپنا شہر لکھیں۔",
+        "nearby.searching": "“%@” میں مساجد تلاش ہو رہی ہیں…",
+        "nearby.none_city": "“%@” کے لیے کوئی مسجد نہیں ملی۔ قریبی شہر آزمائیں۔",
+        "nearby.none": "آپ کے قریب کوئی مسجد نہیں ملی۔",
+        "nearby.summary": "%@ کے قریب مساجد: %d",
+        "nearby.summary.sorted": "%@ کے قریب مساجد: %d · فاصلے کے لحاظ سے",
+    ],
+]
+
+/// Localized mosque picker string; arguments are formatted with the
+/// interface digits (Western or Arabic-Indic) the user chose.
+private func pickerText(_ key: String, _ args: CVarArg...) -> String {
+    let code = Localizer.shared.current.code
+    let format = mosquePickerTranslations[code]?[key]
+        ?? mosquePickerTranslations["en"]?[key] ?? key
+    return localizedInterfaceDigits(String(format: format, arguments: args))
+}
+
 final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManagerDelegate {
     weak var appDelegate: AppDelegate?
     var onDone: (() -> Void)?
@@ -4353,7 +4637,13 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private var lastLiveQuery: String = ""
 
     // ---------- Search tab: country → city → mosques drill-down --------------
-    struct PickerCountry { let code: String; let name: String; let flag: String }
+    struct PickerCountry {
+        let code: String; let name: String; let flag: String
+        /// Name shown in the UI; `name` stays English for Mawaqit queries.
+        var displayName: String {
+            preferredInterfaceLocale().localizedString(forRegionCode: code) ?? name
+        }
+    }
     /// Curated list of countries where Mawaqit has good mosque coverage.
     /// Ordered alphabetically by English name so the list is easy to scan.
     private static let pickerCountries: [PickerCountry] = [
@@ -4417,7 +4707,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private func build() {
         let W = bounds.width, H = bounds.height
         let isSettings = presentation == .settings
-        let contentWidth: CGFloat = isSettings ? min(860, W - 48) : W - 24
+        // Same column width as every other Settings section.
+        let contentWidth: CGFloat = isSettings ? min(680, W - 48) : W - 24
         let contentX: CGFloat = isSettings ? (W - contentWidth) / 2 : 12
 
         // -------------------- Header: back + title -------------------------
@@ -4473,6 +4764,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             heading.frame = NSRect(x: textX, y: 61, width: textWidth, height: 16)
             heading.font = Localizer.shared.font(size: 11, weight: .semibold)
             heading.textColor = .secondaryLabelColor
+            // Explicit alignments; the final applyRTL pass flips them.
+            heading.alignment = .left
             currentCard.addSubview(heading)
 
             currentMosqueNameLabel.frame = NSRect(x: textX, y: 34,
@@ -4481,6 +4774,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
                                                                  weight: .semibold)
             currentMosqueNameLabel.textColor = .labelColor
             currentMosqueNameLabel.lineBreakMode = .byTruncatingTail
+            currentMosqueNameLabel.alignment = .left
             currentCard.addSubview(currentMosqueNameLabel)
 
             currentMosqueDetailLabel.frame = NSRect(x: textX, y: 15,
@@ -4488,8 +4782,10 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             currentMosqueDetailLabel.font = Localizer.shared.font(size: 11)
             currentMosqueDetailLabel.textColor = .secondaryLabelColor
             currentMosqueDetailLabel.lineBreakMode = .byTruncatingMiddle
+            currentMosqueDetailLabel.alignment = .left
             currentCard.addSubview(currentMosqueDetailLabel)
-            if Localizer.shared.isRTL { applyRTL(currentCard) }
+            // Mirrored by the picker-wide applyRTL(self) at the end of build;
+            // mirroring here too flipped the card back to left-to-right.
         }
 
         let selectorY: CGFloat = isSettings ? 132 : (showsNavigationHeader ? 50 : 10)
@@ -4749,10 +5045,10 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         clearResults()
         let favs = loadFavorites()
         if favs.isEmpty {
-            statusLabel.stringValue = "No favorites yet. Add one from Search or Nearby."
+            statusLabel.stringValue = pickerText("favorites.empty")
             return
         }
-        statusLabel.stringValue = "\(favs.count) favorite\(favs.count == 1 ? "" : "s")"
+        statusLabel.stringValue = pickerText("favorites.count", favs.count)
         for f in favs {
             resultsStack.addArrangedSubview(makeRow(for: f, fromFavorites: true))
         }
@@ -4775,7 +5071,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private func showCountriesList() {
         clearResults()
         searchField.stringValue = ""
-        statusLabel.stringValue = "Pick a country to see its cities"
+        statusLabel.stringValue = pickerText("countries.prompt")
         for c in MosquePickerView.pickerCountries {
             resultsStack.addArrangedSubview(makeCountryRow(country: c))
         }
@@ -4787,10 +5083,10 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     /// shown list instantly while the API enriches it in the background.
     private func showCitiesList(in country: PickerCountry) {
         clearResults()
-        searchField.placeholderString = "Filter cities in \(country.name)"
+        searchField.placeholderString = pickerText("cities.filter", country.displayName)
         // Back row pinned at the top of the results stack.
         resultsStack.addArrangedSubview(
-            makeBackRow(label: "← Back to countries") { [weak self] in
+            makeBackRow(label: pickerText("countries.back")) { [weak self] in
                 self?.searchState = .countries
                 self?.updateInputContainer()
                 self?.showSearchPrompt()
@@ -4804,7 +5100,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             searchCityBucket.removeAll()
             searchCityOrder.removeAll()
             searchCountryCode = country.code
-            statusLabel.stringValue = "Loading cities in \(country.name)…"
+            statusLabel.stringValue = pickerText("cities.loading", country.displayName)
         }
         // Always kick a country-seeded query to pull in (more) cities.
         let q = searchField.stringValue.trimmingCharacters(in: .whitespaces)
@@ -4820,9 +5116,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         let key = city.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let mosques = searchCityBucket[key] ?? []
         statusLabel.stringValue =
-            "\(mosques.count) \(mosques.count == 1 ? "mosque" : "mosques") in \(city), \(country.name)"
+            pickerText("mosques.in_city", city, country.displayName, mosques.count)
         resultsStack.addArrangedSubview(
-            makeBackRow(label: "← Back to cities") { [weak self] in
+            makeBackRow(label: pickerText("cities.back")) { [weak self] in
                 self?.searchState = .cities(country)
                 self?.updateInputContainer()
                 self?.showSearchPrompt()
@@ -4859,7 +5155,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         }
         for r in refs {
             let raw = r.city.trimmingCharacters(in: .whitespacesAndNewlines)
-            let display = raw.isEmpty ? "Other" : raw
+            let display = raw.isEmpty ? pickerText("other") : raw
             let key = display.lowercased()
             if searchCityBucket[key] == nil { searchCityOrder.append(key) }
             var list = searchCityBucket[key] ?? []
@@ -4879,7 +5175,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             v.removeFromSuperview()
         }
         if searchCityOrder.isEmpty {
-            statusLabel.stringValue = "Loading cities in \(country.name)…"
+            statusLabel.stringValue = pickerText("cities.loading", country.displayName)
             return
         }
         let filterRaw = searchField.stringValue
@@ -4900,20 +5196,18 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         }
         if sortedKeys.isEmpty {
             statusLabel.stringValue =
-                "No city matches “\(filterRaw)” in \(country.name) yet — keep typing…"
+                pickerText("cities.none", filterRaw, country.displayName)
             return
         }
         let totalMosques = sortedKeys.reduce(0) {
             $0 + (searchCityBucket[$1]?.count ?? 0)
         }
-        let cityWord = sortedKeys.count == 1 ? "city" : "cities"
-        let mosqueWord = totalMosques == 1 ? "mosque" : "mosques"
-        statusLabel.stringValue =
-            "\(sortedKeys.count) \(cityWord), \(totalMosques) \(mosqueWord) in \(country.name) — tap a city"
+        statusLabel.stringValue = pickerText("cities.summary", country.displayName,
+                                             sortedKeys.count, totalMosques)
         for key in sortedKeys {
             let display = searchCityBucket[key]?.first?.city
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            let shown = (display?.isEmpty ?? true) ? "Other" : display!
+            let shown = (display?.isEmpty ?? true) ? pickerText("other") : display!
             let count = searchCityBucket[key]?.count ?? 0
             resultsStack.addArrangedSubview(
                 makeCityRowForSearch(city: shown, count: count, country: country))
@@ -4928,7 +5222,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             clearResults()
             if saved.isEmpty {
                 statusLabel.stringValue =
-                    "Type your city or tap the location button to detect it."
+                    pickerText("nearby.prompt")
             } else {
                 // Auto-run the saved city so returning users see results
                 // immediately without having to press Enter again.
@@ -4983,7 +5277,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     @objc private func runCitySearch() {
         let q = cityField.stringValue.trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else {
-            statusLabel.stringValue = "Type a city, or tap the location button to detect it."
+            statusLabel.stringValue = pickerText("nearby.prompt")
             return
         }
         setUserCity(q)
@@ -5004,10 +5298,10 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // isn't blank for several seconds.
         let saved = userCity()
         if !saved.isEmpty {
-            statusLabel.stringValue = "Using your saved city \"\(saved)\" while checking location…"
+            statusLabel.stringValue = pickerText("nearby.saved", saved)
             runNearbyCityQuery(saved, origin: .savedPendingGeo)
         } else {
-            statusLabel.stringValue = "Requesting your location…"
+            statusLabel.stringValue = pickerText("nearby.requesting")
         }
         let lm = CLLocationManager()
         lm.delegate = self
@@ -5022,7 +5316,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
 
     func locationManager(_ m: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus) {
         if status == .denied || status == .restricted {
-            statusLabel.stringValue = "Location denied. Type your city above, or enable Location in System Settings → Privacy."
+            statusLabel.stringValue = pickerText("nearby.denied")
         }
     }
 
@@ -5031,8 +5325,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         m.stopUpdatingLocation()
         let lat = loc.coordinate.latitude, lon = loc.coordinate.longitude
         nearbyCoord = (lat, lon)
-        statusLabel.stringValue = localizedInterfaceDigits(
-            String(format: "Identifying your city (%.3f, %.3f)…", lat, lon))
+        statusLabel.stringValue = pickerText("nearby.identifying")
 
         // Reverse-geocode with Apple's geocoder — CLPlacemark gives us a
         // proper locality/subLocality string that Mawaqit's name search can
@@ -5052,9 +5345,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
              .filter { !$0.isEmpty }
             guard let city = candidates.first else {
                 if err != nil {
-                    self.statusLabel.stringValue = "Couldn't identify your city. Type it in the field above."
+                    self.statusLabel.stringValue = pickerText("nearby.unidentified")
                 } else {
-                    self.statusLabel.stringValue = "No city name for this location. Type one above."
+                    self.statusLabel.stringValue = pickerText("nearby.no_city")
                 }
                 return
             }
@@ -5075,7 +5368,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         // don't clobber the in-progress status with a scary error — just
         // tell them location was unavailable.
         if userCity().isEmpty {
-            statusLabel.stringValue = "Location error: \(err.localizedDescription). Type your city above."
+            statusLabel.stringValue = pickerText("nearby.error", err.localizedDescription)
         }
     }
 
@@ -5093,7 +5386,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     /// / saved) funnel through here so the result handling stays consistent.
     private func runNearbyCityQuery(_ city: String, origin: NearbyOrigin) {
         clearResults()
-        statusLabel.stringValue = "Searching mosques in \"\(city)\"…"
+        statusLabel.stringValue = pickerText("nearby.searching", city)
         search.searchText(city) { [weak self] refs in
             guard let self = self, self.mode == 2 else { return }
             self.nearbyRefs = self.sortByDistance(refs)
@@ -5101,7 +5394,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
                 self.nearbyState = .idle
                 self.clearResults()
                 self.statusLabel.stringValue =
-                    "No mosques found for \"\(city)\". Try a nearby city name."
+                    pickerText("nearby.none_city", city)
                 return
             }
             self.nearbyState = .results
@@ -5143,14 +5436,13 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
     private func showNearbyFlat(cityLabel: String) {
         clearResults()
         if nearbyRefs.isEmpty {
-            statusLabel.stringValue = "No mosques found near you."
+            statusLabel.stringValue = pickerText("nearby.none")
             return
         }
         let n = nearbyRefs.count
-        let sortedNote = (nearbyCoord != nil && nearbyRefs.contains(where: { $0.lat != nil })) ?
-            ", sorted by distance" : ""
-        statusLabel.stringValue =
-            "\(n) \(n == 1 ? "mosque" : "mosques") near \(cityLabel)\(sortedNote)"
+        let sorted = nearbyCoord != nil && nearbyRefs.contains(where: { $0.lat != nil })
+        statusLabel.stringValue = pickerText(sorted ? "nearby.summary.sorted" : "nearby.summary",
+                                             cityLabel, n)
         for r in nearbyRefs {
             resultsStack.addArrangedSubview(makeRow(for: r, fromFavorites: false))
         }
@@ -5172,7 +5464,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         )
         bg.autoresizingMask = [.width, .height]
         row.addSubview(bg)
-        let lbl = NSTextField(labelWithString: label)
+        // The arrow points toward the reading direction's "back" edge.
+        let arrow = Localizer.shared.isRTL ? "→" : "←"
+        let lbl = NSTextField(labelWithString: "\(arrow) \(label)")
         lbl.frame = NSRect(x: 10, y: 7, width: rowW - 20, height: 18)
         lbl.font = Localizer.shared.font(size: 12, weight: .medium)
         lbl.textColor = .secondaryLabelColor
@@ -5223,7 +5517,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         flag.drawsBackground = false
         row.addSubview(flag)
         // Country name.
-        let name = NSTextField(labelWithString: country.name)
+        let name = NSTextField(labelWithString: country.displayName)
         name.frame = NSRect(x: 44, y: 13, width: rowW - 44 - 26, height: 18)
         name.font = Localizer.shared.font(size: 13, weight: .semibold)
         name.textColor = .labelColor
@@ -5438,6 +5732,8 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         defBtn.toolTip = isCurrent ? t("picker.tooltip.is_default")
                                    : t("picker.tooltip.set_default")
         defBtn.isEnabled = !isCurrent
+        defBtn.setAccessibilityLabel(defBtn.toolTip)
+        favBtn.setAccessibilityLabel(favBtn.toolTip)
         row.addSubview(defBtn)
 
         // ---------- Text block ---------------------------------------------
@@ -5454,6 +5750,9 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         name.textColor = isCurrent ? .appGreenAccent : .labelColor
         name.drawsBackground = false
         name.lineBreakMode = .byTruncatingTail
+        // Explicit (not natural) alignment so Latin city/address lines line
+        // up with the name; applyRTL below flips it for Arabic/Urdu.
+        name.alignment = .left
         name.toolTip = m.name
         row.addSubview(name)
         y += nameH
@@ -5466,6 +5765,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             city.textColor = .secondaryLabelColor
             city.drawsBackground = false
             city.lineBreakMode = .byTruncatingTail
+            city.alignment = .left
             city.toolTip = m.city
             row.addSubview(city)
             y += cityH
@@ -5479,6 +5779,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             addrLbl.textColor = .tertiaryLabelColor
             addrLbl.drawsBackground = false
             addrLbl.lineBreakMode = .byTruncatingTail
+            addrLbl.alignment = .left
             addrLbl.toolTip = addr
             row.addSubview(addrLbl)
         }
@@ -6498,7 +6799,9 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         case "right":
             constraints += [
                 dock.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -dockGap),
-                dock.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+                // Pinned to the top so expanding a section's modes grows the
+                // dock downward instead of re-centering (and jumping) it.
+                dock.topAnchor.constraint(equalTo: host.topAnchor, constant: dockGap),
                 contentContainer.leadingAnchor.constraint(equalTo: host.leadingAnchor),
                 contentContainer.trailingAnchor.constraint(equalTo: host.trailingAnchor,
                                                            constant: -dockLane),
@@ -6528,7 +6831,9 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         default: // left
             constraints += [
                 dock.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: dockGap),
-                dock.centerYAnchor.constraint(equalTo: host.centerYAnchor),
+                // Pinned to the top so expanding a section's modes grows the
+                // dock downward instead of re-centering (and jumping) it.
+                dock.topAnchor.constraint(equalTo: host.topAnchor, constant: dockGap),
                 contentContainer.leadingAnchor.constraint(equalTo: host.leadingAnchor,
                                                           constant: dockLane),
                 contentContainer.trailingAnchor.constraint(equalTo: host.trailingAnchor),
@@ -9274,8 +9579,43 @@ final class PrayerRingClockView: NSControl {
         }
         updateAccessibilityEventChildren()
 
+        let formatter = DateFormatter()
+        formatter.locale = preferredInterfaceLocale()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let digitalText = formatter.string(from: Date())
+        let digitalFont = Localizer.shared.font(size: 19, weight: .bold)
+        let digitalWidth = ceil((digitalText as NSString)
+            .size(withAttributes: [.font: digitalFont]).width) + 30
+        // The digital time sits below the hub unless an afternoon/evening
+        // prayer label wants that spot (e.g. Maghrib near 7 o'clock); then
+        // above the hub; and when both are taken it moves to the card's
+        // header row so it never sits on top of a prayer name.
+        let innerLabelRects: [NSRect] = displayedEvents.compactMap { event in
+            guard event.kind == .obligatory else { return nil }
+            let value = CGFloat((event.startMinute % 1440 + 1440) % 1440)
+            guard value >= 720 else { return nil }
+            let p = point(center: center, radius: inner - 39, minute: value)
+            return NSRect(x: p.x - 40, y: p.y - 12, width: 80, height: 24)
+        }
+        let digitalCandidates = [center.y + 40, center.y - 70].map {
+            NSRect(x: center.x - digitalWidth / 2, y: $0, width: digitalWidth, height: 30)
+        }
+        let digitalRect = digitalCandidates.first { candidate in
+            !innerLabelRects.contains { $0.insetBy(dx: -6, dy: -4).intersects(candidate) }
+        } ?? NSRect(x: bounds.midX - digitalWidth / 2, y: 14,
+                    width: digitalWidth, height: 28)
+
         // Obligatory labels remain larger than auxiliary markers and sit on
         // their AM/PM ring, so the clock can be read without a legend hunt.
+        // Each label is measured and nudged to the nearest free spot so close
+        // prayers (Maghrib/Isha) and the digital time never overlap; a soft
+        // pill keeps it legible over arcs and markers.
+        var occupied: [NSRect] = [
+            digitalRect,
+            NSRect(x: center.x - 12, y: center.y - 12, width: 24, height: 24),
+        ]
+        let labelFont = Localizer.shared.font(size: 13, weight: .bold)
         for event in displayedEvents where event.kind == .obligatory {
             let value = CGFloat((event.startMinute % 1440 + 1440) % 1440)
             let base = radius(for: value, outer: outer, inner: inner)
@@ -9283,12 +9623,39 @@ final class PrayerRingClockView: NSControl {
             NSColor.appAccent.setFill()
             NSBezierPath(ovalIn: NSRect(x: marker.x - 8, y: marker.y - 8,
                                         width: 16, height: 16)).fill()
-            let labelRadius = value < 720 ? outer + 42 : inner - 39
-            let label = point(center: center, radius: labelRadius, minute: value)
-            drawText(event.knowledge.title,
-                     in: NSRect(x: label.x - 55, y: label.y - 12,
-                                width: 110, height: 24),
-                     size: 13, weight: .bold, color: .labelColor)
+
+            let title = event.knowledge.title
+            let textSize = (title as NSString).size(withAttributes: [.font: labelFont])
+            let labelSize = NSSize(width: ceil(textSize.width) + 16,
+                                   height: max(22, ceil(textSize.height) + 2))
+            let isAM = value < 720
+            let baseRadius = isAM ? outer + 42 : inner - 39
+            let radialSteps: [CGFloat] = isAM ? [0, 14, 28] : [0, -14, 14, -26, 26, -38]
+            func rect(radius: CGFloat, minute: CGFloat) -> NSRect {
+                let p = point(center: center, radius: radius, minute: minute)
+                return NSRect(x: p.x - labelSize.width / 2, y: p.y - labelSize.height / 2,
+                              width: labelSize.width, height: labelSize.height)
+            }
+            var labelRect = rect(radius: baseRadius, minute: value)
+            search: for dr in radialSteps {
+                for dm: CGFloat in [0, -20, 20, -40, 40] {
+                    let candidate = rect(radius: baseRadius + dr, minute: value + dm)
+                    if !occupied.contains(where: {
+                        $0.insetBy(dx: -8, dy: -5).intersects(candidate)
+                    }) {
+                        labelRect = candidate
+                        break search
+                    }
+                }
+            }
+            occupied.append(labelRect)
+            (dark ? NSColor(white: 0.08, alpha: 0.82)
+                  : NSColor(white: 0.985, alpha: 0.86)).setFill()
+            NSBezierPath(roundedRect: labelRect,
+                         xRadius: labelRect.height / 2,
+                         yRadius: labelRect.height / 2).fill()
+            drawText(title, in: labelRect, size: 13, weight: .bold,
+                     color: .labelColor)
         }
 
         let now = Date()
@@ -9323,13 +9690,7 @@ final class PrayerRingClockView: NSControl {
         NSBezierPath(ovalIn: NSRect(x: center.x - 7, y: center.y - 7,
                                     width: 14, height: 14)).fill()
 
-        let formatter = DateFormatter()
-        formatter.locale = preferredInterfaceLocale()
-        formatter.dateStyle = .none
-        formatter.timeStyle = .short
-        drawText(formatter.string(from: now),
-                 in: NSRect(x: center.x - 90, y: center.y + 40,
-                            width: 180, height: 30),
+        drawText(digitalText, in: digitalRect,
                  size: 19, weight: .bold, color: .appGreenAccent)
 
         if let id = hoveredEventID ?? selectedEventID,
@@ -9506,16 +9867,16 @@ final class PrayerDisplayModeButton: NSButton {
         case .iconsText:
             if vertical { return compact ? 142 : 168 }
             let labelWidth = (localizedLabel as NSString).size(
-                withAttributes: [.font: NSFont.systemFont(ofSize: labelFontSize,
-                                                           weight: .semibold)]).width
+                withAttributes: [.font: Localizer.shared.font(size: labelFontSize,
+                                                               weight: .semibold)]).width
             return compact
                 ? min(148, max(76, ceil(labelWidth) + 44))
                 : min(184, max(96, ceil(labelWidth) + 56))
         case .text:
             if vertical { return compact ? 126 : 144 }
             let labelWidth = (localizedLabel as NSString).size(
-                withAttributes: [.font: NSFont.systemFont(ofSize: labelFontSize,
-                                                           weight: .semibold)]).width
+                withAttributes: [.font: Localizer.shared.font(size: labelFontSize,
+                                                               weight: .semibold)]).width
             return compact
                 ? min(136, max(60, ceil(labelWidth) + 22))
                 : min(170, max(76, ceil(labelWidth) + 28))
@@ -9524,12 +9885,10 @@ final class PrayerDisplayModeButton: NSButton {
 
     private func updateModeAppearance() {
         let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let roleColor: NSColor = buttonRole == .settings ? .systemOrange : .appAccent
-        let foreground = isModeSelected
-            ? roleColor
-            : (buttonRole == .settings
-                ? NSColor.systemOrange.withAlphaComponent(0.88)
-                : NSColor.secondaryLabelColor)
+        // Settings shares the app accent and only lights up when active; a
+        // permanent orange tint made it read as selected next to the green.
+        let roleColor: NSColor = .appAccent
+        let foreground = isModeSelected ? roleColor : NSColor.secondaryLabelColor
         contentTintColor = foreground
         if displayStyle == .iconsText {
             image = circularLabelSymbol(foreground: foreground,
@@ -9540,16 +9899,14 @@ final class PrayerDisplayModeButton: NSButton {
             attributedTitle = NSAttributedString(
                 string: localizedLabel,
                 attributes: [
-                    .font: NSFont.systemFont(ofSize: compact ? 11 : 12.5,
-                                             weight: .semibold),
+                    .font: Localizer.shared.font(size: compact ? 11 : 12.5,
+                                                 weight: .semibold),
                     .foregroundColor: foreground,
                 ])
         }
         let background: NSColor
         if isModeSelected {
             background = roleColor.withAlphaComponent(dark ? 0.18 : 0.09)
-        } else if buttonRole == .settings {
-            background = NSColor.systemOrange.withAlphaComponent(dark ? 0.09 : 0.055)
         } else if isHovering {
             background = NSColor.labelColor.withAlphaComponent(dark ? 0.10 : 0.055)
         } else {
@@ -9888,7 +10245,7 @@ final class MainDockView: NSView {
             capsule.layer?.shadowRadius = 10
             capsule.layer?.shadowOffset = NSSize(width: 0, height: -2)
         }
-        let drawerColor: NSColor = isSettingsActive ? .systemOrange : .appAccent
+        let drawerColor: NSColor = .appAccent
         drawerHost.layer?.backgroundColor = drawerColor
             .withAlphaComponent(dark ? 0.105 : 0.065).cgColor
         drawerHost.layer?.borderWidth = 1
@@ -10515,8 +10872,11 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             content.autoresizingMask = [.width, .height]
             card.addSubview(content)
 
-            let mode = NSButton(frame: NSRect(x: isRTL ? 2 : tileWidth - 46,
-                                              y: 2, width: 44, height: 44))
+            // Icon buttons sit in the top corners and the prayer name gets
+            // the full card width on its own line; squeezing the name between
+            // two 44 pt buttons left ~36 pt and truncated it to "الـ…".
+            let mode = NSButton(frame: NSRect(x: isRTL ? 4 : tileWidth - 40,
+                                              y: 4, width: 36, height: 36))
             mode.isBordered = false
             mode.title = ""
             mode.tag = index
@@ -10531,19 +10891,18 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             if let knowledge = knowledge(forPrayer: index) {
                 content.addSubview(makeInfoButton(
                     for: knowledge,
-                    frame: NSRect(x: isRTL ? tileWidth - 46 : 2,
-                                  y: 2, width: 44, height: 44)))
+                    frame: NSRect(x: isRTL ? tileWidth - 40 : 4,
+                                  y: 4, width: 36, height: 36)))
             }
 
-            let nameX: CGFloat = 46
             content.addSubview(dashboardLabel(app.localizedPrayerName(at: index),
-                frame: NSRect(x: nameX, y: 14, width: tileWidth - 92, height: 24),
+                frame: NSRect(x: 8, y: 38, width: tileWidth - 16, height: 24),
                 size: 15.5, weight: .semibold,
                 color: index == nextIndex ? .appGreenAccent : .labelColor,
                 alignment: .center))
             let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
             let adhan = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
-                frame: NSRect(x: 10, y: 54, width: tileWidth - 20, height: 36),
+                frame: NSRect(x: 10, y: 66, width: tileWidth - 20, height: 36),
                 size: 27, weight: .semibold,
                 color: index == nextIndex ? .appGreenAccent : .labelColor,
                 alignment: .center)
@@ -10605,22 +10964,27 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                 y: frame.minY, width: cardWidth, height: frame.height))
             card.cornerRadius = 13
             parent.addSubview(card)
-            let icon = NSImageView(frame: NSRect(x: isRTL ? cardWidth - 38 : 14,
-                                                 y: 14, width: 20, height: 20))
+            // AdaptiveCardView is bottom-origin; without a flipped container
+            // the title rendered at the bottom and the note at the top.
+            let content = FlippedView(frame: card.bounds)
+            content.autoresizingMask = [.width, .height]
+            card.addSubview(content)
+            let icon = NSImageView(frame: NSRect(x: isRTL ? cardWidth - 34 : 14,
+                                                 y: 11, width: 20, height: 20))
             icon.image = templateSymbol(item.symbol, pointSize: 14, weight: .semibold)
             icon.contentTintColor = .appGreenAccent
-            card.addSubview(icon)
-            let textX: CGFloat = isRTL ? 12 : 44
-            card.addSubview(dashboardLabel(item.title,
-                frame: NSRect(x: textX, y: 10, width: cardWidth - 56, height: 22),
+            content.addSubview(icon)
+            let textX: CGFloat = isRTL ? 12 : 42
+            content.addSubview(dashboardLabel(item.title,
+                frame: NSRect(x: textX, y: 10, width: cardWidth - 54, height: 22),
                 size: 13, weight: .semibold))
             let value = item.value.isEmpty ? "—" : item.value
             let time = dashboardLabel(value,
                 frame: NSRect(x: 12, y: 34, width: cardWidth - 24, height: 24),
                 size: 17, weight: .semibold, alignment: .center)
             time.font = NSFont.monospacedDigitSystemFont(ofSize: 17, weight: .semibold)
-            card.addSubview(time)
-            card.addSubview(dashboardLabel(item.note,
+            content.addSubview(time)
+            content.addSubview(dashboardLabel(item.note,
                 frame: NSRect(x: 10, y: 61, width: cardWidth - 20, height: 15),
                 size: 10.5, color: .secondaryLabelColor, alignment: .center))
         }
@@ -10628,9 +10992,12 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func addIntegratedNawafilSummary(to parent: NSView, app: AppDelegate,
                                                frame: NSRect) {
-        let card = AdaptiveCardView(frame: frame)
-        card.cornerRadius = 13
-        parent.addSubview(card)
+        let cardView = AdaptiveCardView(frame: frame)
+        cardView.cornerRadius = 13
+        parent.addSubview(cardView)
+        let card = FlippedView(frame: cardView.bounds)
+        card.autoresizingMask = [.width, .height]
+        cardView.addSubview(card)
         let rows = nawafilData(app: app)
         let isRTL = Localizer.shared.isRTL
         let columnWidth = frame.width / CGFloat(rows.count)
@@ -10655,7 +11022,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                 frame: NSRect(x: textX, y: 39, width: columnWidth - 50, height: 18),
                 size: 11, weight: .medium, color: .appGreenAccent, alignment: .center))
         }
-        card.setAccessibilityLabel(featureText("full.nawafil.integrated"))
+        cardView.setAccessibilityLabel(featureText("full.nawafil.integrated"))
     }
 
     private func buildTimeline(in body: NSView, app: AppDelegate,
@@ -10718,7 +11085,9 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
         let header = FlippedView(frame: NSRect(x: x, y: 14, width: width, height: 80))
         body.addSubview(header)
-        let heading = listLabel(featureText("full.view.list"), size: 24,
+        // Every view mode shares the same page title; the mode itself is
+        // already shown by the selected dock item.
+        let heading = listLabel(t("main.tab.prayer_times"), size: 24,
                                 weight: .bold)
         let mosque = listLabel(mosqueName, size: 12,
                                color: .secondaryLabelColor)
@@ -10992,11 +11361,11 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private func buildClock(in body: NSView, app: AppDelegate,
                             x: CGFloat, width: CGFloat) {
         let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        body.addSubview(dashboardLabel(featureText("full.view.clock"),
-            frame: NSRect(x: x, y: 20, width: width, height: 32),
+        body.addSubview(dashboardLabel(t("main.tab.prayer_times"),
+            frame: NSRect(x: x, y: 20, width: width, height: 30),
             size: 24, weight: .bold))
         body.addSubview(dashboardLabel("\(mosqueName) · \(localizedLongDate())",
-            frame: NSRect(x: x, y: 52, width: width, height: 21),
+            frame: NSRect(x: x, y: 50, width: width, height: 18),
             size: 12, color: .secondaryLabelColor))
         let names = (0..<5).map { app.localizedPrayerName(at: $0) }
         let clockHeight = PrayerRingClockView.preferredHeight(for: width)
@@ -15689,7 +16058,6 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let labelW: CGFloat = 190
         var y: CGFloat = 26
         var rowY: CGFloat = 0
-        var cardHeight: CGFloat = 0
 
         func sectionHeader(_ title: String, subtitle: String? = nil) {
             let label = NSTextField(labelWithString: title)
@@ -15720,25 +16088,26 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             }
         }
 
-        func beginCard(rows: Int) -> (NSView, CGFloat) {
-            let h = CGFloat(rows) * rowH
+        /// Cards grow with the rows actually added, so a section can never
+        /// overflow its card (a hand-maintained row count once pushed the
+        /// last General row outside it). A flipped content view keeps the
+        /// row math top-down.
+        func beginCard() -> NSView {
             let card = AdaptiveCardView(frame: NSRect(x: cardX, y: y,
-                                                       width: cardW, height: h))
+                                                       width: cardW, height: rowH))
             card.addsDepth = true
             body.addSubview(card)
+            let content = FlippedView(frame: card.bounds)
+            content.autoresizingMask = [.width, .height]
+            card.addSubview(content)
             rowY = 0
-            cardHeight = h
-            return (card, h)
+            return content
         }
 
-        // The card is a plain (non-flipped) view, so frame math converts each
-        // logical top-down row index into bottom-origin coordinates. Rows now
-        // appear in the same order they are added — previously every card
-        // rendered its rows reversed.
         func addRow(_ card: NSView, label text: String, control: NSView) {
-            let rowBottom = cardHeight - rowY - rowH
+            let rowTop = rowY
             if rowY > 0 {
-                let separator = NSBox(frame: NSRect(x: 14, y: rowBottom + rowH,
+                let separator = NSBox(frame: NSRect(x: 14, y: rowTop,
                                                      width: cardW - 28, height: 1))
                 separator.boxType = .separator
                 card.addSubview(separator)
@@ -15755,33 +16124,39 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                 let labelHeight = max(20, localizedTextHeight(text, font: label.font!,
                                                              width: labelW))
                 label.frame = NSRect(x: labelX,
-                                     y: rowBottom + (rowH - labelHeight) / 2,
+                                     y: rowTop + (rowH - labelHeight) / 2,
                                      width: labelW, height: labelHeight)
                 card.addSubview(label)
             }
             var x = text.isEmpty ? 14 : controlX
             var w = text.isEmpty ? cardW - 28 : controlW
             // A push button stretched across the card reads as a banner, not
-            // a control — give unlabeled action buttons a natural width.
+            // a control: give unlabeled action buttons a natural width and
+            // line them up with the value column above them.
             if text.isEmpty, let button = control as? NSButton,
                button.bezelStyle == .rounded {
                 w = 160
-                x = isRTL ? cardW - 14 - w : 14
+                x = isRTL ? controlX + controlW - w : controlX
             }
-            control.frame = NSRect(x: x, y: rowBottom + 8, width: w, height: 28)
+            // Checkboxes (and every other control) follow the reading
+            // direction so the box sits on the leading edge in Arabic/Urdu.
+            control.userInterfaceLayoutDirection = isRTL ? .rightToLeft : .leftToRight
+            control.frame = NSRect(x: x, y: rowTop + 8, width: w, height: 28)
             card.addSubview(control)
             rowY += rowH
         }
 
-        func endCard(_ height: CGFloat) { y += height + 30 }
+        func endCard(_ card: NSView) {
+            card.superview?.setFrameSize(NSSize(width: cardW, height: rowY))
+            y += rowY + 30
+        }
 
         if selectedSection == .general {
             // General settings are deliberately shared by prayer times,
             // Adhan, and Adhkar. There is one language and one visual system
             // everywhere.
             sectionHeader(featureText("settings.general"))
-            let generalRows = 9 + (Localizer.shared.isArabic ? 1 : 0)
-            let (generalCard, generalH) = beginCard(rows: generalRows)
+            let generalCard = beginCard()
 
         languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
         kSupportedLanguages.forEach { languagePopup.addItem(withTitle: $0.nativeName) }
@@ -15822,13 +16197,19 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         appearanceSeg.action = #selector(appearanceChanged(_:))
         addRow(generalCard, label: t("settings.section.appearance"), control: appearanceSeg)
 
-        let swatchContainer = NSView()
+        // Swatches start on the leading edge of the value column; in RTL they
+        // are laid out from the right and pinned there as the row resizes.
+        let swatchesWidth = CGFloat(kAccentOrder.count) * 38 - 8
+        let swatchContainer = NSView(frame: NSRect(x: 0, y: 0,
+                                                   width: swatchesWidth, height: 28))
         var swatchX: CGFloat = 0
         for key in kAccentOrder {
             let swatch = AccentSwatchButton(key: key, diameter: 28,
                                             target: self,
                                             action: #selector(accentTapped(_:)))
-            swatch.frame = NSRect(x: swatchX, y: 0, width: 30, height: 28)
+            swatch.frame = NSRect(x: isRTL ? swatchesWidth - swatchX - 30 : swatchX,
+                                  y: 0, width: 30, height: 28)
+            swatch.autoresizingMask = isRTL ? [.minXMargin] : [.maxXMargin]
             swatch.isSelectedSwatch = key == currentAccentKey()
             swatchContainer.addSubview(swatch)
             accentSwatches.append(swatch)
@@ -15913,13 +16294,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         openAtLoginCheck.state = isOpenAtLoginEnabled() ? .on : .off
         addRow(generalCard, label: t("settings.section.startup"), control: openAtLoginCheck)
 
-            endCard(generalH)
+            endCard(generalCard)
         }
 
         if selectedSection == .menuBar {
             sectionHeader(t("settings.section.menu_bar"),
                           subtitle: featureText("settings.menu_bar.help"))
-            let (menuCard, menuH) = beginCard(rows: 4)
+            let menuCard = beginCard()
 
             barIconCheck = NSButton(checkboxWithTitle: t("settings.bar.icon"),
                                     target: self,
@@ -15952,13 +16333,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             barHijriPopup.target = self
             barHijriPopup.action = #selector(barHijriFormatChanged(_:))
             addRow(menuCard, label: t("settings.bar.hijri"), control: barHijriPopup)
-            endCard(menuH)
+            endCard(menuCard)
         }
 
         if selectedSection == .adhan {
             // Complete Adhan controls live here as well as in the compact popup.
             sectionHeader(t("settings.section.adhan"))
-            let (adhanCard, adhanH) = beginCard(rows: 8)
+            let adhanCard = beginCard()
         adhanCheck = NSButton(checkboxWithTitle: t("settings.adhan.play"), target: self,
                               action: #selector(adhanEnabledChanged(_:)))
         adhanCheck.state = UserDefaults.standard.bool(forKey: kAdhanEnabled) ? .on : .off
@@ -16024,11 +16405,11 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         preAdhanPopup.target = self
         preAdhanPopup.action = #selector(preAdhanChanged(_:))
         addRow(adhanCard, label: t("settings.notif.headsup"), control: preAdhanPopup)
-            endCard(adhanH)
+            endCard(adhanCard)
 
             sectionHeader(featureText("settings.prayer_modes"),
                           subtitle: featureText("settings.prayer_modes.help"))
-            let (modesCard, modesH) = beginCard(rows: prayerLabels.count)
+            let modesCard = beginCard()
             perPrayerModePopups.removeAll()
             let prayerKeys = ["prayer.fajr", "prayer.dhuhr", "prayer.asr",
                               "prayer.maghrib", "prayer.isha"]
@@ -16046,14 +16427,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                 perPrayerModePopups.append(popup)
                 addRow(modesCard, label: t(prayerKeys[index]), control: popup)
             }
-            endCard(modesH)
+            endCard(modesCard)
         }
 
         if selectedSection == .adhkar {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
             sectionHeader(t("settings.section.adhkar"))
-            let (adhkarCard, adhkarH) = beginCard(rows: 7)
+            let adhkarCard = beginCard()
         adhkarAutoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                       target: self,
                                       action: #selector(adhkarAutoPlayChanged(_:)))
@@ -16114,7 +16495,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         afterAdhanDelayPopup.action = #selector(afterAdhanDelayChanged(_:))
         addRow(adhkarCard, label: featureText("adhkar.after_adhan"),
                control: afterAdhanDelayPopup)
-            endCard(adhkarH)
+            endCard(adhkarCard)
         }
 
         let footer = NSTextField(labelWithString: "Salat Time v\(kAppVersion) · Hisn al-Muslim")
@@ -18148,6 +18529,10 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         editorRoot.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(editorRoot)
         readingRoot = NSView()
+        // Leading/trailing anchors follow each view's own direction, which
+        // defaults to the (English) app bundle; without this the reading list
+        // sat on the trailing side in Arabic.
+        readingRoot.userInterfaceLayoutDirection = v.userInterfaceLayoutDirection
         readingRoot.translatesAutoresizingMaskIntoConstraints = false
         v.addSubview(readingRoot)
         NSLayoutConstraint.activate([
@@ -18409,6 +18794,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         readingSourceLabel.lineBreakMode = .byTruncatingTail
         for label in [readingVirtueLabel!, readingSourceLabel!] {
             label.translatesAutoresizingMaskIntoConstraints = false
+            // Below the window's stay-put priority: a long virtue or source
+            // line must wrap/truncate, not widen the whole window.
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             readingCard.addSubview(label)
         }
 
@@ -18441,18 +18829,19 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         readingTimeLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         readingTimeLabel.textColor = .tertiaryLabelColor
 
-        let isRTL = Localizer.shared.isRTL
+        // Media transport controls keep their left-to-right order and glyphs
+        // in every language (Apple HIG: playback direction isn't mirrored).
         let controlSize = NSSize(width: 44, height: 40)
         let previousButton = HoverIconButton(
-            symbol: isRTL ? "forward.fill" : "backward.fill",
-            toolTip: t("adhkar.previous"), target: self,
+            symbol: "backward.fill",
+            toolTip: t("adhkar.prev"), target: self,
             action: #selector(playerPrev(_:)), pointSize: 15, size: controlSize)
         readingPlayButton = HoverIconButton(
             symbol: "play.fill", toolTip: t("adhkar.play"), target: self,
             action: #selector(readingTogglePlay(_:)), pointSize: 20,
             size: NSSize(width: 56, height: 48))
         let nextButton = HoverIconButton(
-            symbol: isRTL ? "backward.fill" : "forward.fill",
+            symbol: "forward.fill",
             toolTip: t("adhkar.next"), target: self,
             action: #selector(playerNext(_:)), pointSize: 15, size: controlSize)
         let stopButton = HoverIconButton(
@@ -18464,7 +18853,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         controls.orientation = .horizontal
         controls.alignment = .centerY
         controls.spacing = 10
-        controls.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
+        controls.userInterfaceLayoutDirection = .leftToRight
         controls.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(controls)
 
@@ -19134,12 +19523,23 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
 
     private func rebuildCollectionList() {
         collectionList.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        var selectedRow: NSView?
         for c in collections {
             let row = makeCollectionRow(c)
             collectionList.addArrangedSubview(row)
             // Pin each row's width to the stack so rows fill the pane.
             row.leadingAnchor.constraint(equalTo: collectionList.leadingAnchor).isActive = true
             row.trailingAnchor.constraint(equalTo: collectionList.trailingAnchor).isActive = true
+            if c.id == selectedCollectionID { selectedRow = row }
+        }
+        // The stack isn't flipped, so the scroll view used to open part-way
+        // down the list; always bring the selected group into view.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.collectionList.layoutSubtreeIfNeeded()
+            if let row = selectedRow ?? self.collectionList.arrangedSubviews.first {
+                row.scrollToVisible(row.bounds)
+            }
         }
     }
 
@@ -19197,7 +19597,8 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
         // Play button — opens the floating panel and starts recitation.
         // Play button. For RTL, use "backward.fill" (◀) which already points
         // left — much more reliable than flipping images at runtime.
-        let playSymbol = Localizer.shared.isRTL ? "backward.fill" : "play.fill"
+        // Play glyphs are never mirrored; "backward.fill" read as rewind.
+        let playSymbol = "play.fill"
         let playBtn = HoverIconButton(symbol: playSymbol,
                                        toolTip: t("adhkar.play"),
                                        target: self,
@@ -19622,10 +20023,12 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
                 summary, languageCode: Localizer.shared.current.code)
         }
         if base.hasPrefix("bundled:") {
-            return "Bundled · " + String(base.dropFirst("bundled:".count)) + suffix
+            return featureText("audio.bundled") + " · \u{2066}"
+                + String(base.dropFirst("bundled:".count)) + "\u{2069}" + suffix
         }
         if base.hasPrefix("imported:") {
-            return "Imported · " + String(base.dropFirst("imported:".count)) + suffix
+            return featureText("audio.imported") + " · \u{2066}"
+                + String(base.dropFirst("imported:".count)) + "\u{2069}" + suffix
         }
         return t("adhkar.editor.audio.none")
     }
