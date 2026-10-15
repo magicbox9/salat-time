@@ -127,7 +127,7 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.41.0"
+let kAppVersion          = "3.42.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -13226,7 +13226,7 @@ private final class QuranMushafTextView: NSTextView {
         // Only treat it as a verse tap when the user didn't drag a manual
         // text selection.
         if selectedRange().length == 0 || clickCount >= 2 {
-            reader?.handleMushafClick(at: index, clickCount: clickCount)
+            reader?.handleMushafClick(at: index, clickCount: clickCount, in: self)
         }
     }
 }
@@ -14314,6 +14314,39 @@ final class QuranViewController: NSViewController, MainTabContent,
     private var mushafText: QuranMushafTextView!
     private var mushafHeaderLabel: NSTextField!
     private var mushafPageLabel: NSTextField!
+    /// Page surfaces: [0] is the single page (or the right-hand page of a
+    /// spread), [1] the facing left-hand page.
+    private var mushafSurfaces: [MushafPageSurface] = []
+    private var displayedMushafPages: [Int] = []
+
+    private final class MushafPageSurface {
+        let card = QuranMushafCardView()
+        let text = QuranMushafTextView(frame: .zero)
+        let header = NSTextField(labelWithString: "")
+        let pageLabel = NSTextField(labelWithString: "")
+        var ranges: [(range: NSRange, verse: OfflineQuranVerse)] = []
+        var page = 0
+
+        init(reader: QuranViewController, in document: NSView) {
+            document.addSubview(card)
+            header.alignment = .center
+            header.lineBreakMode = .byTruncatingMiddle
+            card.addSubview(header)
+            pageLabel.alignment = .center
+            card.addSubview(pageLabel)
+            text.reader = reader
+            text.isEditable = false
+            text.isSelectable = true
+            text.isRichText = false
+            text.drawsBackground = false
+            text.textContainerInset = NSSize(width: 4, height: 4)
+            text.textContainer?.lineFragmentPadding = 0
+            text.isVerticallyResizable = false
+            text.isHorizontallyResizable = false
+            text.setAccessibilityLabel(quranReaderText("mode.mushaf"))
+            card.addSubview(text)
+        }
+    }
     private var lastMushafViewport = NSSize.zero
 
     private var settingsPopover: NSPopover?
@@ -14350,7 +14383,6 @@ final class QuranViewController: NSViewController, MainTabContent,
         ?? "verses"
     private var currentPage = 1
     private var totalPages = 604
-    private var mushafRanges: [(range: NSRange, verse: OfflineQuranVerse)] = []
 
     // Recitation, memorization, navigator, and reading progress.
     private let recitation = QuranRecitationPlayer()
@@ -14581,30 +14613,13 @@ final class QuranViewController: NSViewController, MainTabContent,
         mushafDocument = FlippedView()
         mushafPageScroll.documentView = mushafDocument
 
-        mushafCard = QuranMushafCardView()
-        mushafDocument.addSubview(mushafCard)
-
-        mushafHeaderLabel = NSTextField(labelWithString: "")
-        mushafHeaderLabel.alignment = .center
-        mushafHeaderLabel.lineBreakMode = .byTruncatingMiddle
-        mushafCard.addSubview(mushafHeaderLabel)
-
-        mushafPageLabel = NSTextField(labelWithString: "")
-        mushafPageLabel.alignment = .center
-        mushafCard.addSubview(mushafPageLabel)
-
-        mushafText = QuranMushafTextView(frame: .zero)
-        mushafText.reader = self
-        mushafText.isEditable = false
-        mushafText.isSelectable = true
-        mushafText.isRichText = false
-        mushafText.drawsBackground = false
-        mushafText.textContainerInset = NSSize(width: 4, height: 4)
-        mushafText.textContainer?.lineFragmentPadding = 0
-        mushafText.isVerticallyResizable = false
-        mushafText.isHorizontallyResizable = false
-        mushafText.setAccessibilityLabel(quranReaderText("mode.mushaf"))
-        mushafCard.addSubview(mushafText)
+        mushafSurfaces = [MushafPageSurface(reader: self, in: mushafDocument),
+                          MushafPageSurface(reader: self, in: mushafDocument)]
+        mushafSurfaces[1].card.isHidden = true
+        mushafCard = mushafSurfaces[0].card
+        mushafText = mushafSurfaces[0].text
+        mushafHeaderLabel = mushafSurfaces[0].header
+        mushafPageLabel = mushafSurfaces[0].pageLabel
 
         NSLayoutConstraint.activate([
             mushafPageScroll.leadingAnchor.constraint(equalTo: backdrop.leadingAnchor),
@@ -15160,7 +15175,11 @@ final class QuranViewController: NSViewController, MainTabContent,
             ? verse.suraNameArabic : verse.suraNameEnglish
         var parts = [name,
                      quranStudyText("juz.title", String(verse.jozz)),
-                     quranStudyText("page.short", String(page)),
+                     quranStudyText("page.short",
+                                    isMushaf && displayedMushafPages.count == 2
+                                        ? displayedMushafPages.sorted().map(String.init)
+                                            .joined(separator: "–")
+                                        : String(page)),
                      quranStudyText("progress.today", QuranReadingLog.pagesToday())]
         let streak = QuranReadingLog.streak()
         if streak > 1 { parts.append(quranStudyText("progress.streak", streak)) }
@@ -15212,7 +15231,14 @@ final class QuranViewController: NSViewController, MainTabContent,
         })?.pageStart ?? currentPage
     }
 
-    fileprivate func movePage(by delta: Int) { goToPage(currentPage + delta) }
+    fileprivate func movePage(by delta: Int) {
+        // An open book turns a whole spread at a time.
+        if displayedMushafPages.count == 2, let first = displayedMushafPages.min() {
+            goToPage(first + 2 * delta)
+        } else {
+            goToPage(currentPage + delta)
+        }
+    }
 
     private func goToPage(_ page: Int, keepSelection: Bool = false) {
         guard !verses.isEmpty else { return }
@@ -15264,18 +15290,263 @@ final class QuranViewController: NSViewController, MainTabContent,
     /// per font (with the publisher face, word widths are the print's own).
     /// The page carries a printed-Mushaf aspect and an illuminated frame;
     /// scale 1.0 fits the whole page and the size control zooms the entire
-    /// page uniformly inside its scroll surface.
+    /// page uniformly inside its scroll surface. When the window is wide
+    /// enough for two fitted pages, the reader opens as a book: the odd
+    /// (lower) page on the right, its facing page on the left, both set in
+    /// the same type size.
     private func renderMushafPage() {
-        guard mushafText != nil, !verses.isEmpty else { return }
-        let pageVerses = verses.filter { $0.pageStart == currentPage }
-            .sorted { $0.id < $1.id }
-        visibleVerses = pageVerses
+        guard !mushafSurfaces.isEmpty, !verses.isEmpty else { return }
         let palette = self.palette
-        guard !pageVerses.isEmpty else {
-            mushafText.string = ""
-            mushafRanges = []
+        let referenceSize: CGFloat = 24
+
+        // -- page geometry: one constant sheet, like a physical mushaf.
+        // Every page of the book shares the same dimensions (derived from
+        // the window, zoomed by the size control); the type is then fitted
+        // into that fixed sheet, never the other way around.
+        let sidePad = QuranMushafCardView.textInset
+        let headerBand: CGFloat = 54
+        let footerBand: CGFloat = 52
+        let viewport = mushafPageScroll.contentSize
+        let viewportHeight = viewport.height > 100 ? viewport.height
+            : max(320, backdrop.bounds.height - 34)
+        let viewportWidth = viewport.width > 100 ? viewport.width
+            : max(360, backdrop.bounds.width)
+        let pageAspect: CGFloat = 1.46
+        var basePageHeight = viewportHeight - 26
+        var basePageWidth = basePageHeight / pageAspect
+        if basePageWidth > viewportWidth - 44 {
+            basePageWidth = viewportWidth - 44
+            basePageHeight = basePageWidth * pageAspect
+        }
+        let pageWidth = max(330, basePageWidth * textScale)
+        let pageHeight = pageWidth * pageAspect
+        let textWidth = pageWidth - sidePad * 2
+        let targetLineWidth = textWidth - 8
+        // Fixed 15-row grid: the print's line height is a constant fraction
+        // of the sheet, whatever face is selected. The face is sized to the
+        // grid, capped so the densest line of this page still fits the
+        // measure (justification can stretch lines, never compress them).
+        let lineHeightFactor: CGFloat = 1.95
+        let textBlockHeight = pageHeight - headerBand - footerBand - 20
+        let lineHeight = textBlockHeight / 15.4
+        // -- single page or an open book (two facing pages)
+        let spreadGap: CGFloat = 26
+        let spread = textScale <= 1.001 && totalPages > 1
+            && viewportWidth >= pageWidth * 2 + spreadGap + 44
+        let pages: [Int]
+        if spread {
+            let first = currentPage % 2 == 1 ? currentPage : currentPage - 1
+            pages = [first, first + 1].filter { (1...totalPages).contains($0) }
+        } else {
+            pages = [currentPage]
+        }
+        let plans = pages.compactMap(planMushafPage)
+        displayedMushafPages = plans.map(\.page)
+        visibleVerses = plans.flatMap(\.verses)
+        guard !plans.isEmpty else {
+            for surface in mushafSurfaces {
+                surface.text.string = ""
+                surface.ranges = []
+            }
             return
         }
+        plans.forEach { QuranReadingLog.record(page: $0.page) }
+        let widestLine = plans.map(\.widestLine).max() ?? 1
+        let bodySize = max(9, min(lineHeight / lineHeightFactor,
+                                  referenceSize * (targetLineWidth - 6) / widestLine * 0.98))
+
+        let bodyFont = quranScriptFont(size: bodySize)
+        let bannerFont = quranScriptFont(size: bodySize * 0.95)
+        let bismillahFont = quranScriptFont(size: bodySize * 0.9)
+
+        var textHeights: [CGFloat] = []
+        for (surface, plan) in zip(mushafSurfaces, plans) {
+            let maxLine = plan.maxLine
+            let bannerLines = plan.bannerLines
+            let bismillahLines = plan.bismillahLines
+            let bodyLines = plan.bodyLines
+            let bodyParagraph = NSMutableParagraphStyle()
+            bodyParagraph.alignment = .right
+            bodyParagraph.baseWritingDirection = .rightToLeft
+            bodyParagraph.lineBreakMode = .byWordWrapping
+            bodyParagraph.minimumLineHeight = lineHeight
+            bodyParagraph.maximumLineHeight = lineHeight
+            let centered = NSMutableParagraphStyle()
+            centered.alignment = .center
+            centered.baseWritingDirection = .rightToLeft
+            centered.minimumLineHeight = lineHeight
+            centered.maximumLineHeight = lineHeight
+
+            // -- compose. Body lines break at the solved cuts (U+2028) and are
+            // then hand-justified: the slack to the full measure is distributed
+            // over the line's word spaces, so every line of the column ends at
+            // exactly the same length, like the printed page. (TextKit's own
+            // justification ignores lines ended by explicit breaks.)
+            let result = NSMutableAttributedString()
+            var ranges: [(range: NSRange, verse: OfflineQuranVerse)] = []
+            var inBodyBlock = false
+            func endBodyBlock() {
+                guard inBodyBlock else { return }
+                result.append(NSAttributedString(string: "\n", attributes:
+                    [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+                inBodyBlock = false
+            }
+            func justifyLine(_ lineRange: NSRange) {
+                guard lineRange.length > 0 else { return }
+                let text = (result.string as NSString).substring(with: lineRange)
+                let natural = (text as NSString).size(withAttributes: [.font: bodyFont]).width
+                let slack = targetLineWidth - 2 - natural
+                guard slack > 0.5 else { return }
+                var spaceOffsets: [Int] = []
+                let nsText = text as NSString
+                for offset in 0..<nsText.length where nsText.character(at: offset) == 32 {
+                    spaceOffsets.append(lineRange.location + offset)
+                }
+                guard !spaceOffsets.isEmpty else { return }
+                let kern = min(slack / CGFloat(spaceOffsets.count), bodySize * 1.8)
+                for offset in spaceOffsets {
+                    result.addAttribute(.kern, value: kern,
+                                        range: NSRange(location: offset, length: 1))
+                }
+            }
+            for line in 1...maxLine {
+                if let banner = bannerLines[line] {
+                    endBodyBlock()
+                    result.append(NSAttributedString(
+                        string: "۞ سُورَةُ \(banner) ۞\n",
+                        attributes: [.font: bannerFont,
+                                     .foregroundColor: palette.gold,
+                                     .paragraphStyle: centered]))
+                    continue
+                }
+                if bismillahLines.contains(line) {
+                    result.append(NSAttributedString(
+                        string: bismillahText + "\n",
+                        attributes: [.font: bismillahFont,
+                                     .foregroundColor: palette.primary.withAlphaComponent(0.92),
+                                     .paragraphStyle: centered]))
+                    continue
+                }
+                guard let segments = bodyLines[line], !segments.isEmpty else {
+                    endBodyBlock()
+                    result.append(NSAttributedString(string: "\n", attributes:
+                        [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+                    continue
+                }
+                if inBodyBlock {
+                    result.append(NSAttributedString(string: "\u{2028}", attributes:
+                        [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+                }
+                let lineStart = result.length
+                for (index, segment) in segments.enumerated() {
+                    if index > 0 {
+                        result.append(NSAttributedString(string: " ", attributes:
+                            [.font: bodyFont, .paragraphStyle: bodyParagraph]))
+                    }
+                    let location = result.length
+                    result.append(NSAttributedString(
+                        string: segment.text,
+                        attributes: [.font: bodyFont, .foregroundColor: palette.primary,
+                                     .paragraphStyle: bodyParagraph]))
+                    if let verse = segment.verse {
+                        ranges.append((NSRange(location: location,
+                                               length: segment.text.utf16.count), verse))
+                    }
+                }
+                justifyLine(NSRange(location: lineStart, length: result.length - lineStart))
+                inBodyBlock = true
+            }
+            surface.text.textStorage?.setAttributedString(result)
+            surface.ranges = ranges
+            surface.page = plan.page
+            surface.card.palette = palette
+
+            // Measure the typeset block so it can be centered between the
+            // header cartouche and the page-number medallion (ornamental
+            // short pages float centered).
+            surface.text.textContainer?.containerSize = NSSize(
+                width: textWidth - 8, height: CGFloat.greatestFiniteMagnitude)
+            var textHeight: CGFloat = 200
+            if let layoutManager = surface.text.layoutManager,
+               let container = surface.text.textContainer {
+                layoutManager.ensureLayout(for: container)
+                textHeight = ceil(layoutManager.usedRect(for: container).height) + 10
+            }
+            textHeights.append(textHeight)
+
+            let suraNames = plan.verses.reduce(into: [String]()) { list, verse in
+                if list.last != verse.suraNameArabic { list.append(verse.suraNameArabic) }
+            }
+            let juzList = Set(plan.verses.map(\.jozz)).sorted()
+            let juzText = juzList.map { localizedInterfaceDigits(String($0)) }
+                .joined(separator: "، ")
+            surface.header.stringValue = suraNames.joined(separator: " · ")
+                + "  ·  \(quranReaderText("juz")) \(juzText)"
+            // Interface font: Qur'an-only faces (Amiri Quran) lack glyphs for
+            // plain UI text, so the running head must not use the script face.
+            surface.header.font = Localizer.shared.font(size: 13, weight: .semibold)
+            surface.header.textColor = palette.gold
+            surface.pageLabel.stringValue =
+                "\(localizedInterfaceDigits(String(plan.page))) / \(localizedInterfaceDigits(String(totalPages)))"
+            surface.pageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
+            surface.pageLabel.textColor = palette.gold
+            surface.text.toolTip = quranReaderText("mushaf.keys")
+        }
+        applyMushafSelectionHighlight()
+
+        // -- lay the sheet(s) out: one centered page, or an open book whose
+        // first (lower) page sits on the right, as a Mushaf opens.
+        let shown = plans.count
+        let totalWidth = pageWidth * CGFloat(shown) + spreadGap * CGFloat(shown - 1)
+        let documentWidth = max(viewportWidth, totalWidth + 36)
+        let documentHeight = max(viewportHeight, pageHeight + 32)
+        mushafDocument.frame = NSRect(x: 0, y: 0, width: documentWidth,
+                                      height: documentHeight)
+        let originX = (documentWidth - totalWidth) / 2
+        let cardY = max(16, (documentHeight - pageHeight) / 2)
+        for (index, surface) in mushafSurfaces.enumerated() {
+            guard index < shown else {
+                surface.card.isHidden = true
+                surface.ranges = []
+                surface.page = 0
+                continue
+            }
+            let x = shown == 2 && index == 0 ? originX + pageWidth + spreadGap : originX
+            surface.card.isHidden = false
+            surface.card.frame = NSRect(x: x, y: cardY, width: pageWidth, height: pageHeight)
+            let contentHeight = headerBand + textHeights[index] + footerBand
+            let slack = max(0, (pageHeight - contentHeight) / 2)
+            surface.text.frame = NSRect(x: sidePad, y: headerBand + slack,
+                                        width: textWidth, height: textHeights[index])
+            surface.header.frame = QuranMushafCardView
+                .headerFrame(in: surface.card.bounds).insetBy(dx: 12, dy: 4)
+            surface.pageLabel.frame = QuranMushafCardView
+                .pageBadgeFrame(in: surface.card.bounds).insetBy(dx: 6, dy: 3)
+        }
+        mushafPageScroll.contentView.scroll(to: .zero)
+        mushafPageScroll.reflectScrolledClipView(mushafPageScroll.contentView)
+        // Resizing can open or close the spread: keep "page 3–4" current.
+        (view.window as? MainWindow)?.refreshPageSubtitle()
+    }
+
+    private struct MushafPagePlan {
+        let page: Int
+        let verses: [OfflineQuranVerse]
+        let bodyLines: [Int: [MushafSegment]]
+        let bannerLines: [Int: String]
+        let bismillahLines: Set<Int>
+        let maxLine: Int
+        /// Widest line at the 24 pt reference size, for fitting the face.
+        let widestLine: CGFloat
+    }
+
+    /// Structural pass for one printed page: word tokens placed on their
+    /// printed lines (least-squares cuts between the KFGQPC line anchors),
+    /// surah banners, and bismillah lines.
+    private func planMushafPage(_ page: Int) -> MushafPagePlan? {
+        let pageVerses = verses.filter { $0.pageStart == page }
+            .sorted { $0.id < $1.id }
+        guard !pageVerses.isEmpty else { return nil }
         let markerStyle = effectiveMarkerStyle
         let referenceSize: CGFloat = 24
         let referenceFont = quranScriptFont(size: referenceSize)
@@ -15440,202 +15711,32 @@ final class QuranViewController: NSViewController, MainTabContent,
             tokenIndex = cut + 1
         }
 
-        // -- page geometry: one constant sheet, like a physical mushaf.
-        // Every page of the book shares the same dimensions (derived from
-        // the window, zoomed by the size control); the type is then fitted
-        // into that fixed sheet, never the other way around.
         var widestLine: CGFloat = 1
         for line in 1...maxLine {
             guard let segments = bodyLines[line] else { continue }
             widestLine = max(widestLine,
                              naturalWidth(segments.map(\.text).joined(separator: " ")))
         }
-        let sidePad = QuranMushafCardView.textInset
-        let headerBand: CGFloat = 54
-        let footerBand: CGFloat = 52
-        let viewport = mushafPageScroll.contentSize
-        let viewportHeight = viewport.height > 100 ? viewport.height
-            : max(320, backdrop.bounds.height - 34)
-        let viewportWidth = viewport.width > 100 ? viewport.width
-            : max(360, backdrop.bounds.width)
-        let pageAspect: CGFloat = 1.46
-        var basePageHeight = viewportHeight - 26
-        var basePageWidth = basePageHeight / pageAspect
-        if basePageWidth > viewportWidth - 44 {
-            basePageWidth = viewportWidth - 44
-            basePageHeight = basePageWidth * pageAspect
-        }
-        let pageWidth = max(330, basePageWidth * textScale)
-        let pageHeight = pageWidth * pageAspect
-        let textWidth = pageWidth - sidePad * 2
-        let targetLineWidth = textWidth - 8
-        // Fixed 15-row grid: the print's line height is a constant fraction
-        // of the sheet, whatever face is selected. The face is sized to the
-        // grid, capped so the densest line of this page still fits the
-        // measure (justification can stretch lines, never compress them).
-        let lineHeightFactor: CGFloat = 1.95
-        let textBlockHeight = pageHeight - headerBand - footerBand - 20
-        let lineHeight = textBlockHeight / 15.4
-        let bodySize = max(9, min(lineHeight / lineHeightFactor,
-                                  referenceSize * (targetLineWidth - 6) / widestLine * 0.98))
-
-        let bodyFont = quranScriptFont(size: bodySize)
-        let bannerFont = quranScriptFont(size: bodySize * 0.95)
-        let bismillahFont = quranScriptFont(size: bodySize * 0.9)
-
-        let bodyParagraph = NSMutableParagraphStyle()
-        bodyParagraph.alignment = .right
-        bodyParagraph.baseWritingDirection = .rightToLeft
-        bodyParagraph.lineBreakMode = .byWordWrapping
-        bodyParagraph.minimumLineHeight = lineHeight
-        bodyParagraph.maximumLineHeight = lineHeight
-        let centered = NSMutableParagraphStyle()
-        centered.alignment = .center
-        centered.baseWritingDirection = .rightToLeft
-        centered.minimumLineHeight = lineHeight
-        centered.maximumLineHeight = lineHeight
-
-        // -- compose. Body lines break at the solved cuts (U+2028) and are
-        // then hand-justified: the slack to the full measure is distributed
-        // over the line's word spaces, so every line of the column ends at
-        // exactly the same length, like the printed page. (TextKit's own
-        // justification ignores lines ended by explicit breaks.)
-        let result = NSMutableAttributedString()
-        var ranges: [(range: NSRange, verse: OfflineQuranVerse)] = []
-        var inBodyBlock = false
-        func endBodyBlock() {
-            guard inBodyBlock else { return }
-            result.append(NSAttributedString(string: "\n", attributes:
-                [.font: bodyFont, .paragraphStyle: bodyParagraph]))
-            inBodyBlock = false
-        }
-        func justifyLine(_ lineRange: NSRange) {
-            guard lineRange.length > 0 else { return }
-            let text = (result.string as NSString).substring(with: lineRange)
-            let natural = (text as NSString).size(withAttributes: [.font: bodyFont]).width
-            let slack = targetLineWidth - 2 - natural
-            guard slack > 0.5 else { return }
-            var spaceOffsets: [Int] = []
-            let nsText = text as NSString
-            for offset in 0..<nsText.length where nsText.character(at: offset) == 32 {
-                spaceOffsets.append(lineRange.location + offset)
-            }
-            guard !spaceOffsets.isEmpty else { return }
-            let kern = min(slack / CGFloat(spaceOffsets.count), bodySize * 1.8)
-            for offset in spaceOffsets {
-                result.addAttribute(.kern, value: kern,
-                                    range: NSRange(location: offset, length: 1))
-            }
-        }
-        for line in 1...maxLine {
-            if let banner = bannerLines[line] {
-                endBodyBlock()
-                result.append(NSAttributedString(
-                    string: "۞ سُورَةُ \(banner) ۞\n",
-                    attributes: [.font: bannerFont,
-                                 .foregroundColor: palette.gold,
-                                 .paragraphStyle: centered]))
-                continue
-            }
-            if bismillahLines.contains(line) {
-                result.append(NSAttributedString(
-                    string: bismillahText + "\n",
-                    attributes: [.font: bismillahFont,
-                                 .foregroundColor: palette.primary.withAlphaComponent(0.92),
-                                 .paragraphStyle: centered]))
-                continue
-            }
-            guard let segments = bodyLines[line], !segments.isEmpty else {
-                endBodyBlock()
-                result.append(NSAttributedString(string: "\n", attributes:
-                    [.font: bodyFont, .paragraphStyle: bodyParagraph]))
-                continue
-            }
-            if inBodyBlock {
-                result.append(NSAttributedString(string: "\u{2028}", attributes:
-                    [.font: bodyFont, .paragraphStyle: bodyParagraph]))
-            }
-            let lineStart = result.length
-            for (index, segment) in segments.enumerated() {
-                if index > 0 {
-                    result.append(NSAttributedString(string: " ", attributes:
-                        [.font: bodyFont, .paragraphStyle: bodyParagraph]))
-                }
-                let location = result.length
-                result.append(NSAttributedString(
-                    string: segment.text,
-                    attributes: [.font: bodyFont, .foregroundColor: palette.primary,
-                                 .paragraphStyle: bodyParagraph]))
-                if let verse = segment.verse {
-                    ranges.append((NSRange(location: location,
-                                           length: segment.text.utf16.count), verse))
-                }
-            }
-            justifyLine(NSRange(location: lineStart, length: result.length - lineStart))
-            inBodyBlock = true
-        }
-        mushafText.textStorage?.setAttributedString(result)
-        mushafRanges = ranges
-        applyMushafSelectionHighlight()
-
-        // -- lay the illuminated page out on the constant sheet: measure the
-        // typeset block and center it between the header cartouche and the
-        // page-number medallion (ornamental short pages float centered).
-        mushafText.textContainer?.containerSize = NSSize(
-            width: textWidth - 8, height: CGFloat.greatestFiniteMagnitude)
-        var textHeight: CGFloat = 200
-        if let layoutManager = mushafText.layoutManager,
-           let container = mushafText.textContainer {
-            layoutManager.ensureLayout(for: container)
-            textHeight = ceil(layoutManager.usedRect(for: container).height) + 10
-        }
-        let contentHeight = headerBand + textHeight + footerBand
-        let slack = max(0, (pageHeight - contentHeight) / 2)
-        let documentWidth = max(viewportWidth, pageWidth + 36)
-        let documentHeight = max(viewportHeight, pageHeight + 32)
-        mushafDocument.frame = NSRect(x: 0, y: 0, width: documentWidth,
-                                      height: documentHeight)
-        let cardX = (documentWidth - pageWidth) / 2
-        let cardY = max(16, (documentHeight - pageHeight) / 2)
-        mushafCard.frame = NSRect(x: cardX, y: cardY,
-                                  width: pageWidth, height: pageHeight)
-        mushafText.frame = NSRect(x: sidePad, y: headerBand + slack,
-                                  width: textWidth, height: textHeight)
-        mushafHeaderLabel.frame = QuranMushafCardView
-            .headerFrame(in: mushafCard.bounds).insetBy(dx: 12, dy: 4)
-        mushafPageLabel.frame = QuranMushafCardView
-            .pageBadgeFrame(in: mushafCard.bounds).insetBy(dx: 6, dy: 3)
-        mushafPageScroll.contentView.scroll(to: .zero)
-        mushafPageScroll.reflectScrolledClipView(mushafPageScroll.contentView)
-
-        let suraNames = pageVerses.reduce(into: [String]()) { list, verse in
-            if list.last != verse.suraNameArabic { list.append(verse.suraNameArabic) }
-        }
-        let juzList = Set(pageVerses.map(\.jozz)).sorted()
-        let juzText = juzList.map { localizedInterfaceDigits(String($0)) }
-            .joined(separator: "، ")
-        mushafHeaderLabel.stringValue = suraNames.joined(separator: " · ")
-            + "  ·  \(quranReaderText("juz")) \(juzText)"
-        // Interface font: Qur'an-only faces (Amiri Quran) lack glyphs for
-        // plain UI text, so the running head must not use the script face.
-        mushafHeaderLabel.font = Localizer.shared.font(size: 13, weight: .semibold)
-        mushafHeaderLabel.textColor = palette.gold
-        mushafPageLabel.stringValue =
-            "\(localizedInterfaceDigits(String(currentPage))) / \(localizedInterfaceDigits(String(totalPages)))"
-        mushafPageLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .medium)
-        mushafPageLabel.textColor = palette.gold
-        mushafText.toolTip = quranReaderText("mushaf.keys")
+        return MushafPagePlan(page: page, verses: pageVerses, bodyLines: bodyLines,
+                              bannerLines: bannerLines, bismillahLines: bismillahLines,
+                              maxLine: maxLine, widestLine: widestLine)
     }
 
     private func applyMushafSelectionHighlight() {
-        guard let storage = mushafText?.textStorage else { return }
+        for surface in mushafSurfaces where !surface.card.isHidden {
+            applyMushafHighlight(to: surface)
+        }
+    }
+
+    private func applyMushafHighlight(to surface: MushafPageSurface) {
+        guard let storage = surface.text.textStorage else { return }
         let whole = NSRange(location: 0, length: storage.length)
         storage.removeAttribute(.backgroundColor, range: whole)
         storage.removeAttribute(.underlineStyle, range: whole)
         storage.removeAttribute(.underlineColor, range: whole)
         let hide = memorizeMode
         // A verse can occupy several printed lines, i.e. several ranges.
-        for hit in mushafRanges {
+        for hit in surface.ranges {
             let isSelected = hit.verse.suraNumber == selectedSurah
                 && hit.verse.ayahNumber == selectedAyah
             let hidden = hide && !revealedAyahs.contains(
@@ -15685,9 +15786,13 @@ final class QuranViewController: NSViewController, MainTabContent,
         return true
     }
 
-    fileprivate func handleMushafClick(at index: Int, clickCount: Int) {
-        guard let hit = mushafRanges.first(where: { NSLocationInRange(index, $0.range) })
+    fileprivate func handleMushafClick(at index: Int, clickCount: Int,
+                                       in textView: QuranMushafTextView) {
+        guard let surface = mushafSurfaces.first(where: { $0.text === textView }),
+              let hit = surface.ranges.first(where: { NSLocationInRange(index, $0.range) })
         else { return }
+        // In a spread, clicking the facing page makes it the current page.
+        if surface.page > 0 { currentPage = surface.page }
         let key = "\(hit.verse.suraNumber):\(hit.verse.ayahNumber)"
         if memorizeMode && !revealedAyahs.contains(key) {
             revealedAyahs.insert(key)
@@ -15701,24 +15806,25 @@ final class QuranViewController: NSViewController, MainTabContent,
         updateBookmarkButton()
         updateChrome()
         syncSidebarSelection()
-        if clickCount == 1 { showAyahActions(hit.verse, range: hit.range) }
+        if clickCount == 1 { showAyahActions(hit.verse, range: hit.range, in: textView) }
     }
 
     /// Bounding rect of a character range of the Mushaf text, in its view.
-    private func mushafRect(for range: NSRange) -> NSRect? {
-        guard let layoutManager = mushafText.layoutManager,
-              let container = mushafText.textContainer else { return nil }
+    private func mushafRect(for range: NSRange, in textView: NSTextView) -> NSRect? {
+        guard let layoutManager = textView.layoutManager,
+              let container = textView.textContainer else { return nil }
         let glyphRange = layoutManager.glyphRange(forCharacterRange: range,
                                                   actualCharacterRange: nil)
         var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: container)
-        rect.origin.x += mushafText.textContainerOrigin.x
-        rect.origin.y += mushafText.textContainerOrigin.y
+        rect.origin.x += textView.textContainerOrigin.x
+        rect.origin.y += textView.textContainerOrigin.y
         return rect
     }
 
     /// Tarteel-style action card for the clicked ayah.
-    private func showAyahActions(_ verse: OfflineQuranVerse, range: NSRange) {
-        guard let rect = mushafRect(for: range) else { return }
+    private func showAyahActions(_ verse: OfflineQuranVerse, range: NSRange,
+                                 in textView: QuranMushafTextView) {
+        guard let rect = mushafRect(for: range, in: textView) else { return }
         ayahActionsPopover?.close()
         let popover = NSPopover()
         popover.behavior = .transient
@@ -15737,7 +15843,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         rows.append(("doc.on.doc", quranReaderText("copy"),
                      { [weak self] in self?.copyVerse(verse) }))
         rows.append(("text.book.closed", quranStudyText("details"), { [weak self] in
-            self?.showMushafVerseDetails(verse, range: range)
+            self?.showMushafVerseDetails(verse, range: range, in: textView)
         }))
         if edition == "hafs" {
             rows.append(("character.book.closed", quranReaderText("word.meanings"),
@@ -15771,7 +15877,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         stack.frame = NSRect(x: 0, y: 0, width: 240, height: stack.fittingSize.height)
         controller.preferredContentSize = NSSize(width: 240, height: stack.fittingSize.height)
         popover.contentViewController = controller
-        popover.show(relativeTo: rect, of: mushafText, preferredEdge: .maxY)
+        popover.show(relativeTo: rect, of: textView, preferredEdge: .maxY)
         ayahActionsPopover = popover
     }
 
@@ -15824,11 +15930,12 @@ final class QuranViewController: NSViewController, MainTabContent,
         persistLocator()
         if isMushaf {
             let page = pageOfSelectedVerse()
-            if page != currentPage {
-                goToPage(page, keepSelection: true)
-            } else {
+            if displayedMushafPages.contains(page) {
+                currentPage = page
                 applyMushafSelectionHighlight()
                 updateChrome()
+            } else {
+                goToPage(page, keepSelection: true)
             }
         } else if let row = visibleVerses.firstIndex(where: {
             $0.suraNumber == sura && $0.ayahNumber == ayah
@@ -15890,14 +15997,9 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     /// Double-click detail popover: reference, translation of meanings (when
     /// loaded), and its footnotes — the same information verse mode offers.
-    private func showMushafVerseDetails(_ verse: OfflineQuranVerse, range: NSRange) {
-        guard let layoutManager = mushafText.layoutManager,
-              let container = mushafText.textContainer else { return }
-        let glyphRange = layoutManager.glyphRange(forCharacterRange: range,
-                                                  actualCharacterRange: nil)
-        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: container)
-        rect.origin.x += mushafText.textContainerOrigin.x
-        rect.origin.y += mushafText.textContainerOrigin.y
+    private func showMushafVerseDetails(_ verse: OfflineQuranVerse, range: NSRange,
+                                        in textView: NSTextView) {
+        guard let rect = mushafRect(for: range, in: textView) else { return }
 
         var body = "\(verse.suraNameArabic) (\(verse.suraNameEnglish)) · "
             + "\(localizedInterfaceDigits(String(verse.suraNumber))):\(localizedInterfaceDigits(String(verse.ayahNumber)))"
@@ -15931,7 +16033,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         controller.view = text
         controller.preferredContentSize = NSSize(width: 360, height: 220)
         popover.contentViewController = controller
-        popover.show(relativeTo: rect, of: mushafText, preferredEdge: .maxY)
+        popover.show(relativeTo: rect, of: textView, preferredEdge: .maxY)
     }
 
     // MARK: - reading preferences popover
@@ -16122,7 +16224,7 @@ final class QuranViewController: NSViewController, MainTabContent,
         guard backdrop != nil else { return }
         backdrop.palette = palette
         footer.palette = palette
-        mushafCard?.palette = palette
+        mushafSurfaces.forEach { $0.card.palette = palette }
     }
 
     @objc private func layoutChanged(_ sender: NSSegmentedControl) {
