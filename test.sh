@@ -18,7 +18,7 @@ for language in en fr es ar zh hi bn ru pt ur; do
     plutil -lint "WidgetLocalizations/$language.lproj/Localizable.strings" >/dev/null
 done
 
-rg -q 'source-manifest.json' build.sh
-rg -q 'Never introduce a Qur.an web view' AGENTS.md
+grep -q 'source-manifest.json' build.sh
+grep -q 'Never introduce a Qur.an web view' AGENTS.md
 
 echo "Smoke checks passed for Salat Time $SOURCE_VERSION"

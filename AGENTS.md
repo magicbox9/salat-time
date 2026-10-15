@@ -46,7 +46,7 @@ Update.command    Double-clickable wrapper for update.sh (gitignored)
 
 ## 3. Local dev / deploy loop
 
-We develop in `/Volumes/ExSSD/prayer times/` and deploy to the installed app at
+We develop in `/Volumes/01_HotStorage_1TB/01_Projects/Salat Time/Salat Time Source/` and deploy to the installed app at
 `/Applications/Salat Time.app`.
 
 ```bash
