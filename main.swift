@@ -126,10 +126,8 @@ let kQuranReaderSidebar          = "quranReaderSidebarVisible"
 let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
-let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
-let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.39.0"
+let kAppVersion          = "3.40.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -2367,15 +2365,18 @@ final class AdaptiveCardView: NSView {
         guard let layer else { return }
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
         layer.cornerRadius = cornerRadius
+        // In the main window cards are flat grouped surfaces (System
+        // Settings style): a soft fill, a hairline, almost no shadow.
+        let flat = window is MainWindow
         layer.backgroundColor = isDark
-            ? NSColor(white: 1.0, alpha: 0.075).cgColor
-            : NSColor(white: 1.0, alpha: 0.82).cgColor
+            ? NSColor(white: 1.0, alpha: flat ? 0.055 : 0.075).cgColor
+            : NSColor(white: 1.0, alpha: flat ? 0.92 : 0.82).cgColor
         layer.borderWidth = 0.5
         layer.borderColor = isDark
-            ? NSColor.white.withAlphaComponent(0.13).cgColor
-            : NSColor.black.withAlphaComponent(0.10).cgColor
+            ? NSColor.white.withAlphaComponent(flat ? 0.08 : 0.13).cgColor
+            : NSColor.black.withAlphaComponent(flat ? 0.07 : 0.10).cgColor
         layer.shadowColor = NSColor.black.cgColor
-        layer.shadowOpacity = addsDepth ? (isDark ? 0.22 : 0.10) : 0
+        layer.shadowOpacity = addsDepth ? (flat ? (isDark ? 0.10 : 0.04) : (isDark ? 0.22 : 0.10)) : 0
         layer.shadowRadius = addsDepth ? 5 : 0
         layer.shadowOffset = NSSize(width: 0, height: -1)
         layer.masksToBounds = false
@@ -2383,6 +2384,11 @@ final class AdaptiveCardView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
         needsDisplay = true
     }
 }
@@ -4709,7 +4715,11 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         let isSettings = presentation == .settings
         // Same column width as every other Settings section.
         let contentWidth: CGFloat = isSettings ? min(680, W - 48) : W - 24
-        let contentX: CGFloat = isSettings ? (W - contentWidth) / 2 : 12
+        // In Settings the column hugs the leading edge like every other
+        // section (applyRTL mirrors this to the right in Arabic/Urdu).
+        let contentX: CGFloat = isSettings ? 30 : 12
+        let settingsPin: NSView.AutoresizingMask = Localizer.shared.isRTL
+            ? [.minXMargin] : [.maxXMargin]
 
         // -------------------- Header: back + title -------------------------
         if showsNavigationHeader {
@@ -4742,7 +4752,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
             let currentCard = AdaptiveCardView(frame: NSRect(
                 x: contentX, y: 24, width: contentWidth, height: 92))
             currentCard.addsDepth = true
-            currentCard.autoresizingMask = [.minXMargin, .maxXMargin]
+            currentCard.autoresizingMask = settingsPin
             addSubview(currentCard)
 
             let iconWell = AdaptiveBackgroundView(
@@ -4795,7 +4805,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         selectorSurface.cornerRadius = isSettings ? 22 : 18
         selectorSurface.addsDepth = isSettings
         selectorSurface.autoresizingMask = isSettings
-            ? [.minXMargin, .maxXMargin] : [.width]
+            ? settingsPin : [.width]
         selectorSurface.setAccessibilityElement(true)
         selectorSurface.setAccessibilityRole(.group)
         selectorSurface.setAccessibilityLabel(t("settings.section.mosque"))
@@ -4849,7 +4859,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
         statusLabel.drawsBackground = false
         statusLabel.alignment = .center
         statusLabel.lineBreakMode = .byTruncatingTail
-        statusLabel.autoresizingMask = [.width]
+        statusLabel.autoresizingMask = isSettings ? settingsPin : [.width]
         addSubview(statusLabel)
 
         // -------------------- Input area ----------------------------------
@@ -4857,7 +4867,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
                                       y: isSettings ? 232 : (showsNavigationHeader ? 120 : 80),
                                       width: contentWidth, height: isSettings ? 52 : 44)
         inputContainer.autoresizingMask = isSettings
-            ? [.minXMargin, .maxXMargin] : [.width]
+            ? settingsPin : [.width]
         addSubview(inputContainer)
 
         let iw = inputContainer.bounds.width
@@ -4966,7 +4976,7 @@ final class MosquePickerView: FlippedView, NSTextFieldDelegate, CLLocationManage
                 x: contentX, y: resultsY, width: contentWidth,
                 height: H - resultsY - 12))
             resultsCard.addsDepth = true
-            resultsCard.autoresizingMask = [.minXMargin, .maxXMargin, .height]
+            resultsCard.autoresizingMask = settingsPin.union(.height)
             resultsCard.addSubview(scrollView)
             scrollView.autoresizingMask = [.width, .height]
             addSubview(resultsCard)
@@ -6663,16 +6673,108 @@ final class SettingsView: FlippedView {
 
 protocol MainTabContent: NSViewController {
     func tabDidActivate()
-    /// Round-icon view modes the dock shows while this tab is active.
+    /// Title and live subtitle shown in the window's shared page header.
+    var pageTitle: String { get }
+    var pageSubtitle: String { get }
+    /// View modes shown as the header's segmented control.
     var railModeItems: [(symbol: String, label: String)] { get }
     var railSelectedMode: Int { get }
     func railDidSelectMode(_ index: Int)
 }
 
 extension MainTabContent {
+    var pageTitle: String { "" }
+    var pageSubtitle: String { "" }
     var railModeItems: [(symbol: String, label: String)] { [] }
     var railSelectedMode: Int { 0 }
     func railDidSelectMode(_ index: Int) {}
+}
+
+/// One row in the main window's sidebar: icon + title, with the native
+/// rounded selection and hover highlights of a macOS source list.
+final class MainSidebarItem: NSView {
+    let index: Int
+    var onSelect: ((Int) -> Void)?
+    var isSelected = false { didSet { updateAppearance() } }
+    private var isHovering = false { didSet { updateAppearance() } }
+    private let icon = NSImageView()
+    private let label: NSTextField
+
+    init(index: Int, symbol: String, title: String) {
+        self.index = index
+        label = NSTextField(labelWithString: title)
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = 8
+        translatesAutoresizingMaskIntoConstraints = false
+        let rtl = Localizer.shared.isRTL
+        userInterfaceLayoutDirection = rtl ? .rightToLeft : .leftToRight
+
+        icon.image = templateSymbol(symbol, pointSize: 14, weight: .medium)
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.setAccessibilityElement(false)
+        label.font = Localizer.shared.font(size: 13.5, weight: .medium)
+        label.alignment = rtl ? .right : .left
+        label.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
+        label.lineBreakMode = .byTruncatingTail
+        label.translatesAutoresizingMaskIntoConstraints = false
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        addSubview(icon)
+        addSubview(label)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 34),
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 20),
+            label.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 9),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -10),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+        setAccessibilityElement(true)
+        setAccessibilityRole(.radioButton)
+        setAccessibilityLabel(title)
+        updateAppearance()
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds,
+                                       options: [.mouseEnteredAndExited, .activeInKeyWindow,
+                                                 .inVisibleRect],
+                                       owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { isHovering = true }
+    override func mouseExited(with event: NSEvent) { isHovering = false }
+    override func mouseDown(with event: NSEvent) { onSelect?(index) }
+    override func accessibilityPerformPress() -> Bool { onSelect?(index); return true }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updateAppearance()
+    }
+
+    private func updateAppearance() {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let background: NSColor
+        if isSelected {
+            background = NSColor.appAccent.withAlphaComponent(dark ? 0.26 : 0.17)
+        } else if isHovering {
+            background = NSColor.labelColor.withAlphaComponent(dark ? 0.07 : 0.05)
+        } else {
+            background = .clear
+        }
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            layer?.backgroundColor = background.cgColor
+        }
+        icon.contentTintColor = isSelected ? .appAccent : .secondaryLabelColor
+        label.textColor = .labelColor
+        label.font = Localizer.shared.font(size: 13.5,
+                                           weight: isSelected ? .semibold : .medium)
+        setAccessibilityValue(isSelected ? "1" : "0")
+    }
 }
 
 final class MainWindow: NSWindow, NSWindowDelegate {
@@ -6683,23 +6785,31 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     private var editorVC: AdhkarEditorViewController?
     private var quranVC: QuranViewController?
     private var settingsVC: AdhkarSettingsViewController?
-    private var dock: MainDockView!
+    private var sidebarItems: [MainSidebarItem] = []
+    private var headerTitle: NSTextField!
+    private var headerSubtitle: NSTextField!
+    private var modeControl: NSSegmentedControl!
     private var selectedDestination = 0
     private var isShowingSettings = false
 
+    /// Sidebar index of the Settings row (after the three destinations).
+    private static let settingsIndex = 3
+
     init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
-        let frame = NSRect(x: 0, y: 0, width: 960, height: 640)
+        let frame = NSRect(x: 0, y: 0, width: 1120, height: 740)
         super.init(contentRect: frame,
-                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                   styleMask: [.titled, .closable, .miniaturizable, .resizable,
+                               .fullSizeContentView],
                    backing: .buffered, defer: false)
         self.title = "Salat Time"
-        self.titleVisibility = .visible
-        self.titlebarAppearsTransparent = false
+        // The sidebar runs under a transparent title bar, like Mail or Notes.
+        self.titleVisibility = .hidden
+        self.titlebarAppearsTransparent = true
         self.isMovableByWindowBackground = false
         self.center()
         self.isReleasedWhenClosed = false
-        self.minSize = NSSize(width: 820, height: 540)
+        self.minSize = NSSize(width: 1000, height: 600)
         self.delegate = self
         buildShell()
     }
@@ -6709,7 +6819,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         if let destination {
             selectedDestination = max(0, min(2, destination))
             isShowingSettings = false
-            syncDockSelection()
+            syncSidebarSelection()
             showSelectedDestination()
         }
         if let targetScreen {
@@ -6745,120 +6855,210 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
     }
 
+    /// Shell: a native translucent sidebar on the leading edge (right in
+    /// Arabic/Urdu) and a content column with one shared page header. The
+    /// header carries the page title, a live subtitle, and the page's view
+    /// modes as a single segmented control.
     private func buildShell() {
-        let root = RootPanelView(frame: self.contentLayoutRect)
+        let rtl = Localizer.shared.isRTL
+        let direction: NSUserInterfaceLayoutDirection = rtl ? .rightToLeft : .leftToRight
+        let root = RootPanelView(frame: NSRect(origin: .zero, size: frame.size))
         root.autoresizingMask = [.width, .height]
-        root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
+        root.userInterfaceLayoutDirection = direction
         contentView = root
+        let host = root.contentContainer
+        host.userInterfaceLayoutDirection = direction
 
-        // A stable primary dock carries destinations and utilities. The
-        // selected destination's controls live in a separate animated drawer
-        // so navigation hierarchy never shifts as modes change.
-        let position = UserDefaults.standard.string(forKey: kDockPosition) ?? "left"
-        let vertical = position == "left" || position == "right"
-        let displayStyle = DockDisplayStyle(
-            rawValue: UserDefaults.standard.string(forKey: kDockDisplayStyle) ?? "icons"
-        ) ?? .icons
-        dock = MainDockView(position: position, displayStyle: displayStyle)
-        dock.onSelectNav = { [weak self] index in
-            guard let self else { return }
-            self.selectedDestination = index
-            self.isShowingSettings = false
-            self.syncDockSelection()
-            self.showSelectedDestination()
+        // ---- sidebar --------------------------------------------------
+        let sidebar = NSVisualEffectView()
+        sidebar.material = .sidebar
+        sidebar.blendingMode = .behindWindow
+        sidebar.state = .followsWindowActiveState
+        sidebar.userInterfaceLayoutDirection = direction
+        sidebar.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.setAccessibilityElement(true)
+        sidebar.setAccessibilityRole(.group)
+        sidebar.setAccessibilityLabel(featureText("main.destinations"))
+        host.addSubview(sidebar)
+
+        let divider = NSBox()
+        divider.boxType = .separator
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(divider)
+
+        let definitions: [(symbol: String, title: String)] = [
+            ("sun.and.horizon", t("main.tab.prayer_times")),
+            ("text.book.closed", t("settings.section.adhkar")),
+            ("book.pages", featureText("quran.tab")),
+        ]
+        let primary = NSStackView()
+        primary.orientation = .vertical
+        primary.alignment = .width
+        primary.spacing = 2
+        primary.userInterfaceLayoutDirection = direction
+        primary.translatesAutoresizingMaskIntoConstraints = false
+        sidebar.addSubview(primary)
+        sidebarItems = definitions.enumerated().map { index, definition in
+            MainSidebarItem(index: index, symbol: definition.symbol, title: definition.title)
         }
-        dock.onSelectMode = { [weak self] index in
-            self?.activeViewController()?.railDidSelectMode(index)
+        sidebarItems.forEach { primary.addArrangedSubview($0) }
+
+        let settingsItem = MainSidebarItem(index: Self.settingsIndex,
+                                           symbol: "gearshape", title: t("settings.title"))
+        sidebar.addSubview(settingsItem)
+        sidebarItems.append(settingsItem)
+        for item in sidebarItems {
+            item.onSelect = { [weak self] index in self?.selectSidebarItem(index) }
         }
-        dock.onTheme = { [weak self] button in
-            self?.appDelegate?.themeBtnTapped(button)
+
+        // ---- content column -------------------------------------------
+        let main = NSView()
+        main.userInterfaceLayoutDirection = direction
+        main.translatesAutoresizingMaskIntoConstraints = false
+        host.addSubview(main)
+
+        headerTitle = NSTextField(labelWithString: "")
+        headerTitle.font = Localizer.shared.font(size: 22, weight: .bold)
+        headerTitle.textColor = .labelColor
+        headerTitle.alignment = rtl ? .right : .left
+        headerTitle.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
+        headerTitle.lineBreakMode = .byTruncatingTail
+        headerTitle.translatesAutoresizingMaskIntoConstraints = false
+        headerTitle.setAccessibilityRole(.staticText)
+
+        headerSubtitle = NSTextField(labelWithString: "")
+        headerSubtitle.font = Localizer.shared.font(size: 12)
+        headerSubtitle.textColor = .secondaryLabelColor
+        headerSubtitle.alignment = rtl ? .right : .left
+        headerSubtitle.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
+        headerSubtitle.lineBreakMode = .byTruncatingTail
+        headerSubtitle.translatesAutoresizingMaskIntoConstraints = false
+        for label in [headerTitle!, headerSubtitle!] {
+            label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            main.addSubview(label)
         }
-        dock.onSettings = { [weak self] in
-            guard let self else { return }
-            self.isShowingSettings.toggle()
-            self.syncDockSelection()
-            if self.isShowingSettings {
-                self.showSettings(section: nil)
-            } else {
-                self.showSelectedDestination()
-            }
-        }
+
+        modeControl = NSSegmentedControl()
+        modeControl.segmentStyle = .automatic
+        modeControl.trackingMode = .selectOne
+        modeControl.controlSize = .large
+        modeControl.font = Localizer.shared.font(size: 12.5, weight: .medium)
+        modeControl.userInterfaceLayoutDirection = direction
+        modeControl.target = self
+        modeControl.action = #selector(modeChanged(_:))
+        modeControl.translatesAutoresizingMaskIntoConstraints = false
+        modeControl.setContentHuggingPriority(.required, for: .horizontal)
+        modeControl.setContentCompressionResistancePriority(.required, for: .horizontal)
+        main.addSubview(modeControl)
 
         contentContainer = NSView()
+        contentContainer.userInterfaceLayoutDirection = direction
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
-        root.contentContainer.addSubview(contentContainer)
-        root.contentContainer.addSubview(dock)
+        main.addSubview(contentContainer)
 
-        let host = root.contentContainer
-        var constraints: [NSLayoutConstraint] = []
-        let dockGap: CGFloat = 10
-        let dockLane: CGFloat = (vertical
-            ? MainDockView.primaryCrossAxisSize(for: displayStyle)
-            : 64) + dockGap * 2
-        switch position {
-        case "right":
-            constraints += [
-                dock.trailingAnchor.constraint(equalTo: host.trailingAnchor, constant: -dockGap),
-                // Pinned to the top so expanding a section's modes grows the
-                // dock downward instead of re-centering (and jumping) it.
-                dock.topAnchor.constraint(equalTo: host.topAnchor, constant: dockGap),
-                contentContainer.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-                contentContainer.trailingAnchor.constraint(equalTo: host.trailingAnchor,
-                                                           constant: -dockLane),
-                contentContainer.topAnchor.constraint(equalTo: host.topAnchor),
-                contentContainer.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-            ]
-        case "top":
-            constraints += [
-                dock.topAnchor.constraint(equalTo: host.topAnchor, constant: dockGap),
-                dock.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-                contentContainer.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-                contentContainer.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-                contentContainer.topAnchor.constraint(equalTo: host.topAnchor,
-                                                      constant: dockLane),
-                contentContainer.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-            ]
-        case "bottom":
-            constraints += [
-                dock.bottomAnchor.constraint(equalTo: host.bottomAnchor, constant: -dockGap),
-                dock.centerXAnchor.constraint(equalTo: host.centerXAnchor),
-                contentContainer.leadingAnchor.constraint(equalTo: host.leadingAnchor),
-                contentContainer.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-                contentContainer.topAnchor.constraint(equalTo: host.topAnchor),
-                contentContainer.bottomAnchor.constraint(equalTo: host.bottomAnchor,
-                                                         constant: -dockLane),
-            ]
-        default: // left
-            constraints += [
-                dock.leadingAnchor.constraint(equalTo: host.leadingAnchor, constant: dockGap),
-                // Pinned to the top so expanding a section's modes grows the
-                // dock downward instead of re-centering (and jumping) it.
-                dock.topAnchor.constraint(equalTo: host.topAnchor, constant: dockGap),
-                contentContainer.leadingAnchor.constraint(equalTo: host.leadingAnchor,
-                                                          constant: dockLane),
-                contentContainer.trailingAnchor.constraint(equalTo: host.trailingAnchor),
-                contentContainer.topAnchor.constraint(equalTo: host.topAnchor),
-                contentContainer.bottomAnchor.constraint(equalTo: host.bottomAnchor),
-            ]
+        let sidebarWidth: CGFloat = 220
+        NSLayoutConstraint.activate([
+            sidebar.leadingAnchor.constraint(equalTo: host.leadingAnchor),
+            sidebar.topAnchor.constraint(equalTo: host.topAnchor),
+            sidebar.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            sidebar.widthAnchor.constraint(equalToConstant: sidebarWidth),
+            divider.leadingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            divider.topAnchor.constraint(equalTo: host.topAnchor),
+            divider.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+            divider.widthAnchor.constraint(equalToConstant: 1),
+
+            // Clear the title bar (traffic lights sit over the leading-left
+            // corner in either direction).
+            primary.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 52),
+            primary.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
+            primary.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
+            settingsItem.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
+            settingsItem.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
+            settingsItem.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -14),
+
+            main.leadingAnchor.constraint(equalTo: divider.trailingAnchor),
+            main.trailingAnchor.constraint(equalTo: host.trailingAnchor),
+            main.topAnchor.constraint(equalTo: host.topAnchor),
+            main.bottomAnchor.constraint(equalTo: host.bottomAnchor),
+
+            headerTitle.topAnchor.constraint(equalTo: main.topAnchor, constant: 38),
+            headerTitle.leadingAnchor.constraint(equalTo: main.leadingAnchor, constant: 30),
+            headerSubtitle.topAnchor.constraint(equalTo: headerTitle.bottomAnchor, constant: 1),
+            headerSubtitle.leadingAnchor.constraint(equalTo: headerTitle.leadingAnchor),
+            headerTitle.trailingAnchor.constraint(lessThanOrEqualTo: modeControl.leadingAnchor,
+                                                  constant: -20),
+            headerSubtitle.trailingAnchor.constraint(lessThanOrEqualTo: modeControl.leadingAnchor,
+                                                     constant: -20),
+            modeControl.trailingAnchor.constraint(equalTo: main.trailingAnchor, constant: -28),
+            modeControl.centerYAnchor.constraint(equalTo: headerTitle.bottomAnchor, constant: 0),
+
+            contentContainer.topAnchor.constraint(equalTo: main.topAnchor, constant: 104),
+            contentContainer.leadingAnchor.constraint(equalTo: main.leadingAnchor),
+            contentContainer.trailingAnchor.constraint(equalTo: main.trailingAnchor),
+            contentContainer.bottomAnchor.constraint(equalTo: main.bottomAnchor),
+        ])
+        syncSidebarSelection()
+    }
+
+    private func selectSidebarItem(_ index: Int) {
+        if index == Self.settingsIndex {
+            guard !isShowingSettings else { return }
+            isShowingSettings = true
+            syncSidebarSelection()
+            showSettings(section: nil)
+        } else {
+            guard isShowingSettings || selectedDestination != index else { return }
+            selectedDestination = index
+            isShowingSettings = false
+            syncSidebarSelection()
+            showSelectedDestination()
         }
-        NSLayoutConstraint.activate(constraints)
-        syncDockSelection()
     }
 
-    private func syncDockSelection() {
-        dock.setNavSelected(isShowingSettings ? nil : selectedDestination)
-        dock.setSettingsActive(isShowingSettings)
+    private func syncSidebarSelection() {
+        for item in sidebarItems {
+            item.isSelected = isShowingSettings
+                ? item.index == Self.settingsIndex
+                : item.index == selectedDestination
+        }
     }
 
-    /// Push the active tab's view modes onto the dock.
+    @objc private func modeChanged(_ sender: NSSegmentedControl) {
+        activeViewController()?.railDidSelectMode(sender.selectedSegment)
+        refreshDockModes()
+    }
+
+    /// Refresh the shared page header (title, subtitle, view modes) from the
+    /// active page. Pages call this whenever their mode or title changes.
     func refreshDockModes() {
-        guard dock != nil else { return }
+        guard modeControl != nil else { return }
         let vc = activeViewController()
-        dock.setModes(vc?.railModeItems ?? [], selected: vc?.railSelectedMode ?? 0)
+        headerTitle.stringValue = vc?.pageTitle ?? ""
+        refreshPageSubtitle()
+        let items = vc?.railModeItems ?? []
+        modeControl.segmentCount = items.count
+        for (index, item) in items.enumerated() {
+            modeControl.setLabel(item.label, forSegment: index)
+            modeControl.setImage(nil, forSegment: index)
+        }
+        if !items.isEmpty {
+            modeControl.selectedSegment = max(0, min(items.count - 1,
+                                                     vc?.railSelectedMode ?? 0))
+        }
+        modeControl.isHidden = items.count < 2
+        modeControl.setAccessibilityLabel(headerTitle.stringValue)
+    }
+
+    /// Cheap per-second update for live subtitles (e.g. the prayer countdown).
+    func refreshPageSubtitle() {
+        guard headerSubtitle != nil else { return }
+        let subtitle = activeViewController()?.pageSubtitle ?? ""
+        if headerSubtitle.stringValue != subtitle { headerSubtitle.stringValue = subtitle }
+        headerSubtitle.isHidden = subtitle.isEmpty
     }
 
     /// Rebuild every full-window surface after a language, accent, material,
-    /// appearance, or dock-position change.
+    /// or appearance change.
     func reloadForPreferences() {
         let previousDestination = selectedDestination
         let wasShowingSettings = isShowingSettings
@@ -6875,7 +7075,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
         }
         selectedDestination = previousDestination
         isShowingSettings = wasShowingSettings
-        syncDockSelection()
+        syncSidebarSelection()
         if wasShowingSettings {
             showSettings(section: nil)
         } else {
@@ -6918,9 +7118,9 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     /// most relevant to open.
     func showSettingsWindow(section: SettingsSection) {
         isShowingSettings = true
-        syncDockSelection()
+        syncSidebarSelection()
         showSettings(section: section)
-        dock.revealSettingsModes()
+        refreshDockModes()
     }
 
     func reloadPrayerDashboard() {
@@ -6932,6 +7132,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     /// creating a timer per visualization.
     func refreshPrayerLiveState(now: Date = Date()) {
         adhanVC?.refreshLiveState(now: now)
+        if !isShowingSettings && selectedDestination == 0 { refreshPageSubtitle() }
     }
 
     private func present(_ vc: MainTabContent) {
@@ -6974,7 +7175,7 @@ final class MainWindow: NSWindow, NSWindowDelegate {
     func startAdhkarReading(_ collection: AdhkarCollection, autoPlay: Bool) {
         selectedDestination = 1
         isShowingSettings = false
-        syncDockSelection()
+        syncSidebarSelection()
         showSelectedDestination()
         editorVC?.startReading(collection: collection, autoPlay: autoPlay)
         refreshDockModes()
@@ -7010,7 +7211,8 @@ final class MoroccanPatternView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        let ink = NSColor.appAccent.withAlphaComponent(isDark ? 0.085 : 0.048)
+        // Texture, not decoration: barely-there ink.
+        let ink = NSColor.appAccent.withAlphaComponent(isDark ? 0.035 : 0.022)
         ink.setStroke()
 
         var row = 0
@@ -7053,8 +7255,8 @@ final class MoroccanHeroView: NSView {
         super.init(frame: frameRect)
         wantsLayer = true
         layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.16
-        layer?.shadowRadius = 9
+        layer?.shadowOpacity = 0.10
+        layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
         setAccessibilityRole(.group)
         setAccessibilityLabel(featureText("full.next_prayer"))
@@ -7065,16 +7267,20 @@ final class MoroccanHeroView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let cardRect = bounds.insetBy(dx: 1, dy: 1)
-        let card = NSBezierPath(roundedRect: cardRect, xRadius: 18, yRadius: 18)
+        let card = NSBezierPath(roundedRect: cardRect, xRadius: 14, yRadius: 14)
         let accent = currentAccentPair().light
         let deepGreen = NSColor(red: 0.025, green: 0.19, blue: 0.135, alpha: 1)
         NSGraphicsContext.saveGraphicsState()
         card.addClip()
         NSGradient(starting: accent, ending: deepGreen)?.draw(in: card, angle: 0)
 
-        NSColor.white.withAlphaComponent(0.10).setStroke()
-        var x = bounds.width * 0.56
-        while x < bounds.width + 30 {
+        // Stars sit behind the time block (the trailing side), never under
+        // the prayer name.
+        NSColor.white.withAlphaComponent(0.07).setStroke()
+        let rtl = Localizer.shared.isRTL
+        var x = rtl ? -24 : bounds.width * 0.56
+        let xEnd = rtl ? bounds.width * 0.44 : bounds.width + 30
+        while x < xEnd {
             var y: CGFloat = 12
             while y < bounds.height + 24 {
                 let star = zelligeStarPath(center: NSPoint(x: x, y: y),
@@ -7087,7 +7293,7 @@ final class MoroccanHeroView: NSView {
         }
         NSGraphicsContext.restoreGraphicsState()
 
-        NSColor.white.withAlphaComponent(0.18).setStroke()
+        NSColor.white.withAlphaComponent(0.12).setStroke()
         card.lineWidth = 0.8
         card.stroke()
     }
@@ -9967,394 +10173,12 @@ final class PrayerDisplayModeButton: NSButton {
 /// Stable primary navigation plus an inset destination-specific controls
 /// drawer. Main destinations remain large and constant; the selected
 /// destination reveals a smaller, tinted control group immediately beside it.
-final class MainDockView: NSView {
-    private static let navDefinitions: [(symbol: String, labelKey: () -> String)] = [
-        ("sun.and.horizon", { t("settings.section.adhan") }),
-        ("text.book.closed", { t("settings.section.adhkar") }),
-        ("book.pages", { featureText("quran.tab") }),
-    ]
-
-    let vertical: Bool
-    private let displayStyle: DockDisplayStyle
-    private let outerStack = NSStackView()
-    private let primaryCapsule = NSView()
-    private let utilityCapsule = NSView()
-    private let primaryStack = NSStackView()
-    private let drawerHost = NSView()
-    private let drawerStack = NSStackView()
-    private let utilityStack = NSStackView()
-    private var drawerAxisConstraint: NSLayoutConstraint!
-    private var navButtons: [PrayerDisplayModeButton] = []
-    private var modeButtons: [PrayerDisplayModeButton] = []
-    private var isDrawerOpen = false
-    private var selectedNavIndex: Int?
-    private var isSettingsActive = false
-    private var themeButton: PrayerDisplayModeButton!
-    private var settingsButton: PrayerDisplayModeButton!
-    var onSelectNav: ((Int) -> Void)?
-    var onSelectMode: ((Int) -> Void)?
-    var onTheme: ((NSButton) -> Void)?
-    var onSettings: (() -> Void)?
-
-    static func primaryCrossAxisSize(for style: DockDisplayStyle) -> CGFloat {
-        switch style {
-        case .icons: return 64
-        case .iconsText: return 184
-        case .text: return 160
-        }
-    }
-
-    init(position: String, displayStyle: DockDisplayStyle) {
-        self.vertical = position == "left" || position == "right"
-        self.displayStyle = displayStyle
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        wantsLayer = true
-        layer?.masksToBounds = false
-        setAccessibilityElement(true)
-        setAccessibilityRole(.toolbar)
-        setAccessibilityLabel(featureText("main.destinations"))
-
-        // Every group follows the edge axis. On a top/bottom dock they sit
-        // side by side; on a side dock they form adjacent vertical groups.
-        outerStack.orientation = vertical ? .vertical : .horizontal
-        outerStack.alignment = vertical ? .centerX : .centerY
-        outerStack.spacing = 10
-        outerStack.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        outerStack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(outerStack)
-        NSLayoutConstraint.activate([
-            outerStack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            outerStack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            outerStack.topAnchor.constraint(equalTo: topAnchor),
-            outerStack.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-
-        for capsule in [primaryCapsule, utilityCapsule] {
-            capsule.translatesAutoresizingMaskIntoConstraints = false
-            capsule.wantsLayer = true
-            capsule.layer?.cornerRadius = 32
-            capsule.layer?.masksToBounds = true
-        }
-        outerStack.addArrangedSubview(primaryCapsule)
-        outerStack.addArrangedSubview(utilityCapsule)
-
-        configure(primaryStack, in: primaryCapsule)
-        configure(utilityStack, in: utilityCapsule)
-        configureDrawerHost()
-
-        for (index, definition) in Self.navDefinitions.enumerated() {
-            let button = PrayerDisplayModeButton(
-                modeIndex: index, symbol: definition.symbol,
-                label: definition.labelKey(), target: self,
-                action: #selector(navPressed(_:)),
-                contextLabel: featureText("main.destinations"),
-                displayStyle: displayStyle)
-            constrainButton(button)
-            navButtons.append(button)
-            primaryStack.addArrangedSubview(button)
-        }
-
-        themeButton = PrayerDisplayModeButton(
-            modeIndex: 0, symbol: "circle.lefthalf.filled",
-            label: adhkarModeText("dock.theme"), target: self,
-            action: #selector(themePressed(_:)),
-            contextLabel: featureText("main.destinations"),
-            displayStyle: displayStyle, role: .theme)
-        constrainButton(themeButton)
-        utilityStack.addArrangedSubview(themeButton)
-
-        settingsButton = PrayerDisplayModeButton(
-            modeIndex: 0, symbol: "gearshape.fill",
-            label: t("settings.title"), target: self,
-            action: #selector(settingsPressed(_:)),
-            contextLabel: featureText("main.destinations"),
-            displayStyle: displayStyle, role: .settings)
-        constrainButton(settingsButton)
-        utilityStack.addArrangedSubview(settingsButton)
-
-        drawerHost.isHidden = true
-        drawerHost.alphaValue = 0
-        updateCapsuleAppearance()
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    private func configure(_ stack: NSStackView, in capsule: NSView) {
-        stack.orientation = vertical ? .vertical : .horizontal
-        stack.alignment = vertical ? .centerX : .centerY
-        stack.spacing = 7
-        stack.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        capsule.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: capsule.leadingAnchor, constant: 8),
-            stack.trailingAnchor.constraint(equalTo: capsule.trailingAnchor, constant: -8),
-            stack.topAnchor.constraint(equalTo: capsule.topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: capsule.bottomAnchor, constant: -8),
-        ])
-    }
-
-    /// A clipped inline host lives inside the primary capsule. Its axis
-    /// dimension grows from zero, making the controls look as if they were
-    /// concealed behind the selected destination rather than mounted in a
-    /// second toolbar.
-    private func configureDrawerHost() {
-        drawerHost.translatesAutoresizingMaskIntoConstraints = false
-        drawerHost.wantsLayer = true
-        drawerHost.layer?.cornerRadius = 20
-        drawerHost.layer?.masksToBounds = true
-        drawerStack.orientation = vertical ? .vertical : .horizontal
-        drawerStack.alignment = vertical ? .centerX : .centerY
-        drawerStack.spacing = 4
-        drawerStack.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        drawerStack.translatesAutoresizingMaskIntoConstraints = false
-        drawerHost.addSubview(drawerStack)
-
-        if vertical {
-            drawerAxisConstraint = drawerHost.heightAnchor.constraint(equalToConstant: 0)
-            NSLayoutConstraint.activate([
-                drawerHost.widthAnchor.constraint(equalToConstant:
-                    Self.primaryCrossAxisSize(for: displayStyle) - 22),
-                drawerStack.topAnchor.constraint(equalTo: drawerHost.topAnchor,
-                                                   constant: 5),
-                drawerStack.centerXAnchor.constraint(equalTo: drawerHost.centerXAnchor),
-            ])
-        } else {
-            drawerAxisConstraint = drawerHost.widthAnchor.constraint(equalToConstant: 0)
-            NSLayoutConstraint.activate([
-                drawerHost.heightAnchor.constraint(equalToConstant: 42),
-                drawerStack.leadingAnchor.constraint(equalTo: drawerHost.leadingAnchor,
-                                                       constant: 4),
-                drawerStack.centerYAnchor.constraint(equalTo: drawerHost.centerYAnchor),
-            ])
-        }
-        drawerAxisConstraint.isActive = true
-    }
-
-    private func constrainButton(_ button: PrayerDisplayModeButton,
-                                 compact: Bool = false) {
-        let height = button.heightAnchor.constraint(
-            equalToConstant: compact ? 34 : 48)
-        let width: NSLayoutConstraint
-        if displayStyle == .icons {
-            width = button.widthAnchor.constraint(equalTo: button.heightAnchor)
-        } else {
-            width = button.widthAnchor.constraint(
-                equalToConstant: button.preferredWidth(vertical: vertical))
-        }
-        NSLayoutConstraint.activate([width, height])
-    }
-
-    /// Replace the contextual mode group with the active tab's modes.
-    func setModes(_ items: [(symbol: String, label: String)], selected: Int) {
-        for button in modeButtons {
-            drawerStack.removeArrangedSubview(button)
-            button.removeFromSuperview()
-        }
-        modeButtons = []
-        positionDrawerBesideSelectedDestination()
-        for (index, item) in items.enumerated() {
-            let button = PrayerDisplayModeButton(
-                modeIndex: index, symbol: item.symbol, label: item.label,
-                target: self, action: #selector(modePressed(_:)),
-                contextLabel: isSettingsActive ? t("settings.title") : selectedNavIndex.flatMap {
-                    Self.navDefinitions.indices.contains($0)
-                        ? Self.navDefinitions[$0].labelKey() : nil
-                } ?? featureText("main.destinations"),
-                displayStyle: displayStyle, compact: true)
-            constrainButton(button, compact: true)
-            button.isModeSelected = index == selected
-            modeButtons.append(button)
-            drawerStack.addArrangedSubview(button)
-        }
-        if items.isEmpty { setDrawerOpen(false, animated: true) }
-        else if isDrawerOpen { updateOpenDrawerSize(animated: true) }
-    }
-
-    func setModeSelected(_ index: Int) {
-        for button in modeButtons { button.isModeSelected = button.modeIndex == index }
-    }
-
-    /// nil deselects every destination (Settings active).
-    func setNavSelected(_ index: Int?) {
-        selectedNavIndex = index
-        for button in navButtons { button.isModeSelected = button.modeIndex == index }
-        positionDrawerBesideSelectedDestination()
-    }
-
-    func setSettingsActive(_ active: Bool) {
-        isSettingsActive = active
-        settingsButton.isModeSelected = active
-        positionDrawerBesideSelectedDestination()
-    }
-
-    /// Used by shortcuts outside the dock (the compact popover and prayer
-    /// dashboard) so Settings opens with its contextual controls visible.
-    func revealSettingsModes() {
-        guard isSettingsActive, !modeButtons.isEmpty else { return }
-        setDrawerOpen(true, animated: true)
-    }
-
-    @objc private func navPressed(_ sender: PrayerDisplayModeButton) {
-        let wasCurrent = selectedNavIndex == sender.modeIndex
-        if !wasCurrent { setDrawerOpen(false, animated: false) }
-        setNavSelected(sender.modeIndex)
-        onSelectNav?(sender.modeIndex)
-        setDrawerOpen(wasCurrent ? !isDrawerOpen : true, animated: true)
-    }
-
-    @objc private func modePressed(_ sender: PrayerDisplayModeButton) {
-        setModeSelected(sender.modeIndex)
-        onSelectMode?(sender.modeIndex)
-    }
-
-    @objc private func themePressed(_ sender: PrayerDisplayModeButton) {
-        onTheme?(sender)
-    }
-
-    @objc private func settingsPressed(_ sender: PrayerDisplayModeButton) {
-        let wasCurrent = isSettingsActive
-        if !wasCurrent { setDrawerOpen(false, animated: false) }
-        onSettings?()
-        if isSettingsActive {
-            setDrawerOpen(wasCurrent ? !isDrawerOpen : true, animated: true)
-        } else {
-            setDrawerOpen(false, animated: true)
-        }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        updateCapsuleAppearance()
-    }
-
-    private func updateCapsuleAppearance() {
-        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        for capsule in [primaryCapsule, utilityCapsule] {
-            capsule.layer?.backgroundColor = (dark
-                ? NSColor.white.withAlphaComponent(0.055)
-                : NSColor.white.withAlphaComponent(0.68)).cgColor
-            capsule.layer?.borderWidth = 1
-            capsule.layer?.borderColor = NSColor.separatorColor
-                .withAlphaComponent(dark ? 0.55 : 0.32).cgColor
-            capsule.layer?.shadowColor = NSColor.black.cgColor
-            capsule.layer?.shadowOpacity = dark ? 0.16 : 0.09
-            capsule.layer?.shadowRadius = 10
-            capsule.layer?.shadowOffset = NSSize(width: 0, height: -2)
-        }
-        let drawerColor: NSColor = .appAccent
-        drawerHost.layer?.backgroundColor = drawerColor
-            .withAlphaComponent(dark ? 0.105 : 0.065).cgColor
-        drawerHost.layer?.borderWidth = 1
-        drawerHost.layer?.borderColor = drawerColor
-            .withAlphaComponent(dark ? 0.34 : 0.22).cgColor
-    }
-
-    private func drawerStartTransform() -> CATransform3D {
-        if vertical { return CATransform3DMakeTranslation(0, 10, 0) }
-        return CATransform3DMakeTranslation(
-            Localizer.shared.isRTL ? 12 : -12, 0, 0)
-    }
-
-    private func positionDrawerBesideSelectedDestination() {
-        let targetStack: NSStackView
-        let selectedButton: NSView
-        if isSettingsActive {
-            targetStack = utilityStack
-            selectedButton = settingsButton
-        } else {
-            guard let selectedNavIndex,
-                  navButtons.indices.contains(selectedNavIndex) else { return }
-            targetStack = primaryStack
-            selectedButton = navButtons[selectedNavIndex]
-        }
-        if let buttonPosition = targetStack.arrangedSubviews.firstIndex(
-                of: selectedButton),
-           buttonPosition + 1 < targetStack.arrangedSubviews.count,
-           targetStack.arrangedSubviews[buttonPosition + 1] === drawerHost {
-            return
-        }
-
-        // Remove first, then calculate the new insertion index. Calculating
-        // while the old drawer is still present shifts later destinations by
-        // one and can attach the controls to the wrong section.
-        if let oldStack = drawerHost.superview as? NSStackView {
-            oldStack.removeArrangedSubview(drawerHost)
-            drawerHost.removeFromSuperview()
-        }
-        guard let buttonPosition = targetStack.arrangedSubviews.firstIndex(
-                of: selectedButton) else { return }
-        targetStack.insertArrangedSubview(drawerHost, at: buttonPosition + 1)
-        updateCapsuleAppearance()
-    }
-
-    private func desiredDrawerSize() -> CGFloat {
-        guard !modeButtons.isEmpty else { return 0 }
-        drawerStack.layoutSubtreeIfNeeded()
-        let fitting = drawerStack.fittingSize
-        return (vertical ? fitting.height : fitting.width) + 9
-    }
-
-    private func updateOpenDrawerSize(animated: Bool) {
-        guard isDrawerOpen else { return }
-        let size = desiredDrawerSize()
-        drawerAxisConstraint.constant = size
-        if animated { window?.layoutIfNeeded() }
-    }
-
-    private func setDrawerOpen(_ open: Bool, animated: Bool) {
-        guard open != isDrawerOpen else { return }
-        isDrawerOpen = open
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        if open {
-            positionDrawerBesideSelectedDestination()
-            drawerAxisConstraint.constant = desiredDrawerSize()
-            drawerHost.isHidden = false
-            drawerHost.alphaValue = animated ? 0 : 1
-            drawerHost.layer?.transform = (animated && !reduceMotion)
-                ? drawerStartTransform() : CATransform3DIdentity
-            window?.layoutIfNeeded()
-        }
-        let changes = {
-            self.drawerHost.animator().alphaValue = open ? 1 : 0
-            if !reduceMotion {
-                self.drawerHost.layer?.transform = open
-                    ? CATransform3DIdentity : self.drawerStartTransform()
-            }
-        }
-        guard animated else {
-            drawerAxisConstraint.constant = open ? desiredDrawerSize() : 0
-            drawerHost.alphaValue = open ? 1 : 0
-            drawerHost.layer?.transform = CATransform3DIdentity
-            drawerHost.isHidden = !open
-            return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = reduceMotion ? 0.10 : 0.23
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            changes()
-        } completionHandler: { [weak self] in
-            guard let self else { return }
-            if !open {
-                self.drawerHost.isHidden = true
-                self.drawerAxisConstraint.constant = 0
-                self.drawerHost.layer?.transform = CATransform3DIdentity
-            }
-        }
-    }
-}
-
 final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private weak var appDelegate: AppDelegate?
     private var scrollView: NSScrollView!
-    private var countdownCard: AdaptiveCardView!
-    private var countdownTitleLabel: NSTextField!
-    private var countdownValueLabel: NSTextField!
-    private var countdownHeightConstraint: NSLayoutConstraint!
-    private var countdownWasVisible: Bool?
+    /// Live header subtitle: mosque, next prayer, and (optionally) the
+    /// countdown. Shown by the window's shared page header.
+    private var liveSubtitle = ""
     private var lastCountdownPrayerIndex: Int?
     private var scheduleEvents: [PrayerScheduleEvent] = []
     private var knowledgeByButtonTag: [Int: PrayerKnowledge] = [:]
@@ -10406,60 +10230,6 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let root = NSView()
         root.userInterfaceLayoutDirection = Localizer.shared.isRTL ? .rightToLeft : .leftToRight
 
-        countdownCard = AdaptiveCardView()
-        countdownCard.cornerRadius = 12
-        countdownCard.translatesAutoresizingMaskIntoConstraints = false
-        countdownCard.setAccessibilityElement(true)
-        countdownCard.setAccessibilityRole(.group)
-        countdownCard.setAccessibilityLabel(
-            prayerInfoText("visual.countdown.accessibility"))
-        root.addSubview(countdownCard)
-
-        let countdownIcon = NSImageView()
-        countdownIcon.image = templateSymbol("hourglass", pointSize: 14,
-                                               weight: .semibold)
-        countdownIcon.contentTintColor = .appGreenAccent
-        countdownIcon.translatesAutoresizingMaskIntoConstraints = false
-        countdownIcon.setAccessibilityElement(false)
-
-        countdownTitleLabel = NSTextField(labelWithString: "")
-        countdownTitleLabel.font = Localizer.shared.font(size: 13,
-                                                          weight: .semibold)
-        countdownTitleLabel.lineBreakMode = .byTruncatingTail
-        countdownTitleLabel.alignment = Localizer.shared.isRTL ? .right : .left
-        countdownTitleLabel.baseWritingDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        countdownTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        countdownValueLabel = NSTextField(labelWithString: "--:--:--")
-        countdownValueLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 18,
-                                                                    weight: .semibold)
-        countdownValueLabel.textColor = .appGreenAccent
-        countdownValueLabel.alignment = .center
-        countdownValueLabel.translatesAutoresizingMaskIntoConstraints = false
-        countdownValueLabel.setAccessibilityLabel(
-            prayerInfoText("visual.countdown.accessibility"))
-
-        let countdownStack = NSStackView(views: [countdownIcon,
-                                                  countdownTitleLabel,
-                                                  countdownValueLabel])
-        countdownStack.orientation = .horizontal
-        countdownStack.alignment = .centerY
-        countdownStack.spacing = 10
-        countdownStack.userInterfaceLayoutDirection = root.userInterfaceLayoutDirection
-        countdownStack.translatesAutoresizingMaskIntoConstraints = false
-        countdownCard.addSubview(countdownStack)
-        NSLayoutConstraint.activate([
-            countdownStack.leadingAnchor.constraint(equalTo: countdownCard.leadingAnchor,
-                                                      constant: 14),
-            countdownStack.trailingAnchor.constraint(equalTo: countdownCard.trailingAnchor,
-                                                       constant: -14),
-            countdownStack.centerYAnchor.constraint(equalTo: countdownCard.centerYAnchor),
-            countdownIcon.widthAnchor.constraint(equalToConstant: 20),
-            countdownIcon.heightAnchor.constraint(equalToConstant: 20),
-            countdownValueLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 104),
-        ])
-
         scrollView = NSScrollView()
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -10467,17 +10237,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         if Localizer.shared.isRTL { scrollView.userInterfaceLayoutDirection = .rightToLeft }
         root.addSubview(scrollView)
-        countdownHeightConstraint = countdownCard.heightAnchor.constraint(equalToConstant: 46)
         NSLayoutConstraint.activate([
-            countdownCard.topAnchor.constraint(equalTo: root.topAnchor,
-                                                constant: 10),
-            countdownCard.centerXAnchor.constraint(equalTo: root.centerXAnchor),
-            countdownCard.widthAnchor.constraint(equalToConstant: 540),
-            countdownHeightConstraint,
-
             scrollView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scrollView.topAnchor.constraint(equalTo: countdownCard.bottomAnchor, constant: 8),
+            scrollView.topAnchor.constraint(equalTo: root.topAnchor),
             scrollView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
         ])
         self.view = root
@@ -10500,7 +10263,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         refreshLiveState()
     }
 
-    // Dock view modes (Overview · List · Timeline · Clock).
+    // Header view modes (Overview · List · Timeline · Clock).
     var railModeItems: [(symbol: String, label: String)] {
         [("square.grid.2x2", featureText("full.view.overview")),
          ("list.bullet", featureText("full.view.list")),
@@ -10516,36 +10279,21 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
-    /// Updated by AppDelegate's existing one-second heartbeat. The countdown
-    /// lives above the document view, so it remains visible in every display
-    /// mode without rebuilding a timeline or clock once per second.
+    var pageTitle: String { t("main.tab.prayer_times") }
+    var pageSubtitle: String { liveSubtitle }
+
+    /// Updated by AppDelegate's existing one-second heartbeat. The next
+    /// prayer and countdown live in the window header, so they stay visible
+    /// in every display mode without rebuilding a timeline or clock.
     func refreshLiveState(now: Date = Date()) {
-        guard countdownCard != nil else { return }
-        let visible = UserDefaults.standard.object(forKey: kPrayerShowCountdown)
+        guard let app = appDelegate else { return }
+        let mosque = app.info.name.isEmpty ? t("mosque.default") : app.info.name
+        let showCountdown = UserDefaults.standard.object(forKey: kPrayerShowCountdown)
             as? Bool ?? true
-        if countdownWasVisible != visible {
-            countdownWasVisible = visible
-            countdownCard.isHidden = !visible
-            countdownHeightConstraint.constant = visible ? 46 : 0
-        }
-        guard visible else { return }
-        guard let app = appDelegate, app.info.times.count >= 5 else {
-            countdownTitleLabel.stringValue = featureText("full.next_prayer")
-            countdownValueLabel.stringValue = "--:--:--"
-            countdownCard.setAccessibilityLabel(
-                prayerInfoText("visual.countdown.accessibility"))
-            countdownValueLabel.setAccessibilityValue("")
-            lastCountdownPrayerIndex = nil
-            return
-        }
-        let next = app.nextPrayer()
+        let next = app.info.times.count >= 5 ? app.nextPrayer() : (index: -1, date: nil, isTomorrow: false)
         guard (0..<5).contains(next.index), let date = next.date,
               app.info.times.indices.contains(next.index) else {
-            countdownTitleLabel.stringValue = featureText("full.next_prayer")
-            countdownValueLabel.stringValue = "--:--:--"
-            countdownCard.setAccessibilityLabel(
-                prayerInfoText("visual.countdown.accessibility"))
-            countdownValueLabel.setAccessibilityValue("")
+            liveSubtitle = "\(mosque) · \(localizedLongDate())"
             lastCountdownPrayerIndex = nil
             return
         }
@@ -10558,29 +10306,16 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         } else {
             lastCountdownPrayerIndex = next.index
         }
-        let seconds = max(0, Int(date.timeIntervalSince(now)))
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let remainingSeconds = seconds % 60
-        let remaining = localizedInterfaceDigits(
-            String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds))
         let prayer = app.localizedPrayerName(at: next.index)
         let scheduled = displayTime(app.info.times[next.index])
-        countdownTitleLabel.stringValue =
-            "\(featureText("full.next_prayer")) · \(prayer) · \(scheduled)"
-        countdownValueLabel.stringValue = remaining
-        let spoken = "\(countdownTitleLabel.stringValue). "
-                   + "\(prayerInfoText("visual.countdown.accessibility")): \(remaining)"
-        countdownCard.setAccessibilityLabel(spoken)
-        countdownValueLabel.setAccessibilityValue(remaining)
+        var parts = [mosque, "\(featureText("full.next_prayer")): \(prayer) \(scheduled)"]
+        if showCountdown {
+            let seconds = max(0, Int(date.timeIntervalSince(now)))
+            parts.append(localizedInterfaceDigits(String(
+                format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)))
+        }
+        liveSubtitle = parts.joined(separator: " · ")
     }
-
-
-
-
-
-
-
 
     private func makeInfoButton(for knowledge: PrayerKnowledge,
                                 frame: NSRect) -> HoverIconButton {
@@ -10663,21 +10398,21 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         knowledgeByButtonTag.removeAll(keepingCapacity: true)
         nextKnowledgeButtonTag = 20_000
         guard let app = appDelegate else { return }
-        let contentWidth = min(856, max(680, width - 64))
+        let contentWidth = min(900, max(680, width - 60))
         let separateCount = nawafilMode == 2 ? nawafilData(app: app).count : 0
         let separateExtra: CGFloat = nawafilMode == 2 ? 560 : 0
         let bodyHeight: CGFloat
         switch displayMode {
-        case 0: bodyHeight = 670 + separateExtra
-        case 1: bodyHeight = (nawafilMode == 1 ? 1240 : 820) + separateExtra
+        case 0: bodyHeight = 612 + separateExtra
+        case 1: bodyHeight = (nawafilMode == 1 ? 880 : 600) + separateExtra
         case 2:
             let chart = InteractivePrayerDayTimelineView.preferredHeight(
                 for: contentWidth)
-            bodyHeight = chart + 260
+            bodyHeight = chart + 190
                 + (nawafilMode == 2 ? 100 + CGFloat(separateCount) * 128 : 0)
         default:
             let clock = PrayerRingClockView.preferredHeight(for: contentWidth)
-            bodyHeight = clock + 262
+            bodyHeight = clock + 190
                 + (nawafilMode == 2 ? 100 + CGFloat(separateCount) * 128 : 0)
         }
         let body = FlippedView(frame: NSRect(x: 0, y: 0, width: width, height: bodyHeight))
@@ -10817,7 +10552,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let nextTime = nextRaw.isEmpty ? "—" : displayTime(nextRaw)
         let iqamaRaw = validNext ? (app.iqamaTimeAt(nextIndex) ?? "") : ""
 
-        let hero = MoroccanHeroView(frame: NSRect(x: x, y: 22, width: width, height: 178))
+        let hero = MoroccanHeroView(frame: NSRect(x: x, y: 6, width: width, height: 168))
         body.addSubview(hero)
         let primaryX = isRTL ? width * 0.40 : 26
         let primaryWidth = width * 0.54
@@ -10848,16 +10583,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             size: 12, weight: .medium,
             color: NSColor.white.withAlphaComponent(0.76), alignment: .center))
 
-        body.addSubview(dashboardLabel(t("main.tab.prayer_times"),
-            frame: NSRect(x: x, y: 222, width: width, height: 30),
-            size: 22, weight: .bold))
+        // The page header already says "Prayer times"; tiles follow the hero.
 
         let gap: CGFloat = 10
         let tileWidth = (width - gap * 4) / 5
         for index in 0..<5 {
             let visualIndex = isRTL ? 4 - index : index
             let tileX = x + CGFloat(visualIndex) * (tileWidth + gap)
-            let card = AdaptiveCardView(frame: NSRect(x: tileX, y: 262,
+            let card = AdaptiveCardView(frame: NSRect(x: tileX, y: 190,
                                                        width: tileWidth, height: 144))
             card.cornerRadius = 14
             card.addsDepth = index == nextIndex
@@ -10915,25 +10648,25 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         }
 
         body.addSubview(dashboardLabel(featureText("full.landmarks"),
-            frame: NSRect(x: x, y: 434, width: width, height: 30),
-            size: 22, weight: .bold))
+            frame: NSRect(x: x, y: 358, width: width, height: 26),
+            size: 17, weight: .semibold))
         addLandmarksStrip(to: body, app: app,
-                          frame: NSRect(x: x, y: 472, width: width, height: 82))
+                          frame: NSRect(x: x, y: 392, width: width, height: 82))
 
         if nawafilMode == 1 {
             addIntegratedNawafilSummary(to: body, app: app,
-                frame: NSRect(x: x, y: 582, width: width, height: 72))
+                frame: NSRect(x: x, y: 498, width: width, height: 72))
         } else if nawafilMode == 2 {
             body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: 584, width: width, height: 30),
-                size: 22, weight: .bold))
+                frame: NSRect(x: x, y: 498, width: width, height: 26),
+                size: 17, weight: .semibold))
             let rows = nawafilData(app: app)
             for (index, row) in rows.enumerated() {
                 addNawafilRow(to: body,
-                              frame: NSRect(x: x, y: 622 + CGFloat(index) * 128,
+                              frame: NSRect(x: x, y: 532 + CGFloat(index) * 128,
                                             width: width, height: 116), data: row)
             }
-            addGuidance(to: body, frame: NSRect(x: x, y: 1142,
+            addGuidance(to: body, frame: NSRect(x: x, y: 1044,
                                                 width: width, height: 38))
         }
     }
@@ -11027,18 +10760,11 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func buildTimeline(in body: NSView, app: AppDelegate,
                                x: CGFloat, width: CGFloat) {
-        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        body.addSubview(dashboardLabel(t("main.tab.prayer_times"),
-            frame: NSRect(x: x, y: 20, width: width, height: 30),
-            size: 24, weight: .bold))
-        body.addSubview(dashboardLabel("\(mosqueName) · \(localizedLongDate())",
-            frame: NSRect(x: x, y: 50, width: width, height: 18),
-            size: 12, color: .secondaryLabelColor))
         let names = (0..<5).map { app.localizedPrayerName(at: $0) }
         let timelineHeight = InteractivePrayerDayTimelineView.preferredHeight(
             for: width)
         let timeline = InteractivePrayerDayTimelineView(
-            frame: NSRect(x: x, y: 84, width: width, height: timelineHeight),
+            frame: NSRect(x: x, y: 8, width: width, height: timelineHeight),
             info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
             events: scheduleEvents,
             initialVisibleStart: timelineVisibleStart,
@@ -11054,10 +10780,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             })
         body.addSubview(timeline)
 
-        var y = 84 + timelineHeight + 24
+        var y = 8 + timelineHeight + 28
         body.addSubview(dashboardLabel(featureText("full.landmarks"),
-            frame: NSRect(x: x, y: y, width: width, height: 30),
-            size: 22, weight: .bold))
+            frame: NSRect(x: x, y: y, width: width, height: 26),
+            size: 17, weight: .semibold))
         y += 38
         addLandmarksStrip(to: body, app: app,
                           frame: NSRect(x: x, y: y, width: width, height: 82))
@@ -11065,8 +10791,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
         if nawafilMode == 2 {
             body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: y, width: width, height: 30),
-                size: 22, weight: .bold))
+                frame: NSRect(x: x, y: y, width: width, height: 26),
+                size: 17, weight: .semibold))
             y += 38
             let rows = nawafilData(app: app)
             for row in rows {
@@ -11082,58 +10808,41 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func buildList(in body: NSView, app: AppDelegate,
                            x: CGFloat, width: CGFloat) {
-        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        let header = FlippedView(frame: NSRect(x: x, y: 14, width: width, height: 80))
-        body.addSubview(header)
-        // Every view mode shares the same page title; the mode itself is
-        // already shown by the selected dock item.
-        let heading = listLabel(t("main.tab.prayer_times"), size: 24,
-                                weight: .bold)
-        let mosque = listLabel(mosqueName, size: 12,
-                               color: .secondaryLabelColor)
-        let date = listLabel(localizedLongDate(), size: 12,
-                             color: .secondaryLabelColor)
-        mosque.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
-        date.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let context = NSStackView(views: [mosque, date])
-        context.orientation = .horizontal
-        context.alignment = .centerY
-        context.spacing = 8
-        context.userInterfaceLayoutDirection = Localizer.shared.isRTL
-            ? .rightToLeft : .leftToRight
-        context.translatesAutoresizingMaskIntoConstraints = false
-        header.addSubview(heading)
-        header.addSubview(context)
-        NSLayoutConstraint.activate([
-            heading.leadingAnchor.constraint(equalTo: header.leadingAnchor),
-            heading.trailingAnchor.constraint(equalTo: header.trailingAnchor),
-            heading.topAnchor.constraint(equalTo: header.topAnchor, constant: 2),
-            context.leadingAnchor.constraint(equalTo: header.leadingAnchor),
-            context.trailingAnchor.constraint(lessThanOrEqualTo: header.trailingAnchor),
-            context.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 2),
-            context.bottomAnchor.constraint(lessThanOrEqualTo: header.bottomAnchor,
-                                            constant: -2),
-        ])
-
-        var y: CGFloat = 108
+        // One grouped table (rows + hairlines) instead of a stack of cards.
+        let group = AdaptiveCardView(frame: NSRect(x: x, y: 8, width: width, height: 0))
+        group.cornerRadius = 12
+        body.addSubview(group)
+        var y: CGFloat = 8
+        var rowCount = 0
+        func separator() {
+            if rowCount > 0 {
+                let line = NSBox(frame: NSRect(x: x + 16, y: y, width: width - 32, height: 1))
+                line.boxType = .separator
+                body.addSubview(line)
+            }
+            rowCount += 1
+        }
         func prayer(_ index: Int) {
+            separator()
             addPrayerListRow(to: body, app: app, index: index,
-                frame: NSRect(x: x, y: y, width: width, height: 78))
-            y += 86
+                frame: NSRect(x: x, y: y, width: width, height: 64))
+            y += 64
         }
         func nafl(_ kind: PrayerScheduleKind, _ title: String, _ detail: String,
                   _ citation: String) {
             let item = displayKnowledge(for: kind, title: title, count: detail,
                                         window: detail, citation: citation)
+            separator()
             addNawafilListRow(to: body, title: title, detail: detail,
                 knowledge: item,
-                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 64))
-            y += 72
+                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 56))
+            y += 56
         }
         func landmark(_ title: String, _ raw: String, _ symbol: String) {
+            separator()
             addLandmarkListRow(to: body, title: title, raw: raw, symbol: symbol,
-                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 64))
-            y += 72
+                frame: NSRect(x: x + 20, y: y, width: width - 40, height: 52))
+            y += 52
         }
 
         if nawafilMode == 1 {
@@ -11164,12 +10873,16 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                  "Ṣaḥīḥ Muslim 1163a · Ṣaḥīḥ al-Bukhārī 1145")
             nafl(.witr, featureText("nawafil.witr"),
                  featureText("nawafil.witr.best"), "Ṣaḥīḥ Muslim 751b")
+            group.frame.size.height = y - 8
+            y += 20
         } else {
             for index in 0..<5 { prayer(index) }
+            group.frame.size.height = y - 8
+            y += 20
             body.addSubview(dashboardLabel(featureText("full.landmarks"),
-                frame: NSRect(x: x, y: y + 8, width: width, height: 30),
-                size: 22, weight: .bold))
-            y += 46
+                frame: NSRect(x: x, y: y, width: width, height: 26),
+                size: 17, weight: .semibold))
+            y += 34
             addLandmarksStrip(to: body, app: app,
                               frame: NSRect(x: x, y: y, width: width, height: 82))
             y += 110
@@ -11177,8 +10890,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
         if nawafilMode == 2 {
             body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: y, width: width, height: 30),
-                size: 22, weight: .bold))
+                frame: NSRect(x: x, y: y, width: width, height: 26),
+                size: 17, weight: .semibold))
             y += 38
             let rows = nawafilData(app: app)
             for row in rows {
@@ -11194,8 +10907,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func addPrayerListRow(to parent: NSView, app: AppDelegate, index: Int,
                                   frame: NSRect) {
-        let card = AdaptiveCardView(frame: frame)
-        card.cornerRadius = 12
+        let card = NSView(frame: frame)
         parent.addSubview(card)
 
         let mode = NSButton(frame: NSRect(x: 0, y: 0, width: 44, height: 44))
@@ -11224,12 +10936,15 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             infoView = placeholder
         }
 
-        let title = listLabel(app.localizedPrayerName(at: index), size: 17,
-                              weight: .semibold, maximumLines: 2)
+        let isNext = app.info.times.count >= 5 && app.nextPrayer().index == index
+        let title = listLabel(app.localizedPrayerName(at: index), size: 16,
+                              weight: .semibold,
+                              color: isNext ? .appGreenAccent : .labelColor,
+                              maximumLines: 2)
         title.setContentHuggingPriority(.defaultLow, for: .horizontal)
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
-        let adhan = listTimeLabel(raw.isEmpty ? "—" : displayTime(raw), size: 27)
+        let adhan = listTimeLabel(raw.isEmpty ? "—" : displayTime(raw), size: 22)
         let iqama = app.iqamaTimeAt(index).map(displayTime) ?? "—"
         let iqamaTitle = listLabel(t("col.iqama"), size: 10.5,
                                    weight: .medium,
@@ -11254,8 +10969,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         NSLayoutConstraint.activate([
             row.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 8),
             row.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -8),
-            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 6),
-            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -6),
+            row.topAnchor.constraint(equalTo: card.topAnchor, constant: 4),
+            row.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -4),
             infoView.widthAnchor.constraint(equalToConstant: 44),
             infoView.heightAnchor.constraint(equalToConstant: 44),
             adhan.widthAnchor.constraint(equalToConstant: 112),
@@ -11268,8 +10983,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private func addNawafilListRow(to parent: NSView, title: String, detail: String,
                                    knowledge: PrayerKnowledge,
                                    frame: NSRect) {
-        let card = AdaptiveCardView(frame: frame)
-        card.cornerRadius = 10
+        let card = NSView(frame: frame)
         parent.addSubview(card)
 
         let icon = NSImageView()
@@ -11318,8 +11032,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func addLandmarkListRow(to parent: NSView, title: String, raw: String,
                                     symbol: String, frame: NSRect) {
-        let card = AdaptiveCardView(frame: frame)
-        card.cornerRadius = 10
+        let card = NSView(frame: frame)
         parent.addSubview(card)
 
         let icon = NSImageView()
@@ -11332,7 +11045,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         titleLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let shownTime = raw.isEmpty ? "—" : displayTime(raw)
-        let time = listTimeLabel(shownTime, size: 19)
+        let time = listTimeLabel(shownTime, size: 17)
 
         let row = NSStackView(views: [icon, titleLabel, time])
         row.orientation = .horizontal
@@ -11360,17 +11073,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
     private func buildClock(in body: NSView, app: AppDelegate,
                             x: CGFloat, width: CGFloat) {
-        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        body.addSubview(dashboardLabel(t("main.tab.prayer_times"),
-            frame: NSRect(x: x, y: 20, width: width, height: 30),
-            size: 24, weight: .bold))
-        body.addSubview(dashboardLabel("\(mosqueName) · \(localizedLongDate())",
-            frame: NSRect(x: x, y: 50, width: width, height: 18),
-            size: 12, color: .secondaryLabelColor))
         let names = (0..<5).map { app.localizedPrayerName(at: $0) }
         let clockHeight = PrayerRingClockView.preferredHeight(for: width)
         let clock = PrayerRingClockView(
-            frame: NSRect(x: x, y: 84, width: width, height: clockHeight),
+            frame: NSRect(x: x, y: 8, width: width, height: clockHeight),
             info: app.info, prayerNames: names, showsNawafil: nawafilMode != 0,
             events: scheduleEvents,
             initialSelectedEventID: clockSelectedEventID,
@@ -11381,10 +11087,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                 self?.showPrayerInfo(event.knowledge, from: source)
             })
         body.addSubview(clock)
-        var y = 84 + clockHeight + 26
+        var y = 8 + clockHeight + 28
         body.addSubview(dashboardLabel(featureText("full.landmarks"),
-            frame: NSRect(x: x, y: y, width: width, height: 30),
-            size: 22, weight: .bold))
+            frame: NSRect(x: x, y: y, width: width, height: 26),
+            size: 17, weight: .semibold))
         y += 38
         addLandmarksStrip(to: body, app: app,
                           frame: NSRect(x: x, y: y, width: width, height: 82))
@@ -11392,8 +11098,8 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
 
         if nawafilMode == 2 {
             body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: y, width: width, height: 30),
-                size: 22, weight: .bold))
+                frame: NSRect(x: x, y: y, width: width, height: 26),
+                size: 17, weight: .semibold))
             y += 38
             let rows = nawafilData(app: app)
             for row in rows {
@@ -14738,7 +14444,9 @@ final class QuranViewController: NSViewController, MainTabContent,
 
     // MARK: - Mushaf page mode
 
-    // Dock view modes (Verses · Mushaf).
+    var pageTitle: String { featureText("quran.tab") }
+
+    // Header view modes (Verses · Mushaf).
     var railModeItems: [(symbol: String, label: String)] {
         [("list.bullet.rectangle", quranReaderText("mode.verses")),
          ("book.closed", quranReaderText("mode.mushaf"))]
@@ -15965,6 +15673,8 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         tabDidActivate()
     }
 
+    var pageTitle: String { t("settings.title") }
+
     var railModeItems: [(symbol: String, label: String)] {
         [
             ("slider.horizontal.3", featureText("settings.general")),
@@ -16033,9 +15743,14 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
                                           showsNavigationHeader: false,
                                           presentation: .settings)
             picker.appDelegate = appDelegate
+            // init() refreshed before the app delegate was attached, which
+            // showed "not selected" for the current mosque.
+            picker.refreshCurrentMode()
             picker.autoresizingMask = [.width, .height]
             picker.setAccessibilityLabel(t("settings.section.mosque"))
             settingsScrollView.documentView = picker
+            settingsScrollView.contentView.scroll(to: .zero)
+            settingsScrollView.reflectScrolledClipView(settingsScrollView.contentView)
             embeddedMosquePicker = picker
             return
         }
@@ -16043,9 +15758,13 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let clipWidth = settingsScrollView.contentSize.width
         lastBuiltWidth = clipWidth
         let body = FlippedView(frame: NSRect(x: 0, y: 0,
-                                             width: max(760, clipWidth), height: 620))
+                                             width: max(740, clipWidth), height: 620))
         settingsScrollView.documentView = body
         buildContent(into: body)
+        // A right-to-left scroll view keeps the horizontal offset from the
+        // first (narrower) build, which shifted every card sideways.
+        settingsScrollView.contentView.scroll(to: .zero)
+        settingsScrollView.reflectScrolledClipView(settingsScrollView.contentView)
         body.needsDisplay = true
     }
 
@@ -16053,24 +15772,27 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         let isRTL = Localizer.shared.isRTL
         let width: CGFloat = body.frame.width
         let cardW: CGFloat = 680
-        let cardX: CGFloat = max(24, (width - cardW) / 2)
+        // Cards line up with the window header's leading margin (30 pt).
+        let cardX: CGFloat = isRTL ? max(24, width - 30 - cardW) : 30
         let rowH: CGFloat = 44
         let labelW: CGFloat = 190
-        var y: CGFloat = 26
+        var y: CGFloat = 8
         var rowY: CGFloat = 0
 
         func sectionHeader(_ title: String, subtitle: String? = nil) {
-            let label = NSTextField(labelWithString: title)
-            label.font = Localizer.shared.font(size: 17, weight: .semibold)
-            label.textColor = .labelColor
-            label.alignment = isRTL ? .right : .left
-            label.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
-            let titleHeight = max(24, localizedTextHeight(title, font: label.font!,
-                                                         width: cardW - 8))
-            label.frame = NSRect(x: cardX + 4, y: y,
-                                 width: cardW - 8, height: titleHeight)
-            body.addSubview(label)
-            y += titleHeight + 2
+            if !title.isEmpty {
+                let label = NSTextField(labelWithString: title)
+                label.font = Localizer.shared.font(size: 15, weight: .semibold)
+                label.textColor = .labelColor
+                label.alignment = isRTL ? .right : .left
+                label.baseWritingDirection = isRTL ? .rightToLeft : .leftToRight
+                let titleHeight = max(22, localizedTextHeight(title, font: label.font!,
+                                                             width: cardW - 8))
+                label.frame = NSRect(x: cardX + 4, y: y,
+                                     width: cardW - 8, height: titleHeight)
+                body.addSubview(label)
+                y += titleHeight + 2
+            }
             if let subtitle = subtitle {
                 let detail = NSTextField(wrappingLabelWithString: subtitle)
                 detail.font = Localizer.shared.font(size: 11)
@@ -16155,7 +15877,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
             // General settings are deliberately shared by prayer times,
             // Adhan, and Adhkar. There is one language and one visual system
             // everywhere.
-            sectionHeader(featureText("settings.general"))
+            // Section name lives in the window header's segmented control.
             let generalCard = beginCard()
 
         languagePopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -16237,35 +15959,6 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         timeFormatSeg.action = #selector(timeFormatChanged(_:))
         addRow(generalCard, label: t("settings.section.time_format"), control: timeFormatSeg)
 
-        let dockPositionPopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        dockPositionPopup.addItems(withTitles: [
-            adhkarModeText("dock.left"), adhkarModeText("dock.right"),
-            adhkarModeText("dock.top"), adhkarModeText("dock.bottom"),
-        ])
-        let dockOrder = ["left", "right", "top", "bottom"]
-        dockPositionPopup.selectItem(at: dockOrder.firstIndex(of:
-            UserDefaults.standard.string(forKey: kDockPosition) ?? "left") ?? 0)
-        dockPositionPopup.target = self
-        dockPositionPopup.action = #selector(dockPositionChanged(_:))
-        dockPositionPopup.setAccessibilityLabel(adhkarModeText("dock.position"))
-        addRow(generalCard, label: adhkarModeText("dock.position"),
-               control: dockPositionPopup)
-
-        let dockStylePopup = NSPopUpButton(frame: .zero, pullsDown: false)
-        dockStylePopup.addItems(withTitles: [
-            adhkarModeText("dock.style.icons"),
-            adhkarModeText("dock.style.iconsText"),
-            adhkarModeText("dock.style.text"),
-        ])
-        let dockStyleOrder = ["icons", "iconsText", "text"]
-        dockStylePopup.selectItem(at: dockStyleOrder.firstIndex(of:
-            UserDefaults.standard.string(forKey: kDockDisplayStyle) ?? "icons") ?? 0)
-        dockStylePopup.target = self
-        dockStylePopup.action = #selector(dockStyleChanged(_:))
-        dockStylePopup.setAccessibilityLabel(adhkarModeText("dock.style"))
-        addRow(generalCard, label: adhkarModeText("dock.style"),
-               control: dockStylePopup)
-
         let nawafilPopup = NSPopUpButton(frame: .zero, pullsDown: false)
         nawafilPopup.addItems(withTitles: [
             featureText("adhan.mode.off"),
@@ -16298,8 +15991,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         }
 
         if selectedSection == .menuBar {
-            sectionHeader(t("settings.section.menu_bar"),
-                          subtitle: featureText("settings.menu_bar.help"))
+            sectionHeader("", subtitle: featureText("settings.menu_bar.help"))
             let menuCard = beginCard()
 
             barIconCheck = NSButton(checkboxWithTitle: t("settings.bar.icon"),
@@ -16338,7 +16030,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
 
         if selectedSection == .adhan {
             // Complete Adhan controls live here as well as in the compact popup.
-            sectionHeader(t("settings.section.adhan"))
+            // Section name lives in the window header's segmented control.
             let adhanCard = beginCard()
         adhanCheck = NSButton(checkboxWithTitle: t("settings.adhan.play"), target: self,
                               action: #selector(adhanEnabledChanged(_:)))
@@ -16433,7 +16125,7 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         if selectedSection == .adhkar {
             // Adhkar-specific sound and schedule settings share the same
             // settings window without becoming another long scrolling page.
-            sectionHeader(t("settings.section.adhkar"))
+            // Section name lives in the window header's segmented control.
             let adhkarCard = beginCard()
         adhkarAutoPlayCheck = NSButton(checkboxWithTitle: t("adhkar.settings.autoplay"),
                                       target: self,
@@ -16537,6 +16229,16 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         embeddedMosquePicker?.refreshCurrentMode()
         populateAdhanDevices()
         populateAdhkarDevices()
+        // The page is first built before the scroll view has its final
+        // width; once it's on screen, rebuild if the width changed so the
+        // cards line up with the window header.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.embeddedMosquePicker == nil,
+                  self.settingsScrollView != nil,
+                  abs(self.settingsScrollView.contentSize.width - self.lastBuiltWidth) > 4
+            else { return }
+            self.rebuildSelectedSection()
+        }
     }
 
     @objc private func languageChanged(_ sender: NSPopUpButton) {
@@ -16568,21 +16270,6 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     @objc private func dashboardCountdownChanged(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: kPrayerShowCountdown)
         appDelegate?.mainWindow?.reloadPrayerDashboard()
-    }
-    @objc private func dockPositionChanged(_ sender: NSPopUpButton) {
-        let order = ["left", "right", "top", "bottom"]
-        guard order.indices.contains(sender.indexOfSelectedItem) else { return }
-        UserDefaults.standard.set(order[sender.indexOfSelectedItem], forKey: kDockPosition)
-        appDelegate?.applyThemeChange()
-        appDelegate?.mainWindow?.showSettingsWindow(section: .general)
-    }
-    @objc private func dockStyleChanged(_ sender: NSPopUpButton) {
-        let order = ["icons", "iconsText", "text"]
-        guard order.indices.contains(sender.indexOfSelectedItem) else { return }
-        UserDefaults.standard.set(order[sender.indexOfSelectedItem],
-                                  forKey: kDockDisplayStyle)
-        appDelegate?.applyThemeChange()
-        appDelegate?.mainWindow?.showSettingsWindow(section: .general)
     }
     @objc private func nawafilSettingChanged(_ sender: NSPopUpButton) {
         let mode = max(0, min(2, sender.indexOfSelectedItem))
@@ -18561,6 +18248,9 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     // MARK: - reading / editing modes
 
     // Dock view modes (Reading · Editing).
+    var pageTitle: String { t("settings.section.adhkar") }
+    var pageSubtitle: String { selectedCollection()?.displayName ?? "" }
+
     var railModeItems: [(symbol: String, label: String)] {
         [("book", adhkarModeText("mode.reading")),
          ("square.and.pencil", adhkarModeText("mode.editing"))]
