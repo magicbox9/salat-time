@@ -127,7 +127,7 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.43.0"
+let kAppVersion          = "3.43.1"
 
 // ============================================================================
 // MARK: Theme palette
@@ -7949,6 +7949,7 @@ final class PrayerDisplayModeButton: NSButton {
 
 private let prayerViewTranslations: [String: [String: String]] = [
     "en": [
+        "range.hijri": "Hijri month", "range.gregorian": "Gregorian month",
         "view.timetable": "Timetable", "view.daypath": "Day path", "view.dial": "24-hour dial",
         "range.week": "7 days", "range.month": "Month", "day": "Day", "today": "Today",
         "vs.yesterday": "Since yesterday (minutes)", "day.length": "Day length", "night.length": "Night length",
@@ -7964,6 +7965,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "Previous month", "next.month": "Next month", "minutes": "%@ min",
     ],
     "fr": [
+        "range.hijri": "Mois hégirien", "range.gregorian": "Mois grégorien",
         "view.timetable": "Calendrier", "view.daypath": "Course du jour", "view.dial": "Cadran 24 h",
         "range.week": "7 jours", "range.month": "Mois", "day": "Jour", "today": "Aujourd’hui",
         "vs.yesterday": "Depuis hier (minutes)", "day.length": "Durée du jour", "night.length": "Durée de la nuit",
@@ -7979,6 +7981,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "Mois précédent", "next.month": "Mois suivant", "minutes": "%@ min",
     ],
     "es": [
+        "range.hijri": "Mes hégira", "range.gregorian": "Mes gregoriano",
         "view.timetable": "Horario", "view.daypath": "Recorrido del día", "view.dial": "Esfera 24 h",
         "range.week": "7 días", "range.month": "Mes", "day": "Día", "today": "Hoy",
         "vs.yesterday": "Desde ayer (minutos)", "day.length": "Duración del día", "night.length": "Duración de la noche",
@@ -7994,6 +7997,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "Mes anterior", "next.month": "Mes siguiente", "minutes": "%@ min",
     ],
     "ar": [
+        "range.hijri": "شهر هجري", "range.gregorian": "شهر ميلادي",
         "view.timetable": "الجدول", "view.daypath": "مسار اليوم", "view.dial": "ساعة ٢٤",
         "range.week": "٧ أيام", "range.month": "الشهر", "day": "اليوم", "today": "اليوم",
         "vs.yesterday": "مقارنة بالأمس (بالدقائق)", "day.length": "طول النهار", "night.length": "طول الليل",
@@ -8009,6 +8013,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "الشهر السابق", "next.month": "الشهر التالي", "minutes": "%@ د",
     ],
     "zh": [
+        "range.hijri": "伊斯兰历月", "range.gregorian": "公历月",
         "view.timetable": "时间表", "view.daypath": "日程轨迹", "view.dial": "24小时表盘",
         "range.week": "7天", "range.month": "月", "day": "日期", "today": "今天",
         "vs.yesterday": "与昨天相比（分钟）", "day.length": "白昼时长", "night.length": "夜晚时长",
@@ -8024,6 +8029,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "上个月", "next.month": "下个月", "minutes": "%@ 分钟",
     ],
     "hi": [
+        "range.hijri": "हिजरी महीना", "range.gregorian": "ग्रेगोरियन महीना",
         "view.timetable": "समय-सारणी", "view.daypath": "दिन का पथ", "view.dial": "24-घंटे डायल",
         "range.week": "7 दिन", "range.month": "महीना", "day": "दिन", "today": "आज",
         "vs.yesterday": "कल की तुलना में (मिनट)", "day.length": "दिन की लंबाई", "night.length": "रात की लंबाई",
@@ -8039,6 +8045,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "पिछला महीना", "next.month": "अगला महीना", "minutes": "%@ मिनट",
     ],
     "bn": [
+        "range.hijri": "হিজরি মাস", "range.gregorian": "গ্রেগরিয়ান মাস",
         "view.timetable": "সময়সূচি", "view.daypath": "দিনের পথ", "view.dial": "২৪ ঘণ্টার ডায়াল",
         "range.week": "৭ দিন", "range.month": "মাস", "day": "দিন", "today": "আজ",
         "vs.yesterday": "গতকালের তুলনায় (মিনিট)", "day.length": "দিনের দৈর্ঘ্য", "night.length": "রাতের দৈর্ঘ্য",
@@ -8054,6 +8061,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "আগের মাস", "next.month": "পরের মাস", "minutes": "%@ মিনিট",
     ],
     "ru": [
+        "range.hijri": "Месяц хиджры", "range.gregorian": "Григорианский месяц",
         "view.timetable": "Расписание", "view.daypath": "Ход дня", "view.dial": "Циферблат 24 ч",
         "range.week": "7 дней", "range.month": "Месяц", "day": "День", "today": "Сегодня",
         "vs.yesterday": "По сравнению со вчера (минуты)", "day.length": "Долгота дня", "night.length": "Долгота ночи",
@@ -8069,6 +8077,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "Предыдущий месяц", "next.month": "Следующий месяц", "minutes": "%@ мин",
     ],
     "pt": [
+        "range.hijri": "Mês hégira", "range.gregorian": "Mês gregoriano",
         "view.timetable": "Horário", "view.daypath": "Percurso do dia", "view.dial": "Mostrador 24 h",
         "range.week": "7 dias", "range.month": "Mês", "day": "Dia", "today": "Hoje",
         "vs.yesterday": "Desde ontem (minutos)", "day.length": "Duração do dia", "night.length": "Duração da noite",
@@ -8084,6 +8093,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "previous.month": "Mês anterior", "next.month": "Mês seguinte", "minutes": "%@ min",
     ],
     "ur": [
+        "range.hijri": "ہجری مہینہ", "range.gregorian": "عیسوی مہینہ",
         "view.timetable": "نظام الاوقات", "view.daypath": "دن کا راستہ", "view.dial": "24 گھنٹے ڈائل",
         "range.week": "7 دن", "range.month": "مہینہ", "day": "دن", "today": "آج",
         "vs.yesterday": "کل کے مقابلے میں (منٹ)", "day.length": "دن کی لمبائی", "night.length": "رات کی لمبائی",
@@ -8107,7 +8117,8 @@ func prayerViewText(_ key: String, _ args: CVarArg...) -> String {
     return localizedInterfaceDigits(args.isEmpty ? format : String(format: format, arguments: args))
 }
 
-let kPrayerTimetableRangeKey = "prayerTimetableRange"   // 0 = 7 days, 1 = month
+/// 0 = next 7 days, 1 = Hijri month (default month), 2 = Gregorian month.
+let kPrayerTimetableRangeKey = "prayerTimetableRangeV2"
 
 /// One day's prayer geometry in minutes since midnight, with the derived
 /// night points, prayer windows, and the approximate discouraged times.
@@ -9515,54 +9526,73 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let rtl = Localizer.shared.isRTL
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())
-        let range = UserDefaults.standard.integer(forKey: kPrayerTimetableRangeKey) == 1 ? 1 : 0
+        // The Hijri month is the default view until the user picks another.
+        let range = UserDefaults.standard.object(forKey: kPrayerTimetableRangeKey) == nil ? 1
+            : max(0, min(2, UserDefaults.standard.integer(forKey: kPrayerTimetableRangeKey)))
+        let adjust = app.info.hijriAdjustment ?? 0
+        var hijriCalendar = Calendar(identifier: .islamicUmmAlQura)
+        hijriCalendar.locale = preferredInterfaceLocale()
         let names = prayerNames(app)
         var y: CGFloat = 8
 
-        // Dates on show: the next seven days, or a whole month.
+        // Dates on show: the next seven days, a Hijri month (the mosque's
+        // adjustment applied), or a Gregorian month.
         var dates: [Date] = []
-        let titleFormatter = DateFormatter()
-        titleFormatter.locale = preferredInterfaceLocale()
-        if range == 1 {
-            let month = calendar.date(byAdding: .month, value: timetableMonthOffset, to: today) ?? today
-            if let interval = calendar.dateInterval(of: .month, for: month) {
-                var day = interval.start
-                while day < interval.end {
-                    dates.append(day)
-                    day = calendar.date(byAdding: .day, value: 1, to: day) ?? interval.end
-                }
-            }
-            titleFormatter.setLocalizedDateFormatFromTemplate("MMMM yyyy")
-        } else {
-            dates = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
-            titleFormatter.setLocalizedDateFormatFromTemplate("d MMMM")
-        }
-        guard let first = dates.first, let last = dates.last else { return y }
-        let title = range == 1 ? titleFormatter.string(from: first)
-            : "\(titleFormatter.string(from: first)) – \(titleFormatter.string(from: last))"
-        var hijriCalendar = Calendar(identifier: .islamicUmmAlQura)
-        hijriCalendar.locale = preferredInterfaceLocale()
+        let gregorianFormatter = DateFormatter()
+        gregorianFormatter.locale = preferredInterfaceLocale()
         let hijriFormatter = DateFormatter()
         hijriFormatter.calendar = hijriCalendar
         hijriFormatter.locale = preferredInterfaceLocale()
         hijriFormatter.dateFormat = "MMMM yyyy"
-        let adjust = app.info.hijriAdjustment ?? 0
-        let hijriMonths = [first, last].map {
-            hijriFormatter.string(from: calendar.date(byAdding: .day, value: adjust, to: $0) ?? $0)
+        func hijriShifted(_ date: Date) -> Date {
+            calendar.date(byAdding: .day, value: adjust, to: date) ?? date
         }
-        let hijriTitle = hijriMonths[0] == hijriMonths[1] ? hijriMonths[0]
+        func appendDays(from start: Date, until end: Date, shift: Int) {
+            var day = start
+            while day < end {
+                dates.append(calendar.date(byAdding: .day, value: shift, to: day) ?? day)
+                day = calendar.date(byAdding: .day, value: 1, to: day) ?? end
+            }
+        }
+        switch range {
+        case 1:
+            // Hijri month: compute in the adjusted Hijri timeline, then shift
+            // each day back to its civil date.
+            let anchor = hijriCalendar.date(byAdding: .month, value: timetableMonthOffset,
+                                            to: hijriShifted(today)) ?? hijriShifted(today)
+            if let interval = hijriCalendar.dateInterval(of: .month, for: anchor) {
+                appendDays(from: interval.start, until: interval.end, shift: -adjust)
+            }
+        case 2:
+            let month = calendar.date(byAdding: .month, value: timetableMonthOffset, to: today) ?? today
+            if let interval = calendar.dateInterval(of: .month, for: month) {
+                appendDays(from: interval.start, until: interval.end, shift: 0)
+            }
+        default:
+            dates = (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: today) }
+        }
+        guard let first = dates.first, let last = dates.last else { return y }
+        gregorianFormatter.setLocalizedDateFormatFromTemplate(range == 2 ? "MMMM yyyy" : "d MMMM")
+        let gregorianTitle = range == 2 ? gregorianFormatter.string(from: first)
+            : "\(gregorianFormatter.string(from: first)) – \(gregorianFormatter.string(from: last))"
+        let hijriMonths = [first, last].map { hijriFormatter.string(from: hijriShifted($0)) }
+        let hijriTitle = range == 1 || hijriMonths[0] == hijriMonths[1] ? hijriMonths[0]
             : "\(hijriMonths[0]) – \(hijriMonths[1])"
+        // The calendar being browsed leads; the other one follows beneath.
+        let title = range == 1 ? hijriTitle : gregorianTitle
+        let subtitle = range == 1 ? gregorianTitle : hijriTitle
 
         // Controls on the trailing side: month steps (month view) + range.
         let rangeControl = NSSegmentedControl(
-            labels: [prayerViewText("range.week"), prayerViewText("range.month")],
+            labels: [prayerViewText("range.week"), prayerViewText("range.hijri"),
+                     prayerViewText("range.gregorian")],
             trackingMode: .selectOne, target: self,
             action: #selector(timetableRangeChanged(_:)))
         rangeControl.selectedSegment = range
         rangeControl.font = Localizer.shared.font(size: 12, weight: .medium)
         rangeControl.userInterfaceLayoutDirection = rtl ? .rightToLeft : .leftToRight
         var controls: [NSView] = []
-        if range == 1 {
+        if range != 0 {
             let previous = HoverIconButton(symbol: rtl ? "chevron.right" : "chevron.left",
                                            toolTip: prayerViewText("previous.month"),
                                            target: self, action: #selector(timetableMonthStep(_:)),
@@ -9589,7 +9619,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         body.addSubview(dashboardLabel(title,
             frame: NSRect(x: rtl ? x + width - textWidth : x, y: y, width: textWidth, height: 24),
             size: 17, weight: .semibold))
-        body.addSubview(dashboardLabel(hijriTitle,
+        body.addSubview(dashboardLabel(subtitle,
             frame: NSRect(x: rtl ? x + width - textWidth : x, y: y + 25, width: textWidth, height: 17),
             size: 12, color: .secondaryLabelColor))
         y += 54
