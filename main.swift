@@ -126,7 +126,7 @@ let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 let kDockPosition                = "mainDockPosition" // "left"|"right"|"top"|"bottom"
 let kDockDisplayStyle            = "mainDockDisplayStyle" // "icons"|"iconsText"|"text"
 
-let kAppVersion          = "3.37.1"
+let kAppVersion          = "3.37.2"
 
 // ============================================================================
 // MARK: Theme palette
@@ -20997,15 +20997,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate,
 
         statusPopoverAnchorWindow?.orderOut(nil)
 
+        // Place the panel with `setFrame` (global coordinates) rather than
+        // passing `screen:` to the initializer: that variant treats the rect
+        // as relative to the screen's origin, which double-offsets it on any
+        // secondary display and strands the anchor off-screen.
+        let anchorFrame = NSRect(x: anchorPoint.x - 1,
+                                 y: anchorPoint.y,
+                                 width: 2,
+                                 height: 2)
         let anchor = NSPanel(
-            contentRect: NSRect(x: anchorPoint.x - 1,
-                                y: anchorPoint.y,
-                                width: 2,
-                                height: 2),
+            contentRect: anchorFrame,
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
-            defer: false,
-            screen: screen)
+            defer: false)
+        anchor.setFrame(anchorFrame, display: false)
         anchor.isOpaque = false
         anchor.backgroundColor = .clear
         anchor.hasShadow = false
