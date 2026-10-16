@@ -38,5 +38,20 @@
     "loading": "جارٍ التحميل…",
     "error_generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى.",
     "dashboard_title": "مساحتي",
-    "dashboard_intro": "مساجدك وصلواتك وطلباتك في مكان واحد."
+    "dashboard_intro": "مساجدك وصلواتك وطلباتك في مكان واحد.",
+    "nav_claims": "طلباتي",
+    "dash_my_mosque": "مسجدي",
+    "dash_choose_mosque": "اختر مسجدك على الخريطة لتظهر مواقيته هنا.",
+    "dash_open_globe": "ابحث عن مسجدي",
+    "dash_open_page": "صفحة المسجد",
+    "dash_today_prayers": "صلوات اليوم",
+    "dash_prayed_count": "أُدّيت {count} من 5",
+    "dash_hasanat_today": "حسنات اليوم: {count}",
+    "dash_hasanat_total": "مجموع الحسنات: {count}",
+    "dash_streak": "المواظبة: {count} أيام",
+    "dash_open_tracker": "افتح متابعتي",
+    "dash_favorites": "المساجد المحفوظة: {count}",
+    "dash_claims_pending": "قيد المراجعة: {count}",
+    "dash_claims_none": "لا توجد طلبات بعد",
+    "close": "إغلاق"
 }

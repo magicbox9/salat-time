@@ -38,5 +38,20 @@
     "loading": "Loading…",
     "error_generic": "Something went wrong. Please try again.",
     "dashboard_title": "My space",
-    "dashboard_intro": "Your mosques, your prayers and your requests, in one place."
+    "dashboard_intro": "Your mosques, your prayers and your requests, in one place.",
+    "nav_claims": "My requests",
+    "dash_my_mosque": "My mosque",
+    "dash_choose_mosque": "Choose your mosque on the map to see its prayer times here.",
+    "dash_open_globe": "Find my mosque",
+    "dash_open_page": "Mosque page",
+    "dash_today_prayers": "Today's prayers",
+    "dash_prayed_count": "{count} of 5 prayed",
+    "dash_hasanat_today": "{count} hasanat today",
+    "dash_hasanat_total": "{count} hasanat in total",
+    "dash_streak": "Streak: {count} days",
+    "dash_open_tracker": "Open my tracker",
+    "dash_favorites": "Saved: {count}",
+    "dash_claims_pending": "Pending: {count}",
+    "dash_claims_none": "No request yet",
+    "close": "Close"
 }

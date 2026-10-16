@@ -38,5 +38,20 @@
     "loading": "Chargement…",
     "error_generic": "Une erreur est survenue. Veuillez réessayer.",
     "dashboard_title": "Mon espace",
-    "dashboard_intro": "Vos mosquées, vos prières et vos demandes, au même endroit."
+    "dashboard_intro": "Vos mosquées, vos prières et vos demandes, au même endroit.",
+    "nav_claims": "Mes demandes",
+    "dash_my_mosque": "Ma mosquée",
+    "dash_choose_mosque": "Choisissez votre mosquée sur la carte pour voir ses horaires ici.",
+    "dash_open_globe": "Trouver ma mosquée",
+    "dash_open_page": "Page de la mosquée",
+    "dash_today_prayers": "Prières du jour",
+    "dash_prayed_count": "{count} sur 5 accomplies",
+    "dash_hasanat_today": "{count} hasanat aujourd'hui",
+    "dash_hasanat_total": "{count} hasanat au total",
+    "dash_streak": "Série : {count} jours",
+    "dash_open_tracker": "Ouvrir mon suivi",
+    "dash_favorites": "Enregistrées : {count}",
+    "dash_claims_pending": "En attente : {count}",
+    "dash_claims_none": "Aucune demande pour l'instant",
+    "close": "Fermer"
 }

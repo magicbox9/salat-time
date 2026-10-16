@@ -32,6 +32,28 @@ export type NextPrayer = {
 
 const COUNTED: PrayerName[] = ['fajr', 'shuruq', 'dhuhr', 'asr', 'maghrib', 'isha'];
 
+/**
+ * A day's times as minutes that only go forward: a time earlier than the one
+ * before it (Isha after midnight in far-north summers) belongs to the next day.
+ */
+export function dayMinutes(day: DayTimes): Record<PrayerName, number> {
+    const out = {} as Record<PrayerName, number>;
+    let previous = -1;
+
+    for (const prayer of COUNTED) {
+        let value = toMinutes(day.times[prayer]);
+
+        if (value < previous) {
+            value += 1440;
+        }
+
+        out[prayer] = value;
+        previous = value;
+    }
+
+    return out;
+}
+
 /** The next event after now, using tomorrow's Fajr after Isha. */
 export function nextPrayer(
     today: DayTimes | null,
@@ -44,12 +66,16 @@ export function nextPrayer(
     }
 
     const now = minutesInZone(timeZone, at);
+    const minutes = dayMinutes(today);
 
     for (const prayer of COUNTED) {
-        const time = today.times[prayer];
-
-        if (time && toMinutes(time) > now) {
-            return { prayer, time, tomorrow: false, inMinutes: toMinutes(time) - now };
+        if (minutes[prayer] > now) {
+            return {
+                prayer,
+                time: today.times[prayer],
+                tomorrow: false,
+                inMinutes: minutes[prayer] - now,
+            };
         }
     }
 
@@ -78,10 +104,11 @@ export function currentPrayer(
     }
 
     const now = minutesInZone(timeZone, at);
+    const minutes = dayMinutes(today);
     let current: PrayerName | null = null;
 
     for (const prayer of COUNTED) {
-        if (toMinutes(today.times[prayer]) <= now) {
+        if (minutes[prayer] <= now) {
             current = prayer;
         }
     }

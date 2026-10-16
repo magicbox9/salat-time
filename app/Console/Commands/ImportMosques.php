@@ -4,6 +4,8 @@ namespace App\Console\Commands;
 
 use App\Models\Mosque;
 use App\Models\MosquePrayerCalendar;
+use App\Services\Geocoding\GeocodingService;
+use App\Services\Geocoding\GeocodingUnavailable;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -32,6 +34,9 @@ class ImportMosques extends Command
     /** @var array<string, true> */
     private array $slugs = [];
 
+    /** @var list<string> records that could not be placed on the map */
+    private array $skipped = [];
+
     public function handle(): int
     {
         $root = rtrim((string) $this->option('path'), '/');
@@ -52,6 +57,9 @@ class ImportMosques extends Command
         $osm = $this->importOsm("$root/study 1/data/osm_mosques_france.json");
 
         $this->info("MAWAQIT mosques: $mawaqit · directory-only: $directory · OpenStreetMap-only: $osm");
+        if ($this->skipped) {
+            $this->warn('Skipped (no usable position): '.implode(', ', $this->skipped));
+        }
         $this->info('Mosques in database: '.Mosque::count().' · with published times: '.MosquePrayerCalendar::count());
 
         return self::SUCCESS;
@@ -98,11 +106,18 @@ class ImportMosques extends Command
                 continue;
             }
             $reg = $register[$conf['slug']] ?? [];
+            $position = $this->position((float) $conf['latitude'], (float) $conf['longitude'], $reg);
+            if (! $position) {
+                $this->skipped[] = $conf['slug'];
+
+                continue;
+            }
+            [$conf['latitude'], $conf['longitude']] = $position;
             DB::transaction(function () use ($conf, $reg, &$count) {
                 $mosque = Mosque::query()->firstOrNew(['mawaqit_slug' => $conf['slug']]);
                 $mosque->fill([
                     'name' => Str::limit(trim((string) $conf['name']), 195, ''),
-                    'address' => $this->addressLine($reg['address'] ?? null),
+                    'address' => $this->addressLine($reg['address'] ?? null, $reg['postcode'] ?? null),
                     'postcode' => $reg['postcode'] ?? null ?: null,
                     'city' => $this->cityName($reg['city'] ?? null),
                     'country_code' => strtoupper(substr((string) ($conf['countryCode'] ?? 'FR'), 0, 2)) ?: 'FR',
@@ -159,8 +174,13 @@ class ImportMosques extends Command
             if ($row['mawaqit_slug'] !== '' || $row['directory_id'] === '' || $row['lat'] === '') {
                 continue;
             }
-            $lat = (float) $row['lat'];
-            $lng = (float) $row['lng'];
+            $position = $this->position((float) $row['lat'], (float) $row['lng'], $row);
+            if (! $position) {
+                $this->skipped[] = 'directory '.$row['directory_id'];
+
+                continue;
+            }
+            [$lat, $lng] = $position;
             $existing = Mosque::query()->where('directory_id', $row['directory_id'])->first();
             if (! $existing && $this->isKnownPlace($lat, $lng)) {
                 continue;
@@ -168,7 +188,7 @@ class ImportMosques extends Command
             $mosque = $existing ?? new Mosque;
             $mosque->fill([
                 'name' => Str::limit(trim($row['name']) ?: 'Mosquée', 195, ''),
-                'address' => $this->addressLine($row['address']),
+                'address' => $this->addressLine($row['address'], $row['postcode']),
                 'postcode' => $row['postcode'] ?: null,
                 'city' => $this->cityName($row['city']),
                 'country_code' => 'FR',
@@ -269,6 +289,39 @@ class ImportMosques extends Command
         return $out;
     }
 
+    /**
+     * A usable position: the given one, else the register's, else the address
+     * looked up in the national address base (some records carry 0,0).
+     *
+     * @param  array<string, string>  $register
+     * @return array{0: float, 1: float}|null
+     */
+    private function position(float $lat, float $lng, array $register): ?array
+    {
+        $valid = fn (float $a, float $b) => (abs($a) > 0.01 || abs($b) > 0.01) && abs($a) <= 90 && abs($b) <= 180;
+        if ($valid($lat, $lng)) {
+            return [$lat, $lng];
+        }
+        $regLat = (float) ($register['lat'] ?? 0);
+        $regLng = (float) ($register['lng'] ?? 0);
+        if ($valid($regLat, $regLng)) {
+            return [$regLat, $regLng];
+        }
+        $address = trim((string) ($register['address'] ?? ''));
+        if ($address === '' || ($register['territory'] ?? 'FR') !== 'FR') {
+            return null;
+        }
+        try {
+            $place = app(GeocodingService::class)->search($address, 'FR')[0] ?? null;
+        } catch (GeocodingUnavailable) {
+            return null;
+        }
+
+        return $place && $valid((float) $place['lat'], (float) $place['lng'])
+            ? [(float) $place['lat'], (float) $place['lng']]
+            : null;
+    }
+
     private function isKnownPlace(float $lat, float $lng, int $metres = self::SAME_PLACE_METRES): bool
     {
         foreach ($this->cells($lat, $lng) as $cell) {
@@ -323,9 +376,14 @@ class ImportMosques extends Command
         return $slug;
     }
 
-    private function addressLine(?string $address): ?string
+    private function addressLine(?string $address, ?string $postcode = null): ?string
     {
         $address = trim(preg_replace('/\s+France$/u', '', (string) $address));
+        // Directory addresses end with "postcode city", which pages show separately.
+        $postcode = trim((string) $postcode);
+        if ($postcode !== '' && ($at = mb_strrpos($address, $postcode)) !== false && $at > 0) {
+            $address = rtrim(mb_substr($address, 0, $at), ' ,');
+        }
 
         return $address !== '' ? Str::limit($address, 295, '') : null;
     }
