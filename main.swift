@@ -127,7 +127,7 @@ let kQuranReaderMode             = "quranReaderMode" // "verses" | "mushaf"
 let kQuranReaderScript           = "quranReaderScript" // "kfgqpc"|"amiri"|"harmattan"|"system"
 let kAdhkarViewMode              = "adhkarViewMode" // "reading" | "editing"
 
-let kAppVersion          = "3.43.1"
+let kAppVersion          = "3.44.0"
 
 // ============================================================================
 // MARK: Theme palette
@@ -7265,106 +7265,6 @@ private func zelligeStarPath(center: NSPoint, outer: CGFloat,
     return path
 }
 
-final class MoroccanPatternView: NSView {
-    override var isFlipped: Bool { true }
-    override var isOpaque: Bool { false }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let isDark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
-        // Texture, not decoration: barely-there ink.
-        let ink = NSColor.appAccent.withAlphaComponent(isDark ? 0.035 : 0.022)
-        ink.setStroke()
-
-        var row = 0
-        var y: CGFloat = 28
-        while y < bounds.height + 30 {
-            var x: CGFloat = row.isMultiple(of: 2) ? 30 : 64
-            while x < bounds.width + 30 {
-                let star = zelligeStarPath(center: NSPoint(x: x, y: y),
-                                            outer: 12, inner: 5.2)
-                star.lineWidth = 0.7
-                star.stroke()
-
-                let diamond = NSBezierPath()
-                diamond.move(to: NSPoint(x: x + 22, y: y))
-                diamond.line(to: NSPoint(x: x + 30, y: y + 8))
-                diamond.line(to: NSPoint(x: x + 38, y: y))
-                diamond.line(to: NSPoint(x: x + 30, y: y - 8))
-                diamond.close()
-                diamond.lineWidth = 0.55
-                diamond.stroke()
-                x += 68
-            }
-            y += 54
-            row += 1
-        }
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-}
-
-final class MoroccanHeroView: NSView {
-    override var isFlipped: Bool { true }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        wantsLayer = true
-        layer?.shadowColor = NSColor.black.cgColor
-        layer?.shadowOpacity = 0.10
-        layer?.shadowRadius = 8
-        layer?.shadowOffset = NSSize(width: 0, height: -2)
-        setAccessibilityRole(.group)
-        setAccessibilityLabel(featureText("full.next_prayer"))
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-
-    override func draw(_ dirtyRect: NSRect) {
-        super.draw(dirtyRect)
-        let cardRect = bounds.insetBy(dx: 1, dy: 1)
-        let card = NSBezierPath(roundedRect: cardRect, xRadius: 14, yRadius: 14)
-        let accent = currentAccentPair().light
-        let deepGreen = NSColor(red: 0.025, green: 0.19, blue: 0.135, alpha: 1)
-        NSGraphicsContext.saveGraphicsState()
-        card.addClip()
-        NSGradient(starting: accent, ending: deepGreen)?.draw(in: card, angle: 0)
-
-        // Stars sit behind the time block (the trailing side), never under
-        // the prayer name.
-        NSColor.white.withAlphaComponent(0.07).setStroke()
-        let rtl = Localizer.shared.isRTL
-        var x = rtl ? -24 : bounds.width * 0.56
-        let xEnd = rtl ? bounds.width * 0.44 : bounds.width + 30
-        while x < xEnd {
-            var y: CGFloat = 12
-            while y < bounds.height + 24 {
-                let star = zelligeStarPath(center: NSPoint(x: x, y: y),
-                                            outer: 19, inner: 8)
-                star.lineWidth = 0.8
-                star.stroke()
-                y += 44
-            }
-            x += 48
-        }
-        NSGraphicsContext.restoreGraphicsState()
-
-        NSColor.white.withAlphaComponent(0.12).setStroke()
-        card.lineWidth = 0.8
-        card.stroke()
-    }
-
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
-    }
-}
-
 enum PrayerScheduleKind: String {
     case obligatory
     case rawatib
@@ -7957,7 +7857,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "Now: %@", "left": "%@ left", "between": "Between prayers",
         "forbidden": "Times to avoid voluntary prayer (approximate)",
         "forbidden.note": "Estimated around sunrise, the sun's zenith, and sunset. Follow local scholarly guidance.",
-        "qibla": "Qibla", "qibla.detail": "%@° from north · %@", "next": "Next: %@ %@",
+        "qibla": "Qibla", "qibla.detail": "%@ from north · %@", "next": "Next: %@ %@",
         "no.calendar": "The full timetable appears after the next refresh from Mawaqit.",
         "day.legend": "Day", "night.legend": "Night", "iqama.legend": "Iqama",
         "dir.0": "North", "dir.1": "Northeast", "dir.2": "East", "dir.3": "Southeast",
@@ -7973,7 +7873,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "En cours : %@", "left": "Reste %@", "between": "Entre les prières",
         "forbidden": "Moments où éviter la prière surérogatoire (approximatifs)",
         "forbidden.note": "Estimés autour du lever du soleil, du zénith et du coucher. Suivez l’avis des savants de votre région.",
-        "qibla": "Qibla", "qibla.detail": "%@° depuis le nord · %@", "next": "Prochaine : %@ %@",
+        "qibla": "Qibla", "qibla.detail": "%@ depuis le nord · %@", "next": "Prochaine : %@ %@",
         "no.calendar": "Le calendrier complet apparaît après la prochaine mise à jour depuis Mawaqit.",
         "day.legend": "Jour", "night.legend": "Nuit", "iqama.legend": "Iqama",
         "dir.0": "Nord", "dir.1": "Nord-est", "dir.2": "Est", "dir.3": "Sud-est",
@@ -7989,7 +7889,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "Ahora: %@", "left": "Quedan %@", "between": "Entre oraciones",
         "forbidden": "Momentos para evitar la oración voluntaria (aproximados)",
         "forbidden.note": "Estimados alrededor del amanecer, el cénit y el atardecer. Sigue la orientación de los sabios locales.",
-        "qibla": "Qibla", "qibla.detail": "%@° desde el norte · %@", "next": "Siguiente: %@ %@",
+        "qibla": "Qibla", "qibla.detail": "%@ desde el norte · %@", "next": "Siguiente: %@ %@",
         "no.calendar": "El horario completo aparece tras la próxima actualización desde Mawaqit.",
         "day.legend": "Día", "night.legend": "Noche", "iqama.legend": "Iqama",
         "dir.0": "Norte", "dir.1": "Noreste", "dir.2": "Este", "dir.3": "Sureste",
@@ -8005,7 +7905,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "الوقت الحالي: %@", "left": "بقي %@", "between": "بين الصلوات",
         "forbidden": "أوقات النهي عن النافلة (تقريبية)",
         "forbidden.note": "تقدير حول الشروق والزوال والغروب. اتبع توجيه أهل العلم في بلدك.",
-        "qibla": "القبلة", "qibla.detail": "%@° من الشمال · %@", "next": "القادمة: %@ %@",
+        "qibla": "القبلة", "qibla.detail": "%@ من الشمال · %@", "next": "القادمة: %@ %@",
         "no.calendar": "يظهر الجدول الكامل بعد التحديث التالي من مواقيت.",
         "day.legend": "النهار", "night.legend": "الليل", "iqama.legend": "الإقامة",
         "dir.0": "الشمال", "dir.1": "الشمال الشرقي", "dir.2": "الشرق", "dir.3": "الجنوب الشرقي",
@@ -8021,7 +7921,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "当前：%@", "left": "剩余 %@", "between": "两次礼拜之间",
         "forbidden": "不宜做副功拜的时间（近似）",
         "forbidden.note": "按日出、日中和日落前后估算。请遵循当地学者的指导。",
-        "qibla": "朝向", "qibla.detail": "距正北 %@° · %@", "next": "下一次：%@ %@",
+        "qibla": "朝向", "qibla.detail": "距正北 %@ · %@", "next": "下一次：%@ %@",
         "no.calendar": "下次从 Mawaqit 更新后将显示完整时间表。",
         "day.legend": "白天", "night.legend": "夜晚", "iqama.legend": "伊卡玛",
         "dir.0": "北", "dir.1": "东北", "dir.2": "东", "dir.3": "东南",
@@ -8037,7 +7937,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "अभी: %@", "left": "%@ शेष", "between": "नमाज़ों के बीच",
         "forbidden": "नफ़्ल नमाज़ से बचने के समय (अनुमानित)",
         "forbidden.note": "सूर्योदय, दोपहर और सूर्यास्त के आसपास अनुमानित। स्थानीय विद्वानों का मार्गदर्शन मानें।",
-        "qibla": "क़िबला", "qibla.detail": "उत्तर से %@° · %@", "next": "अगली: %@ %@",
+        "qibla": "क़िबला", "qibla.detail": "उत्तर से %@ · %@", "next": "अगली: %@ %@",
         "no.calendar": "Mawaqit से अगले अपडेट के बाद पूरी समय-सारणी दिखेगी।",
         "day.legend": "दिन", "night.legend": "रात", "iqama.legend": "इक़ामत",
         "dir.0": "उत्तर", "dir.1": "उत्तर-पूर्व", "dir.2": "पूर्व", "dir.3": "दक्षिण-पूर्व",
@@ -8053,7 +7953,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "এখন: %@", "left": "%@ বাকি", "between": "নামাজের মাঝে",
         "forbidden": "নফল নামাজ এড়ানোর সময় (আনুমানিক)",
         "forbidden.note": "সূর্যোদয়, মধ্যাহ্ন ও সূর্যাস্তের আশেপাশে আনুমানিক। স্থানীয় আলেমদের নির্দেশনা মানুন।",
-        "qibla": "কিবলা", "qibla.detail": "উত্তর থেকে %@° · %@", "next": "পরবর্তী: %@ %@",
+        "qibla": "কিবলা", "qibla.detail": "উত্তর থেকে %@ · %@", "next": "পরবর্তী: %@ %@",
         "no.calendar": "Mawaqit থেকে পরবর্তী হালনাগাদের পর পূর্ণ সময়সূচি দেখা যাবে।",
         "day.legend": "দিন", "night.legend": "রাত", "iqama.legend": "ইকামত",
         "dir.0": "উত্তর", "dir.1": "উত্তর-পূর্ব", "dir.2": "পূর্ব", "dir.3": "দক্ষিণ-পূর্ব",
@@ -8069,7 +7969,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "Сейчас: %@", "left": "Осталось %@", "between": "Между молитвами",
         "forbidden": "Время, когда нежелательны добровольные молитвы (примерно)",
         "forbidden.note": "Оценка около восхода, зенита и заката. Следуйте наставлениям местных учёных.",
-        "qibla": "Кибла", "qibla.detail": "%@° от севера · %@", "next": "Следующая: %@ %@",
+        "qibla": "Кибла", "qibla.detail": "%@ от севера · %@", "next": "Следующая: %@ %@",
         "no.calendar": "Полное расписание появится после следующего обновления из Mawaqit.",
         "day.legend": "День", "night.legend": "Ночь", "iqama.legend": "Икама",
         "dir.0": "Север", "dir.1": "Северо-восток", "dir.2": "Восток", "dir.3": "Юго-восток",
@@ -8085,7 +7985,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "Agora: %@", "left": "Faltam %@", "between": "Entre orações",
         "forbidden": "Momentos para evitar a oração voluntária (aproximados)",
         "forbidden.note": "Estimados perto do nascer do sol, do zénite e do pôr do sol. Siga a orientação dos sábios locais.",
-        "qibla": "Qibla", "qibla.detail": "%@° a partir do norte · %@", "next": "Seguinte: %@ %@",
+        "qibla": "Qibla", "qibla.detail": "%@ a partir do norte · %@", "next": "Seguinte: %@ %@",
         "no.calendar": "O horário completo aparece após a próxima atualização do Mawaqit.",
         "day.legend": "Dia", "night.legend": "Noite", "iqama.legend": "Iqama",
         "dir.0": "Norte", "dir.1": "Nordeste", "dir.2": "Este", "dir.3": "Sudeste",
@@ -8101,7 +8001,7 @@ private let prayerViewTranslations: [String: [String: String]] = [
         "now": "ابھی: %@", "left": "%@ باقی", "between": "نمازوں کے درمیان",
         "forbidden": "نفل نماز سے بچنے کے اوقات (تقریبی)",
         "forbidden.note": "طلوع، زوال اور غروب کے آس پاس تخمینہ۔ مقامی علماء کی رہنمائی پر عمل کریں۔",
-        "qibla": "قبلہ", "qibla.detail": "شمال سے %@° · %@", "next": "اگلی: %@ %@",
+        "qibla": "قبلہ", "qibla.detail": "شمال سے %@ · %@", "next": "اگلی: %@ %@",
         "no.calendar": "Mawaqit سے اگلی تازہ کاری کے بعد مکمل نظام الاوقات ظاہر ہوگا۔",
         "day.legend": "دن", "night.legend": "رات", "iqama.legend": "اقامت",
         "dir.0": "شمال", "dir.1": "شمال مشرق", "dir.2": "مشرق", "dir.3": "جنوب مشرق",
@@ -8396,76 +8296,107 @@ final class PrayerTimetableView: NSView {
 // ---------------------------------------------------------------------------
 // MARK: Day path
 
-/// The day as the sun travels it: a horizon, the sun's arc between sunrise
-/// and sunset (the night dipping below), each prayer placed on the path,
-/// the discouraged times shaded, and the prayer windows as a bar beneath.
-final class PrayerDayPathView: NSView {
-    var model: PrayerDayModel? { didSet { needsDisplay = true } }
-    override var isFlipped: Bool { true }
-    private var markerTips: [(NSRect, String)] = []
+/// The day as the sky lives it: each moment's sky color across the width,
+/// the sun's arc and the night below the horizon, every prayer on the path,
+/// twinkling stars at night, the sun (or tonight's moon) at the current
+/// time, a Sunnah lane (Rawatib, Duha, night prayer, Witr), and the
+/// obligatory windows beneath.
+final class PrayerDayPathView: LivingSkyView {
+    var model: PrayerDayModel? { didSet { cachedSky = nil; needsDisplay = true } }
+    var events: [PrayerScheduleEvent] = [] { didSet { needsDisplay = true } }
+    var southern = false
+    var onSelectEvent: ((PrayerScheduleEvent, NSRect) -> Void)?
+    private var targets: [(rect: NSRect, event: PrayerScheduleEvent?, tip: String)] = []
+    private var cachedSky: NSImage?
+    private var cachedSize = NSSize.zero
     private var trackingArea: NSTrackingArea?
 
-    static let preferredHeight: CGFloat = 338
+    static let preferredHeight: CGFloat = 400
+    private let horizonY: CGFloat = 196
+    private let arcHeight: CGFloat = 146
+    private let nightDepth: CGFloat = 66
+    private var groundBottom: CGFloat { horizonY + nightDepth + 18 }
 
-    private var horizonY: CGFloat { 168 }
-    private let arcHeight: CGFloat = 120
-    private let nightDepth: CGFloat = 62
-
-    private func x(_ minute: Int) -> CGFloat {
-        let left: CGFloat = 26
-        let width = bounds.width - 52
-        let fraction = CGFloat(((minute % 1440) + 1440) % 1440) / 1440
+    private func x(_ minute: Double) -> CGFloat {
+        let left: CGFloat = 26, width = bounds.width - 52
+        let fraction = CGFloat(((minute.truncatingRemainder(dividingBy: 1440)) + 1440)
+            .truncatingRemainder(dividingBy: 1440) / 1440)
         return Localizer.shared.isRTL ? left + width - fraction * width : left + fraction * width
     }
 
-    private func y(_ minute: Int, _ model: PrayerDayModel) -> CGFloat {
-        let m = ((minute % 1440) + 1440) % 1440
-        if m >= model.shuruq && m <= model.sunset {
-            let phase = CGFloat(m - model.shuruq) / CGFloat(max(1, model.dayLength))
-            return horizonY - sin(phase * .pi) * arcHeight
+    private func minute(atX px: CGFloat) -> Double {
+        let left: CGFloat = 26, width = bounds.width - 52
+        var fraction = (px - left) / width
+        if Localizer.shared.isRTL { fraction = 1 - fraction }
+        return Double(max(0, min(1, fraction))) * 1440
+    }
+
+    private func y(_ minute: Double, _ m: PrayerDayModel) -> CGFloat {
+        let value = ((minute.truncatingRemainder(dividingBy: 1440)) + 1440)
+            .truncatingRemainder(dividingBy: 1440)
+        let rise = Double(m.shuruq), set = Double(m.sunset)
+        if value >= rise && value <= set {
+            let phase = (value - rise) / max(1, set - rise)
+            return horizonY - CGFloat(sin(phase * .pi)) * arcHeight
         }
-        let distance = m < model.shuruq ? model.shuruq - m : m - model.sunset
-        let nightLength = max(1, 1440 - model.dayLength)
-        return horizonY + sin(CGFloat(distance) / CGFloat(nightLength) * .pi) * nightDepth
+        let distance = value < rise ? rise - value : value - set
+        let night = max(1, 1440 - (set - rise))
+        return horizonY + CGFloat(sin(distance / night * .pi)) * nightDepth
+    }
+
+    private func skyImage(_ m: PrayerDayModel) -> NSImage {
+        if let cachedSky, cachedSize == bounds.size { return cachedSky }
+        let size = bounds.size
+        let image = NSImage(size: size, flipped: true) { [weak self] _ in
+            guard let self else { return false }
+            var px: CGFloat = 0
+            while px < size.width {
+                let pair = LivingSky.colors(at: self.minute(atX: px + 1), m)
+                NSGradient(colors: [pair.top, pair.horizon])?
+                    .draw(in: NSRect(x: px, y: 0, width: 3, height: self.horizonY), angle: -90)
+                let ground = pair.horizon.blended(withFraction: 0.72, of: .black) ?? .black
+                NSGradient(colors: [ground, (ground.blended(withFraction: 0.5, of: .black) ?? .black)])?
+                    .draw(in: NSRect(x: px, y: self.horizonY, width: 3,
+                                     height: self.groundBottom - self.horizonY), angle: -90)
+                px += 2
+            }
+            return true
+        }
+        cachedSky = image
+        cachedSize = size
+        return image
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        guard let model else { return }
-        let dark = isDarkAppearance(self)
-        markerTips.removeAll()
-        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5),
-                                xRadius: 14, yRadius: 14)
+        guard let m = model else { return }
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let clock = skyTime
+        let p = entrance
+        targets.removeAll()
+
+        // Card.
+        let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 16, yRadius: 16)
         (dark ? NSColor(white: 1, alpha: 0.05) : NSColor(white: 1, alpha: 0.92)).setFill()
         card.fill()
-        (dark ? NSColor.white.withAlphaComponent(0.08) : NSColor.black.withAlphaComponent(0.07)).setStroke()
-        card.lineWidth = 0.5
-        card.stroke()
+        NSGraphicsContext.saveGraphicsState()
+        card.addClip()
 
-        let plotTop: CGFloat = 26
-        let plotBottom = horizonY + nightDepth + 6
+        // Sky spectrum and ground.
+        skyImage(m).draw(in: NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height))
+        LivingSky.drawStars(in: NSRect(x: 0, y: 6, width: bounds.width, height: horizonY - 20),
+                            count: 110, seed: 7, time: clock, alpha: 0.95,
+                            avoid: { [unowned self] point in
+                                LivingSky.darkness(at: self.minute(atX: point.x), m) < 0.55 })
 
-        // Sky: day and night bands.
-        func band(_ start: Int, _ end: Int, _ color: NSColor) {
-            let a = x(start), b = x(end)
-            NSRect(x: min(a, b), y: plotTop, width: abs(b - a), height: plotBottom - plotTop).fill()
-            _ = color
-        }
-        dayAmber.withAlphaComponent(dark ? 0.07 : 0.06).setFill()
-        band(model.shuruq, model.sunset, dayAmber)
-        nightIndigo.withAlphaComponent(dark ? 0.08 : 0.05).setFill()
-        band(0, model.shuruq, nightIndigo)
-        band(model.sunset, 1439, nightIndigo)
-
-        // Discouraged times: soft hatched bands.
-        for (start, end) in model.discouraged {
-            let a = x(start), b = x(end)
-            let rect = NSRect(x: min(a, b), y: plotTop, width: max(3, abs(b - a)),
-                              height: plotBottom - plotTop)
-            NSColor.systemRed.withAlphaComponent(dark ? 0.12 : 0.08).setFill()
+        // Discouraged times: soft hatches across the sky.
+        for (start, end) in m.discouraged {
+            let a = x(Double(start)), b = x(Double(end))
+            let rect = NSRect(x: min(a, b), y: 0, width: max(3, abs(b - a)), height: horizonY)
+            NSColor.systemRed.withAlphaComponent(0.07).setFill()
             rect.fill()
             NSGraphicsContext.saveGraphicsState()
             NSBezierPath(rect: rect).addClip()
-            NSColor.systemRed.withAlphaComponent(0.22).setStroke()
+            NSColor.white.withAlphaComponent(0.09).setStroke()
             var hx = rect.minX - rect.height
             while hx < rect.maxX {
                 let hatch = NSBezierPath()
@@ -8473,164 +8404,254 @@ final class PrayerDayPathView: NSView {
                 hatch.line(to: NSPoint(x: hx + rect.height, y: rect.minY))
                 hatch.lineWidth = 0.6
                 hatch.stroke()
-                hx += 6
+                hx += 7
             }
             NSGraphicsContext.restoreGraphicsState()
-            markerTips.append((rect, prayerViewText("forbidden") + "\n" + prayerViewText("forbidden.note")))
+            targets.append((rect, nil, prayerViewText("forbidden") + "\n" + prayerViewText("forbidden.note")))
         }
 
         // Horizon.
-        NSColor.separatorColor.setStroke()
+        NSColor.white.withAlphaComponent(0.35).setStroke()
         let horizon = NSBezierPath()
-        horizon.move(to: NSPoint(x: 18, y: horizonY))
-        horizon.line(to: NSPoint(x: bounds.width - 18, y: horizonY))
+        horizon.move(to: NSPoint(x: 0, y: horizonY))
+        horizon.line(to: NSPoint(x: bounds.width, y: horizonY))
         horizon.lineWidth = 1
         horizon.stroke()
 
-        // The path: solid by day, dashed by night.
-        func strokePath(from start: Int, to end: Int, color: NSColor, width: CGFloat, dashed: Bool) {
+        // The path, drawn in as the view appears.
+        let reveal = 1440 * Double(p)
+        func path(from start: Double, to end: Double) -> NSBezierPath? {
+            let stop = min(end, reveal)
+            guard stop > start else { return nil }
             let path = NSBezierPath()
-            var m = start
-            path.move(to: NSPoint(x: x(m), y: y(m, model)))
-            while m < end {
-                m = min(end, m + 4)
-                path.line(to: NSPoint(x: x(m), y: y(m, model)))
+            var minute = start
+            path.move(to: NSPoint(x: x(minute), y: y(minute, m)))
+            while minute < stop {
+                minute = min(stop, minute + 3)
+                path.line(to: NSPoint(x: x(minute), y: y(minute, m)))
             }
-            path.lineWidth = width
             path.lineCapStyle = .round
-            if dashed { path.setLineDash([4, 4], count: 2, phase: 0) }
-            color.setStroke()
-            path.stroke()
+            return path
         }
-        strokePath(from: 0, to: model.shuruq, color: nightIndigo.withAlphaComponent(0.8), width: 1.6, dashed: true)
-        strokePath(from: model.sunset, to: 1439, color: nightIndigo.withAlphaComponent(0.8), width: 1.6, dashed: true)
-        strokePath(from: model.shuruq, to: model.sunset, color: dayAmber, width: 3, dashed: false)
+        for (start, end) in [(0.0, Double(m.shuruq)), (Double(m.sunset), 1439.0)] {
+            if let night = path(from: start, to: end) {
+                night.lineWidth = 1.6
+                night.setLineDash([4, 5], count: 2, phase: 0)
+                NSColor.white.withAlphaComponent(0.5).setStroke()
+                night.stroke()
+            }
+        }
+        if let dayPath = path(from: Double(m.shuruq), to: Double(m.sunset)) {
+            dayPath.lineWidth = 7
+            srgbColor(1, 0.85, 0.5).withAlphaComponent(0.28).setStroke()
+            dayPath.stroke()
+            dayPath.lineWidth = 2.6
+            NSColor.white.withAlphaComponent(0.92).setStroke()
+            dayPath.stroke()
+        }
 
-        // Hour axis.
+        // Hour axis on the ground.
         let axisFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
         for hour in stride(from: 0, through: 24, by: 3) {
-            let px = x(hour == 24 ? 1439 : hour * 60)
-            NSColor.secondaryLabelColor.withAlphaComponent(0.6).setFill()
+            let px = x(hour == 24 ? 1439.5 : Double(hour * 60))
+            NSColor.white.withAlphaComponent(0.5).setFill()
             NSRect(x: px - 0.5, y: horizonY - 4, width: 1, height: 8).fill()
-            _ = drawCentered(localizedInterfaceDigits(String(format: "%02d", hour % 24)),
-                             at: NSPoint(x: px, y: plotBottom + 10), font: axisFont,
-                             color: .secondaryLabelColor)
+            drawText(localizedInterfaceDigits(String(format: "%02d", hour % 24)),
+                     at: NSPoint(x: px, y: groundBottom - 9), font: axisFont,
+                     color: NSColor.white.withAlphaComponent(0.6))
         }
 
         // Night points.
-        for (minute, label) in [(model.midnight, prayerViewText("midnight")),
-                                (model.lastThird, prayerViewText("last.third"))] {
-            let p = NSPoint(x: x(minute), y: y(minute, model))
-            nightIndigo.setStroke()
-            let ring = NSBezierPath(ovalIn: NSRect(x: p.x - 4, y: p.y - 4, width: 8, height: 8))
-            ring.lineWidth = 1.5
+        for (minute, label) in [(m.midnight, prayerViewText("midnight")),
+                                (m.lastThird, prayerViewText("last.third"))]
+            where Double(minute) <= reveal || minute < m.shuruq {
+            let point = NSPoint(x: x(Double(minute)), y: y(Double(minute), m))
+            NSColor.white.withAlphaComponent(0.85).setStroke()
+            let ring = NSBezierPath(ovalIn: NSRect(x: point.x - 4, y: point.y - 4, width: 8, height: 8))
+            ring.lineWidth = 1.4
             ring.stroke()
-            markerTips.append((NSRect(x: p.x - 10, y: p.y - 10, width: 20, height: 20),
-                               "\(label) · \(displayTime(clockString(minute)))"))
+            targets.append((NSRect(x: point.x - 10, y: point.y - 10, width: 20, height: 20), nil,
+                            "\(label) · \(displayTime(clockString(minute)))"))
         }
 
-        // Prayers on the path, labels above the arc by day, below at night.
-        let nameFont = Localizer.shared.font(size: 12, weight: .semibold)
-        let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
+        // Prayers on the path, with legible pills over the sky.
+        let nameFont = Localizer.shared.font(size: 12, weight: .bold)
+        let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .semibold)
+        let now = currentMinuteOfDay()
+        let current = m.current(at: Int(now))
         var placed: [NSRect] = []
-        var markers: [(minute: Int, name: String, isPrayer: Bool)] =
-            model.times.enumerated().map {
-                (minute: $0.element, name: model.names[$0.offset], isPrayer: true)
-            }
-        markers.append((model.shuruq, t("prayer.shuruq"), false))
-        let now = Calendar.current.component(.hour, from: Date()) * 60
-            + Calendar.current.component(.minute, from: Date())
-        let current = model.current(at: now)
+        var markers: [(minute: Int, name: String, isPrayer: Bool)] = m.times.enumerated().map {
+            (minute: $0.element, name: m.names[$0.offset], isPrayer: true)
+        }
+        markers.append((minute: m.shuruq, name: t("prayer.shuruq"), isPrayer: false))
         for marker in markers.sorted(by: { $0.minute < $1.minute }) {
-            let p = NSPoint(x: x(marker.minute), y: y(marker.minute, model))
-            let isCurrent = marker.isPrayer && current.index.map { model.times[$0] == marker.minute } ?? false
-            let radius: CGFloat = marker.isPrayer ? 6 : 4.5
-            (marker.isPrayer ? NSColor.appAccent : dayAmber).setFill()
-            NSBezierPath(ovalIn: NSRect(x: p.x - radius, y: p.y - radius,
-                                        width: radius * 2, height: radius * 2)).fill()
-            (dark ? NSColor(white: 0.12, alpha: 1) : NSColor.white).setStroke()
-            let outline = NSBezierPath(ovalIn: NSRect(x: p.x - radius, y: p.y - radius,
-                                                      width: radius * 2, height: radius * 2))
-            outline.lineWidth = 1.5
+            let fade = max(0, min(1, CGFloat((reveal - Double(marker.minute)) / 60)))
+            guard fade > 0 else { continue }
+            let point = NSPoint(x: x(Double(marker.minute)), y: y(Double(marker.minute), m))
+            let isCurrent = marker.isPrayer && current.index.map { m.times[$0] == marker.minute } ?? false
+            let r: CGFloat = marker.isPrayer ? 6.5 : 5
+            (marker.isPrayer ? NSColor.appAccent : srgbColor(1, 0.75, 0.3)).withAlphaComponent(fade).setFill()
+            NSBezierPath(ovalIn: NSRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)).fill()
+            NSColor.white.withAlphaComponent(fade).setStroke()
+            let outline = NSBezierPath(ovalIn: NSRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2))
+            outline.lineWidth = 2
             outline.stroke()
-            let above = p.y <= horizonY
-            var labelY = above ? p.y - 30 : p.y + 22
-            let width: CGFloat = 70
-            var rect = NSRect(x: p.x - width / 2, y: labelY - 9, width: width, height: 30)
-            while placed.contains(where: { $0.insetBy(dx: -2, dy: -1).intersects(rect) }) {
-                labelY += above ? -26 : 26
-                rect = NSRect(x: p.x - width / 2, y: labelY - 9, width: width, height: 30)
+
+            let time = displayTime(clockString(marker.minute))
+            let width = max((marker.name as NSString).size(withAttributes: [.font: nameFont]).width,
+                            (time as NSString).size(withAttributes: [.font: timeFont]).width) + 18
+            let above = point.y <= horizonY
+            var top = above ? point.y - 50 : point.y + 14
+            var pill = NSRect(x: point.x - width / 2, y: top, width: width, height: 36)
+            while placed.contains(where: { $0.insetBy(dx: -3, dy: -2).intersects(pill) }) {
+                top += above ? -40 : 40
+                pill = NSRect(x: point.x - width / 2, y: top, width: width, height: 36)
             }
-            placed.append(rect)
-            _ = drawCentered(marker.name, at: NSPoint(x: p.x, y: labelY), font: nameFont,
-                             color: isCurrent ? .appGreenAccent : .labelColor)
-            _ = drawCentered(displayTime(clockString(marker.minute)),
-                             at: NSPoint(x: p.x, y: labelY + 14), font: timeFont,
-                             color: .secondaryLabelColor)
-            markerTips.append((NSRect(x: p.x - 12, y: p.y - 12, width: 24, height: 24),
-                               "\(marker.name) · \(displayTime(clockString(marker.minute)))"))
+            placed.append(pill)
+            NSColor.black.withAlphaComponent(0.34 * fade).setFill()
+            NSBezierPath(roundedRect: pill, xRadius: 10, yRadius: 10).fill()
+            drawText(marker.name, at: NSPoint(x: pill.midX, y: pill.minY + 11), font: nameFont,
+                     color: (isCurrent ? NSColor(srgbRed: 0.6, green: 0.95, blue: 0.75, alpha: 1)
+                                       : NSColor.white).withAlphaComponent(fade))
+            drawText(time, at: NSPoint(x: pill.midX, y: pill.minY + 25), font: timeFont,
+                     color: NSColor.white.withAlphaComponent(0.8 * fade))
+            targets.append((NSRect(x: point.x - 12, y: point.y - 12, width: 24, height: 24), nil,
+                            "\(marker.name) · \(time)"))
         }
 
-        // Now: a hairline and the sun (or moon) on the path.
-        let nowPoint = NSPoint(x: x(now), y: y(now, model))
-        NSColor.appAccent.withAlphaComponent(0.45).setStroke()
+        // Now: the sun or tonight's moon travels to its place on entrance.
+        let shown = now * Double(p)
+        let body = NSPoint(x: x(shown), y: y(shown, m))
+        NSColor.white.withAlphaComponent(0.3).setStroke()
         let nowLine = NSBezierPath()
-        nowLine.move(to: NSPoint(x: nowPoint.x, y: plotTop))
-        nowLine.line(to: NSPoint(x: nowPoint.x, y: plotBottom))
-        nowLine.setLineDash([2, 3], count: 2, phase: 0)
-        nowLine.lineWidth = 1
+        nowLine.move(to: NSPoint(x: body.x, y: 6))
+        nowLine.line(to: NSPoint(x: body.x, y: groundBottom))
+        nowLine.setLineDash([2, 4], count: 2, phase: 0)
         nowLine.stroke()
-        let isDay = now >= model.shuruq && now <= model.sunset
-        let body = isDay ? dayAmber : nightIndigo
-        body.withAlphaComponent(0.25).setFill()
-        NSBezierPath(ovalIn: NSRect(x: nowPoint.x - 14, y: nowPoint.y - 14, width: 28, height: 28)).fill()
-        body.setFill()
-        NSBezierPath(ovalIn: NSRect(x: nowPoint.x - 8, y: nowPoint.y - 8, width: 16, height: 16)).fill()
+        if shown >= Double(m.shuruq) && shown <= Double(m.sunset) {
+            LivingSky.drawSun(at: body, radius: 11, time: clock)
+        } else {
+            LivingSky.drawMoon(at: body, radius: 11, phase: MoonPhase.at(Date()),
+                               southern: southern, time: clock)
+        }
+        NSGraphicsContext.restoreGraphicsState()
 
-        // Prayer windows bar.
-        let barY = plotBottom + 30
-        for window in model.windows {
-            let start = x(window.start), end = x(min(window.end, 1439))
+        // Sunnah lane: Rawatib pills, Duha and night-prayer bands, Witr.
+        let laneTop = groundBottom + 14
+        let laneFont = Localizer.shared.font(size: 10.5, weight: .bold)
+        let rawatibColor = srgbColor(0.86, 0.6, 0.2)
+        let bandY = laneTop + 30
+        func band(_ start: Double, _ end: Double, color: NSColor, label: String?,
+                  event: PrayerScheduleEvent?) {
+            let segments: [(Double, Double)] = end > 1440
+                ? [(start, 1440), (0, end - 1440)] : [(start, end)]
+            for (index, segment) in segments.enumerated() {
+                let a = x(segment.0), b = x(min(segment.1, 1439.5))
+                let rect = NSRect(x: min(a, b), y: bandY, width: max(4, abs(b - a)), height: 16)
+                color.withAlphaComponent(dark ? 0.5 : 0.35).setFill()
+                NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+                if let label, index == 0 {
+                    let width = (label as NSString).size(withAttributes: [.font: laneFont]).width
+                    if rect.width > width + 12 {
+                        drawText(label, at: NSPoint(x: rect.midX, y: rect.midY), font: laneFont,
+                                 color: dark ? .white : .labelColor)
+                    }
+                }
+                if let event {
+                    targets.append((rect, event, "\(event.knowledge.title) · \(event.knowledge.whenText)"))
+                }
+            }
+        }
+        var pillRects: [NSRect] = []
+        func pill(at minute: Double, text: String, color: NSColor, event: PrayerScheduleEvent) {
+            let width = (text as NSString).size(withAttributes: [.font: laneFont]).width + 16
+            var rect = NSRect(x: x(minute) - width / 2, y: laneTop, width: width, height: 22)
+            if pillRects.contains(where: { $0.insetBy(dx: -2, dy: 0).intersects(rect) }) {
+                rect.origin.x += Localizer.shared.isRTL ? -(width + 4) : width + 4
+            }
+            pillRects.append(rect)
+            color.withAlphaComponent(dark ? 0.85 : 0.9).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 11, yRadius: 11).fill()
+            drawText(text, at: NSPoint(x: rect.midX, y: rect.midY), font: laneFont, color: .white)
+            targets.append((rect, event, "\(event.knowledge.title) · \(event.knowledge.whenText)"))
+        }
+        for event in events {
+            switch event.kind {
+            case .rawatib:
+                let before = event.id.hasSuffix(".before")
+                let count = event.id == "rawatib.dhuhr.before" ? 4 : 2
+                let text = livingText(before ? "rawatib.before" : "rawatib.after",
+                                      localizedInterfaceDigits(String(count)))
+                let anchor = before
+                    ? (Double(event.startMinute) + Double(event.endMinute ?? event.startMinute)) / 2
+                    : Double(event.startMinute) + 6
+                pill(at: anchor, text: text, color: rawatibColor, event: event)
+            case .duha:
+                band(Double(event.startMinute), Double(event.endMinute ?? event.startMinute + 60),
+                     color: .systemTeal, label: event.knowledge.title, event: event)
+            case .qiyam:
+                let end = Double(event.endMinute ?? event.startMinute)
+                band(Double(event.startMinute), end < Double(event.startMinute) ? end + 1440 : end,
+                     color: .systemIndigo, label: event.knowledge.title, event: event)
+                // The last third, brighter inside the night band.
+                let third = Double(m.lastThird)
+                let fajr = Double(m.times[0])
+                let a = x(third), b = x(fajr)
+                let rect = NSRect(x: min(a, b), y: bandY, width: abs(b - a), height: 16)
+                if third < fajr, rect.width > 4 {
+                    NSColor.systemIndigo.withAlphaComponent(0.9).setFill()
+                    NSBezierPath(roundedRect: rect, xRadius: 8, yRadius: 8).fill()
+                    let label = prayerViewText("last.third")
+                    if rect.width > (label as NSString).size(withAttributes: [.font: laneFont]).width + 12 {
+                        drawText(label, at: NSPoint(x: rect.midX, y: rect.midY), font: laneFont, color: .white)
+                    }
+                    targets.append((rect, event, "\(prayerViewText("last.third")) · \(displayTime(clockString(m.lastThird)))"))
+                }
+            case .witr:
+                // Witr closes the night: placed within the last third,
+                // clear of the Fajr Sunnah pill.
+                let third = Double(m.lastThird < m.times[0] ? m.lastThird : m.times[0] - 120)
+                pill(at: (third + Double(m.times[0])) / 2 - 10, text: event.knowledge.title,
+                     color: .systemPurple, event: event)
+            case .obligatory:
+                break
+            }
+        }
+
+        // Obligatory windows.
+        let barY = bandY + 34
+        for window in m.windows {
+            let start = x(Double(window.start)), end = x(Double(min(window.end, 1439)))
             let isCurrent = current.index == window.index
-            let rect = NSRect(x: min(start, end), y: barY, width: max(4, abs(end - start)), height: 10)
-            NSColor.appAccent.withAlphaComponent(isCurrent ? 0.95 : 0.28).setFill()
-            NSBezierPath(roundedRect: rect, xRadius: 5, yRadius: 5).fill()
-            // Name each window under its segment when there's room.
-            let name = model.names[window.index]
-            let labelFont = Localizer.shared.font(size: 10.5, weight: isCurrent ? .bold : .medium)
-            let labelWidth = (name as NSString).size(withAttributes: [.font: labelFont]).width
-            if rect.width > labelWidth + 8 {
-                _ = drawCentered(name, at: NSPoint(x: rect.midX, y: barY + 22), font: labelFont,
-                                 color: isCurrent ? .appGreenAccent : .secondaryLabelColor)
-            }
+            let rect = NSRect(x: min(start, end), y: barY, width: max(4, abs(end - start)), height: 8)
+            NSColor.appAccent.withAlphaComponent(isCurrent ? 0.95 : 0.3).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4).fill()
             if window.index == 4 {
-                // Isha continues past midnight up to Fajr.
-                let tail = NSRect(x: min(x(0), x(model.times[0])), y: barY,
-                                  width: abs(x(model.times[0]) - x(0)), height: 10)
-                NSColor.appAccent.withAlphaComponent(current.index == 4 ? 0.95 : 0.28).setFill()
-                NSBezierPath(roundedRect: tail, xRadius: 5, yRadius: 5).fill()
+                let tail = NSRect(x: min(x(0), x(Double(m.times[0]))), y: barY,
+                                  width: abs(x(Double(m.times[0])) - x(0)), height: 8)
+                NSColor.appAccent.withAlphaComponent(isCurrent ? 0.95 : 0.3).setFill()
+                NSBezierPath(roundedRect: tail, xRadius: 4, yRadius: 4).fill()
+            }
+            let name = m.names[window.index]
+            let font = Localizer.shared.font(size: 10.5, weight: isCurrent ? .bold : .medium)
+            if rect.width > (name as NSString).size(withAttributes: [.font: font]).width + 8 {
+                drawText(name, at: NSPoint(x: rect.midX, y: barY + 19), font: font,
+                         color: isCurrent ? .appGreenAccent : .secondaryLabelColor)
             }
         }
+        _ = targets
+    }
 
-        // Legend.
-        let legendFont = Localizer.shared.font(size: 10.5, weight: .medium)
-        let legend: [(NSColor, String)] = [(dayAmber, prayerViewText("day.legend")),
-                                           (nightIndigo, prayerViewText("night.legend")),
-                                           (NSColor.systemRed, prayerViewText("forbidden"))]
-        var lx: CGFloat = Localizer.shared.isRTL ? bounds.width - 26 : 26
-        let ly = barY + 48
-        for (color, text) in legend {
-            let attributes: [NSAttributedString.Key: Any] = [.font: legendFont,
-                                                             .foregroundColor: NSColor.secondaryLabelColor]
-            let size = (text as NSString).size(withAttributes: attributes)
-            let swatchX = Localizer.shared.isRTL ? lx - 8 : lx
-            color.withAlphaComponent(0.7).setFill()
-            NSBezierPath(ovalIn: NSRect(x: swatchX, y: ly - 4, width: 8, height: 8)).fill()
-            let textX = Localizer.shared.isRTL ? swatchX - 6 - size.width : swatchX + 14
-            (text as NSString).draw(at: NSPoint(x: textX, y: ly - size.height / 2),
-                                    withAttributes: attributes)
-            lx = Localizer.shared.isRTL ? textX - 18 : textX + size.width + 18
-        }
+    private func drawText(_ text: String, at point: NSPoint, font: NSFont, color: NSColor) {
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
+        let size = (text as NSString).size(withAttributes: attributes)
+        (text as NSString).draw(at: NSPoint(x: point.x - size.width / 2, y: point.y - size.height / 2),
+                                withAttributes: attributes)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        cachedSky = nil
     }
 
     override func updateTrackingAreas() {
@@ -8644,192 +8665,436 @@ final class PrayerDayPathView: NSView {
 
     override func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
-        toolTip = markerTips.last(where: { $0.0.contains(point) })?.1
+        let hit = targets.last(where: { $0.rect.contains(point) })
+        toolTip = hit?.tip
+        if hit?.event != nil { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let hit = targets.last(where: { $0.rect.contains(point) }), let selected = hit.event {
+            onSelectEvent?(selected, hit.rect)
+        }
     }
+}
+
+private func srgbColor(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> NSColor {
+    NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
 }
 
 // ---------------------------------------------------------------------------
 // MARK: 24-hour dial
 
-/// One ring for the whole day: midnight at the bottom, noon at the top,
-/// daylight and night arcs, every prayer and iqama on the ring, the
-/// current window's progress, and a live hand.
-final class PrayerDialView: NSView {
+/// One ring for the whole day, painted with each hour's sky; a window into
+/// the sky at its heart (sun or tonight's moon, stars after dark); prayers
+/// and iqama on the ring; a Sunnah track inside; the current window's
+/// progress outside; and a glowing bead for now.
+final class PrayerDialView: LivingSkyView {
     var model: PrayerDayModel? { didSet { needsDisplay = true } }
     var iqamaMinutes: [Int?] = []
-    override var isFlipped: Bool { true }
+    var events: [PrayerScheduleEvent] = []
+    var southern = false
+    var onSelectEvent: ((PrayerScheduleEvent, NSRect) -> Void)?
+    private var targets: [(rect: NSRect, event: PrayerScheduleEvent?, tip: String)] = []
+    private var trackingArea: NSTrackingArea?
 
-    private func angle(_ minute: Int) -> CGFloat {
-        let fraction = CGFloat(((minute % 1440) + 1440) % 1440) / 1440
-        // Morning sits on the leading side: left in LTR, right in RTL.
-        return Localizer.shared.isRTL ? .pi / 2 - fraction * 2 * .pi
-                                      : .pi / 2 + fraction * 2 * .pi
+    private func angle(_ minute: Double) -> CGFloat {
+        let fraction = CGFloat(((minute.truncatingRemainder(dividingBy: 1440)) + 1440)
+            .truncatingRemainder(dividingBy: 1440) / 1440)
+        return Localizer.shared.isRTL ? .pi / 2 - fraction * 2 * .pi : .pi / 2 + fraction * 2 * .pi
     }
 
-    private func point(_ minute: Int, radius: CGFloat, center: NSPoint) -> NSPoint {
+    private func point(_ minute: Double, _ radius: CGFloat, _ center: NSPoint) -> NSPoint {
         let a = angle(minute)
         return NSPoint(x: center.x + cos(a) * radius, y: center.y + sin(a) * radius)
     }
 
-    override func draw(_ dirtyRect: NSRect) {
-        guard let model else { return }
-        let dark = isDarkAppearance(self)
-        let center = NSPoint(x: bounds.midX, y: bounds.midY)
-        let radius = min(bounds.width, bounds.height) / 2 - 64
-        let ringWidth: CGFloat = 18
+    private func arc(_ start: Double, _ end: Double, radius: CGFloat, center: NSPoint,
+                     width: CGFloat, color: NSColor, cap: NSBezierPath.LineCapStyle = .butt) {
+        guard end > start else { return }
+        let path = NSBezierPath()
+        var minute = start
+        path.move(to: point(minute, radius, center))
+        while minute < end {
+            minute = min(end, minute + 3)
+            path.line(to: point(minute, radius, center))
+        }
+        path.lineWidth = width
+        path.lineCapStyle = cap
+        color.setStroke()
+        path.stroke()
+    }
 
-        func arc(from start: Int, to end: Int, radius r: CGFloat, color: NSColor, width: CGFloat) {
-            guard end > start else { return }
-            let path = NSBezierPath()
-            var m = start
-            path.move(to: point(m, radius: r, center: center))
-            while m < end {
-                m = min(end, m + 3)
-                path.line(to: point(m, radius: r, center: center))
-            }
-            path.lineWidth = width
-            path.lineCapStyle = .butt
-            color.setStroke()
-            path.stroke()
+    override func draw(_ dirtyRect: NSRect) {
+        guard let m = model else { return }
+        let clock = skyTime
+        let p = entrance
+        targets.removeAll()
+        let center = NSPoint(x: bounds.midX, y: bounds.midY)
+        let radius = min(bounds.width, bounds.height) / 2 - 66
+        let ring: CGFloat = 22
+        let discRadius = radius - ring / 2 - 42
+        let now = currentMinuteOfDay()
+
+        // Sky ring, swept in on entrance.
+        let reveal = 1440 * Double(p)
+        var minute = 0.0
+        while minute < reveal {
+            let pair = LivingSky.colors(at: minute + 2, m)
+            let color = pair.horizon.blended(withFraction: 0.45, of: pair.top) ?? pair.top
+            arc(minute, min(reveal, minute + 4.5), radius: radius, center: center, width: ring, color: color)
+            minute += 4
+        }
+        NSColor.white.withAlphaComponent(0.12).setStroke()
+        for r in [radius - ring / 2, radius + ring / 2] {
+            let edge = NSBezierPath(ovalIn: NSRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2))
+            edge.lineWidth = 0.8
+            edge.stroke()
         }
 
-        // Night base and the daylight arc.
-        arc(from: 0, to: 1440, radius: radius, color: nightIndigo.withAlphaComponent(dark ? 0.38 : 0.26),
-            width: ringWidth)
-        arc(from: model.shuruq, to: model.sunset, radius: radius,
-            color: dayAmber.withAlphaComponent(dark ? 0.62 : 0.55), width: ringWidth)
+        // The window into the sky.
+        let disc = NSRect(x: center.x - discRadius, y: center.y - discRadius,
+                          width: discRadius * 2, height: discRadius * 2)
+        NSGraphicsContext.saveGraphicsState()
+        NSBezierPath(ovalIn: disc).addClip()
+        LivingSky.fillSky(disc, minute: now, model: m)
+        LivingSky.drawStars(in: disc, count: 70, seed: 3, time: clock,
+                            alpha: LivingSky.darkness(at: now, m))
+        let bodyPoint = NSPoint(x: center.x, y: center.y - discRadius * 0.42)
+        let isDay = now >= Double(m.shuruq) && now <= Double(m.sunset)
+        if isDay {
+            LivingSky.drawSun(at: bodyPoint, radius: discRadius * 0.13, time: clock)
+        } else {
+            LivingSky.drawMoon(at: bodyPoint, radius: discRadius * 0.15, phase: MoonPhase.at(Date()),
+                               southern: southern, time: clock)
+        }
+        // A quiet horizon at the bottom of the disc.
+        let ground = NSRect(x: disc.minX, y: center.y + discRadius * 0.62, width: disc.width,
+                            height: discRadius * 0.5)
+        NSColor.black.withAlphaComponent(0.28).setFill()
+        ground.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.white.withAlphaComponent(0.25).setStroke()
+        let discEdge = NSBezierPath(ovalIn: disc)
+        discEdge.lineWidth = 1
+        discEdge.stroke()
 
-        // Hour ticks and labels inside the ring.
-        let hourFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .medium)
+        // Center text over the sky.
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+        shadow.shadowBlurRadius = 4
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        let current = m.current(at: Int(now))
+        let windowName: String
+        let remaining: Int
+        if let index = current.index {
+            windowName = prayerViewText("now", m.names[index])
+            remaining = current.end - (Int(now) < current.start && current.start >= 0 ? Int(now) + 1440 : Int(now))
+        } else {
+            windowName = prayerViewText("between")
+            remaining = m.times[1] - Int(now)
+        }
+        func centered(_ text: String, y: CGFloat, font: NSFont, alpha: CGFloat) {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: font, .foregroundColor: NSColor.white.withAlphaComponent(alpha), .shadow: shadow]
+            let size = (text as NSString).size(withAttributes: attributes)
+            (text as NSString).draw(at: NSPoint(x: center.x - size.width / 2, y: y - size.height / 2),
+                                    withAttributes: attributes)
+        }
+        centered(windowName, y: center.y + 4, font: Localizer.shared.font(size: 12.5, weight: .semibold), alpha: 0.85)
+        centered(prayerViewText("left", localizedInterfaceDigits(String(format: "%d:%02d",
+                                                                          max(0, remaining) / 60,
+                                                                          max(0, remaining) % 60))),
+                 y: center.y + 30, font: Localizer.shared.font(size: 24, weight: .bold), alpha: 1)
+
+        // Hour ticks between the sky and the ring.
+        let hourFont = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .semibold)
         for hour in 0..<24 {
-            let minute = hour * 60
-            let outer = point(minute, radius: radius - ringWidth / 2 - 3, center: center)
-            let inner = point(minute, radius: radius - ringWidth / 2 - (hour % 3 == 0 ? 10 : 6), center: center)
+            let minute = Double(hour * 60)
+            let outer = point(minute, radius - ring / 2 - 3, center)
+            let inner = point(minute, radius - ring / 2 - (hour % 3 == 0 ? 9 : 6), center)
             let tick = NSBezierPath()
             tick.move(to: outer)
             tick.line(to: inner)
             tick.lineWidth = hour % 3 == 0 ? 1.6 : 1
-            NSColor.secondaryLabelColor.withAlphaComponent(hour % 3 == 0 ? 0.75 : 0.45).setStroke()
+            NSColor.secondaryLabelColor.withAlphaComponent(hour % 3 == 0 ? 0.8 : 0.45).setStroke()
             tick.stroke()
-            if hour % 3 == 0 {
-                _ = drawCentered(localizedInterfaceDigits(String(format: "%02d", hour)),
-                                 at: point(minute, radius: radius - ringWidth / 2 - 22, center: center),
-                                 font: hourFont, color: .secondaryLabelColor)
+            if hour % 6 == 0 {
+                let label = point(minute, radius - ring / 2 - 20, center)
+                let text = localizedInterfaceDigits(String(format: "%02d", hour))
+                let attributes: [NSAttributedString.Key: Any] = [.font: hourFont,
+                                                                 .foregroundColor: NSColor.secondaryLabelColor]
+                let size = (text as NSString).size(withAttributes: attributes)
+                (text as NSString).draw(at: NSPoint(x: label.x - size.width / 2, y: label.y - size.height / 2),
+                                        withAttributes: attributes)
             }
         }
 
-        // Current window: progress drawn over the ring.
-        let calendar = Calendar.current
-        let now = calendar.component(.hour, from: Date()) * 60 + calendar.component(.minute, from: Date())
-        let seconds = calendar.component(.second, from: Date())
-        let current = model.current(at: now)
+        // Sunnah track just outside the sky disc.
+        let trackRadius = discRadius + 6
+        let rawatibColor = srgbColor(0.86, 0.6, 0.2)
+        for event in events {
+            switch event.kind {
+            case .duha:
+                let end = Double(event.endMinute ?? event.startMinute)
+                arc(Double(event.startMinute), end, radius: trackRadius, center: center, width: 5,
+                    color: NSColor.systemTeal.withAlphaComponent(0.85), cap: .round)
+                let mid = point((Double(event.startMinute) + end) / 2, trackRadius, center)
+                targets.append((NSRect(x: mid.x - 14, y: mid.y - 14, width: 28, height: 28), event,
+                                "\(event.knowledge.title) · \(event.knowledge.whenText)"))
+            case .qiyam:
+                let start = Double(event.startMinute)
+                var end = Double(event.endMinute ?? event.startMinute)
+                if end < start { end += 1440 }
+                for (a, b) in end > 1440 ? [(start, 1440.0), (0.0, end - 1440)] : [(start, end)] {
+                    arc(a, b, radius: trackRadius, center: center, width: 5,
+                        color: NSColor.systemIndigo.withAlphaComponent(0.6), cap: .round)
+                }
+                if m.lastThird < m.times[0] {
+                    arc(Double(m.lastThird), Double(m.times[0]), radius: trackRadius, center: center,
+                        width: 5, color: NSColor.systemIndigo, cap: .round)
+                }
+                let mid = point(Double(m.midnight), trackRadius, center)
+                targets.append((NSRect(x: mid.x - 14, y: mid.y - 14, width: 28, height: 28), event,
+                                "\(event.knowledge.title) · \(event.knowledge.whenText)"))
+            case .rawatib, .witr:
+                let anchor: Double
+                if event.kind == .witr { anchor = Double(m.times[0] - 22) }
+                else if event.id.hasSuffix(".before") {
+                    anchor = (Double(event.startMinute) + Double(event.endMinute ?? event.startMinute)) / 2
+                } else { anchor = Double(event.startMinute) + 8 }
+                let dot = point(anchor, trackRadius, center)
+                (event.kind == .witr ? NSColor.systemPurple : rawatibColor).setFill()
+                NSBezierPath(ovalIn: NSRect(x: dot.x - 4.5, y: dot.y - 4.5, width: 9, height: 9)).fill()
+                targets.append((NSRect(x: dot.x - 12, y: dot.y - 12, width: 24, height: 24), event,
+                                "\(event.knowledge.title) · \(event.knowledge.whenText)"))
+            case .obligatory:
+                break
+            }
+        }
+
+        // Current window progress just outside the ring.
         if current.index != nil {
-            let start = current.start, end = current.end
-            func wrapped(_ a: Int, _ b: Int, _ color: NSColor) {
-                if a < 0 { arc(from: 1440 + a, to: 1440, radius: radius + ringWidth / 2 + 4, color: color, width: 4)
-                           arc(from: 0, to: b, radius: radius + ringWidth / 2 + 4, color: color, width: 4) }
-                else if b > 1440 { arc(from: a, to: 1440, radius: radius + ringWidth / 2 + 4, color: color, width: 4)
-                                   arc(from: 0, to: b - 1440, radius: radius + ringWidth / 2 + 4, color: color, width: 4) }
-                else { arc(from: a, to: b, radius: radius + ringWidth / 2 + 4, color: color, width: 4) }
+            let outer = radius + ring / 2 + 6
+            let linear = Double(Int(now) < current.start && current.start >= 0 ? Int(now) + 1440 : Int(now))
+                + (now - floor(now))
+            func wrapped(_ a: Double, _ b: Double, _ color: NSColor) {
+                if a < 0 {
+                    arc(1440 + a, 1440, radius: outer, center: center, width: 4, color: color)
+                    arc(0, b, radius: outer, center: center, width: 4, color: color)
+                } else if b > 1440 {
+                    arc(a, 1440, radius: outer, center: center, width: 4, color: color)
+                    arc(0, b - 1440, radius: outer, center: center, width: 4, color: color)
+                } else {
+                    arc(a, b, radius: outer, center: center, width: 4, color: color)
+                }
             }
-            let nowLinear = now < start && start >= 0 ? now + 1440 : now
-            wrapped(start, end, NSColor.appAccent.withAlphaComponent(0.25))
-            wrapped(start, min(end, max(start, nowLinear)), NSColor.appAccent)
+            wrapped(Double(current.start), Double(current.end), NSColor.appAccent.withAlphaComponent(0.25))
+            wrapped(Double(current.start), min(Double(current.end), max(Double(current.start), linear)),
+                    NSColor.appAccent)
         }
 
-        // Prayers and iqama on the ring; labels outside, nudged apart.
-        let nameFont = Localizer.shared.font(size: 12, weight: .semibold)
+        // Prayers, iqama, and labels outside.
+        let nameFont = Localizer.shared.font(size: 12, weight: .bold)
         let timeFont = NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .medium)
-        var occupied: [NSRect] = []
-        var markers = model.times.enumerated().map { ($0.element, model.names[$0.offset], true) }
-        markers.append((model.shuruq, t("prayer.shuruq"), false))
         for (index, iqama) in iqamaMinutes.enumerated() {
-            guard let iqama, model.times.indices.contains(index), iqama != model.times[index] else { continue }
-            let a = point(iqama, radius: radius + ringWidth / 2 + 4, center: center)
-            let b = point(iqama, radius: radius + ringWidth / 2 + 11, center: center)
+            guard let iqama, m.times.indices.contains(index), iqama != m.times[index],
+                  Double(iqama) <= reveal else { continue }
+            let a = point(Double(iqama), radius + ring / 2 + 2, center)
+            let b = point(Double(iqama), radius + ring / 2 + 12, center)
             let tick = NSBezierPath()
             tick.move(to: a)
             tick.line(to: b)
             tick.lineWidth = 2
-            NSColor.appAccent.withAlphaComponent(0.7).setStroke()
+            NSColor.appAccent.withAlphaComponent(0.75).setStroke()
             tick.stroke()
         }
-        for (minute, name, isPrayer) in markers {
-            let p = point(minute, radius: radius, center: center)
-            let r: CGFloat = isPrayer ? 7 : 5
-            (isPrayer ? NSColor.appAccent : dayAmber).setFill()
-            NSBezierPath(ovalIn: NSRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)).fill()
-            (dark ? NSColor(white: 0.1, alpha: 1) : NSColor.white).setStroke()
-            let outline = NSBezierPath(ovalIn: NSRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2))
+        var occupied: [NSRect] = []
+        var markers = m.times.enumerated().map { (Double($0.element), m.names[$0.offset], true) }
+        markers.append((Double(m.shuruq), t("prayer.shuruq"), false))
+        for (minute, name, isPrayer) in markers where minute <= reveal {
+            let dot = point(minute, radius, center)
+            let r: CGFloat = isPrayer ? 7.5 : 5.5
+            (isPrayer ? NSColor.appAccent : srgbColor(1, 0.75, 0.3)).setFill()
+            NSBezierPath(ovalIn: NSRect(x: dot.x - r, y: dot.y - r, width: r * 2, height: r * 2)).fill()
+            NSColor.white.setStroke()
+            let outline = NSBezierPath(ovalIn: NSRect(x: dot.x - r, y: dot.y - r, width: r * 2, height: r * 2))
             outline.lineWidth = 2
             outline.stroke()
-            var labelRadius = radius + ringWidth / 2 + 30
-            var labelPoint = point(minute, radius: labelRadius, center: center)
-            var rect = NSRect(x: labelPoint.x - 36, y: labelPoint.y - 15, width: 72, height: 30)
+            var labelRadius = radius + ring / 2 + 32
+            var label = point(minute, labelRadius, center)
+            var rect = NSRect(x: label.x - 38, y: label.y - 16, width: 76, height: 32)
             var guardCount = 0
             while occupied.contains(where: { $0.intersects(rect) }) && guardCount < 4 {
                 labelRadius += 22
-                labelPoint = point(minute, radius: labelRadius, center: center)
-                rect = NSRect(x: labelPoint.x - 36, y: labelPoint.y - 15, width: 72, height: 30)
+                label = point(minute, labelRadius, center)
+                rect = NSRect(x: label.x - 38, y: label.y - 16, width: 76, height: 32)
                 guardCount += 1
             }
             occupied.append(rect)
-            let isCurrent = isPrayer && current.index.map { model.times[$0] == minute } ?? false
-            _ = drawCentered(name, at: NSPoint(x: labelPoint.x, y: labelPoint.y - 6), font: nameFont,
-                             color: isCurrent ? .appGreenAccent : (isPrayer ? .labelColor : .secondaryLabelColor))
-            _ = drawCentered(displayTime(clockString(minute)),
-                             at: NSPoint(x: labelPoint.x, y: labelPoint.y + 8), font: timeFont,
-                             color: .secondaryLabelColor)
+            let isCurrent = isPrayer && current.index.map { Double(m.times[$0]) == minute } ?? false
+            let nameAttributes: [NSAttributedString.Key: Any] = [
+                .font: nameFont,
+                .foregroundColor: isCurrent ? NSColor.appGreenAccent
+                    : (isPrayer ? NSColor.labelColor : NSColor.secondaryLabelColor)]
+            let timeText = displayTime(clockString(Int(minute)))
+            let timeAttributes: [NSAttributedString.Key: Any] = [.font: timeFont,
+                                                                 .foregroundColor: NSColor.secondaryLabelColor]
+            let nameSize = (name as NSString).size(withAttributes: nameAttributes)
+            let timeSize = (timeText as NSString).size(withAttributes: timeAttributes)
+            (name as NSString).draw(at: NSPoint(x: label.x - nameSize.width / 2, y: label.y - nameSize.height + 2),
+                                    withAttributes: nameAttributes)
+            (timeText as NSString).draw(at: NSPoint(x: label.x - timeSize.width / 2, y: label.y + 1),
+                                        withAttributes: timeAttributes)
         }
 
-        // Hand.
-        let exact = Double(now) + Double(seconds) / 60
-        let handAngle = angle(Int(exact.rounded()))
-        let tip = NSPoint(x: center.x + cos(handAngle) * (radius - ringWidth / 2 - 4),
-                          y: center.y + sin(handAngle) * (radius - ringWidth / 2 - 4))
-        let tail = NSPoint(x: center.x + cos(handAngle) * 46, y: center.y + sin(handAngle) * 46)
-        let hand = NSBezierPath()
-        hand.move(to: tail)
-        hand.line(to: tip)
-        hand.lineWidth = 3
-        hand.lineCapStyle = .round
-        NSColor.labelColor.setStroke()
-        hand.stroke()
-        let isDay = now >= model.shuruq && now <= model.sunset
-        let onRing = point(now, radius: radius, center: center)
-        (isDay ? dayAmber : nightIndigo).setFill()
-        NSBezierPath(ovalIn: NSRect(x: onRing.x - 9, y: onRing.y - 9, width: 18, height: 18)).fill()
-        (dark ? NSColor(white: 0.1, alpha: 1) : NSColor.white).setStroke()
-        let ringDot = NSBezierPath(ovalIn: NSRect(x: onRing.x - 9, y: onRing.y - 9, width: 18, height: 18))
-        ringDot.lineWidth = 2
-        ringDot.stroke()
-
-        // Center: the current window and what's left of it.
-        let windowName: String
-        let remaining: Int
-        if let index = current.index {
-            windowName = prayerViewText("now", model.names[index])
-            remaining = current.end - (now < current.start && current.start >= 0 ? now + 1440 : now)
-        } else {
-            windowName = prayerViewText("between")
-            remaining = model.times[1] - now
-        }
-        _ = drawCentered(windowName, at: NSPoint(x: center.x, y: center.y - 18),
-                         font: Localizer.shared.font(size: 12.5, weight: .medium),
-                         color: .secondaryLabelColor)
-        _ = drawCentered(prayerViewText("left", durationText(remaining)),
-                         at: NSPoint(x: center.x, y: center.y + 8),
-                         font: Localizer.shared.font(size: 22, weight: .bold), color: .labelColor)
+        // Now: a glowing bead on the ring and a needle to the sky.
+        let shown = now * Double(p)
+        let bead = point(shown, radius, center)
+        let needleOuter = point(shown, radius - ring / 2, center)
+        let needleInner = point(shown, discRadius + 1, center)
+        let needle = NSBezierPath()
+        needle.move(to: needleOuter)
+        needle.line(to: needleInner)
+        needle.lineWidth = 2
+        NSColor.labelColor.withAlphaComponent(0.8).setStroke()
+        needle.stroke()
+        let glow = (isDay ? srgbColor(1, 0.8, 0.4) : srgbColor(0.75, 0.78, 1))
+        NSGradient(colors: [glow.withAlphaComponent(0.6), glow.withAlphaComponent(0)])?
+            .draw(fromCenter: bead, radius: 0, toCenter: bead,
+                  radius: CGFloat(18 + 3 * sin(clock * 2)), options: [])
+        glow.setFill()
+        NSBezierPath(ovalIn: NSRect(x: bead.x - 8, y: bead.y - 8, width: 16, height: 16)).fill()
+        NSColor.white.setStroke()
+        let beadEdge = NSBezierPath(ovalIn: NSRect(x: bead.x - 8, y: bead.y - 8, width: 16, height: 16))
+        beadEdge.lineWidth = 2
+        beadEdge.stroke()
     }
 
-    override func viewDidChangeEffectiveAppearance() {
-        super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea { removeTrackingArea(trackingArea) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+                                  owner: self)
+        addTrackingArea(area)
+        trackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let hit = targets.last(where: { $0.rect.contains(point) })
+        toolTip = hit?.tip
+        if hit?.event != nil { NSCursor.pointingHand.set() } else { NSCursor.arrow.set() }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        if let hit = targets.last(where: { $0.rect.contains(point) }), let selected = hit.event {
+            onSelectEvent?(selected, hit.rect)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// MARK: Overview hero
+
+/// The Overview's living sky: today's sky at this minute, the sun (or the
+/// moon in its phase) on its arc, stars at night, and a quiet silhouette
+/// inspired by Education City Mosque's two leaning minarets.
+final class LiveSkyHeroView: LivingSkyView {
+    var model: PrayerDayModel? { didSet { needsDisplay = true } }
+    var southern = false
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let m = model else { return }
+        let clock = skyTime
+        let now = currentMinuteOfDay()
+        let shape = NSBezierPath(roundedRect: bounds, xRadius: 18, yRadius: 18)
+        NSGraphicsContext.saveGraphicsState()
+        shape.addClip()
+        LivingSky.fillSky(bounds, minute: now, model: m)
+        let darkness = LivingSky.darkness(at: now, m)
+        LivingSky.drawStars(in: NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height * 0.7),
+                            count: 90, seed: 11, time: clock, alpha: darkness)
+
+        // Celestial arc across the hero; morning on the leading side.
+        let rtl = Localizer.shared.isRTL
+        let left: CGFloat = 40, right = bounds.width - 40
+        let baseY = bounds.height - 30, top: CGFloat = 26
+        func arcPoint(_ fraction: CGFloat) -> NSPoint {
+            let f = max(0, min(1, fraction))
+            let px = rtl ? right - f * (right - left) : left + f * (right - left)
+            return NSPoint(x: px, y: baseY - sin(f * .pi) * (baseY - top))
+        }
+        let guide = NSBezierPath()
+        for step in 0...60 {
+            let point = arcPoint(CGFloat(step) / 60)
+            step == 0 ? guide.move(to: point) : guide.line(to: point)
+        }
+        guide.setLineDash([2, 6], count: 2, phase: 0)
+        guide.lineWidth = 1.2
+        NSColor.white.withAlphaComponent(0.28).setStroke()
+        guide.stroke()
+        let rise = Double(m.shuruq), set = Double(m.sunset)
+        let progress = entrance
+        if now >= rise && now <= set {
+            let f = CGFloat((now - rise) / max(1, set - rise)) * progress
+            LivingSky.drawSun(at: arcPoint(f), radius: 15, time: clock)
+        } else {
+            let night = 1440 - (set - rise)
+            let since = now > set ? now - set : now + 1440 - set
+            let f = CGFloat(since / max(1, night)) * progress
+            LivingSky.drawMoon(at: arcPoint(f), radius: 15, phase: MoonPhase.at(Date()),
+                               southern: southern, time: clock)
+        }
+
+        // Silhouette: a folded hall and two slender leaning minarets.
+        let ink = NSColor.black.withAlphaComponent(0.12 + 0.12 * darkness)
+        ink.setFill()
+        let w = bounds.width, h = bounds.height
+        let unit = min(w * 0.2, 180)
+        let baseX: CGFloat = rtl ? w * 0.36 : w * 0.64 - unit
+        let hall = NSBezierPath()
+        hall.move(to: NSPoint(x: baseX, y: h))
+        hall.line(to: NSPoint(x: baseX + unit * 0.05, y: h - 22))
+        hall.line(to: NSPoint(x: baseX + unit * 0.42, y: h - 36))
+        hall.line(to: NSPoint(x: baseX + unit * 0.78, y: h - 26))
+        hall.line(to: NSPoint(x: baseX + unit, y: h - 12))
+        hall.line(to: NSPoint(x: baseX + unit, y: h))
+        hall.close()
+        hall.fill()
+        for (offset, lean, height) in [(0.58, 0.04, 0.40), (0.70, 0.06, 0.48)] as [(CGFloat, CGFloat, CGFloat)] {
+            let x0 = baseX + unit * offset
+            let minaret = NSBezierPath()
+            minaret.move(to: NSPoint(x: x0, y: h))
+            minaret.line(to: NSPoint(x: x0 + unit * 0.05, y: h))
+            minaret.line(to: NSPoint(x: x0 + unit * (0.05 + lean), y: h - h * height))
+            minaret.line(to: NSPoint(x: x0 + unit * (0.02 + lean), y: h - h * height - 10))
+            minaret.close()
+            minaret.fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        NSColor.white.withAlphaComponent(0.16).setStroke()
+        shape.lineWidth = 1
+        shape.stroke()
+    }
+}
+
+/// A slim live progress bar for a prayer tile.
+final class WindowProgressBar: NSView {
+    var progress: CGFloat = 0 { didSet { needsDisplay = true } }
+    var tint: NSColor = .appAccent
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        let track = NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2)
+        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        track.fill()
+        guard progress > 0 else { return }
+        let width = bounds.width * max(0, min(1, progress))
+        let x = Localizer.shared.isRTL ? bounds.width - width : 0
+        tint.setFill()
+        NSBezierPath(roundedRect: NSRect(x: x, y: 0, width: width, height: bounds.height),
+                     xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
     }
 }
 
@@ -8877,6 +9142,656 @@ final class QiblaCompassView: NSView {
     }
 }
 
+// ============================================================================
+// MARK: Living sky — sky colors, sun, moon phase, stars, animation
+// ============================================================================
+
+private let livingTranslations: [String: [String: String]] = [
+    "en": [
+        "leave.by": "Leave by %@ to catch the iqama", "travel.time": "Travel time to the mosque",
+        "off": "Off", "min": "%d min", "in": "in %@",
+        "sunnah.now": "Sunnah of this moment", "up.next": "Up next: %@ · %@",
+        "ctx.lastthird": "The last third of the night: a time for night prayer and supplication",
+        "ctx.night": "Night: pray two by two, and end with Witr before Fajr",
+        "ctx.fajr": "Two rak‘ahs before Fajr — the most emphasized Sunnah",
+        "ctx.morning": "Morning adhkar · no voluntary prayer until the sun has risen",
+        "ctx.sunrise": "The sun is rising: wait about a quarter of an hour",
+        "ctx.duha": "Duha is open until %@ (2 to 8 rak‘ahs)",
+        "ctx.zenith": "The sun is at its zenith: a short pause before Dhuhr",
+        "ctx.dhuhr": "Four before Dhuhr and two after",
+        "ctx.asr": "Evening adhkar · no voluntary prayer after Asr until Maghrib",
+        "ctx.sunset": "The sun is setting: Maghrib is near",
+        "ctx.maghrib": "Two rak‘ahs after Maghrib",
+        "ctx.isha": "Two rak‘ahs after Isha · Witr before you sleep or before Fajr",
+        "fri": "Friday: Surat Al-Kahf and abundant salawat on the Prophet ﷺ",
+        "moon.0": "New moon", "moon.1": "Waxing crescent", "moon.2": "First quarter",
+        "moon.3": "Waxing gibbous", "moon.4": "Full moon", "moon.5": "Waning gibbous",
+        "moon.6": "Last quarter", "moon.7": "Waning crescent", "moon.lit": "%d%% lit",
+        "white.today": "Today is one of the White Days (13–15)", "white.in": "White Days: in %d days",
+        "fast.tomorrow.1": "Tomorrow is Monday: a Sunnah fast", "fast.tomorrow.4": "Tomorrow is Thursday: a Sunnah fast",
+        "fast.today.1": "Today is Monday: a Sunnah fast", "fast.today.4": "Today is Thursday: a Sunnah fast",
+        "rawatib.before": "%@ before", "rawatib.after": "%@ after",
+    ],
+    "fr": [
+        "leave.by": "Partez à %@ pour l’iqama", "travel.time": "Trajet jusqu’à la mosquée",
+        "off": "Désactivé", "min": "%d min", "in": "dans %@",
+        "sunnah.now": "La sunna de ce moment", "up.next": "Ensuite : %@ · %@",
+        "ctx.lastthird": "Le dernier tiers de la nuit : temps de prière nocturne et d’invocation",
+        "ctx.night": "La nuit : prier deux par deux et finir par le witr avant l’aube",
+        "ctx.fajr": "Deux rak‘ats avant le fajr, la sunna la plus appuyée",
+        "ctx.morning": "Adhkar du matin · pas de prière surérogatoire avant le lever du soleil",
+        "ctx.sunrise": "Le soleil se lève : attendez environ un quart d’heure",
+        "ctx.duha": "Le duha est ouvert jusqu’à %@ (2 à 8 rak‘ats)",
+        "ctx.zenith": "Le soleil est au zénith : courte pause avant le dhuhr",
+        "ctx.dhuhr": "Quatre avant le dhuhr et deux après",
+        "ctx.asr": "Adhkar du soir · pas de prière surérogatoire après l’asr jusqu’au maghrib",
+        "ctx.sunset": "Le soleil se couche : le maghrib approche",
+        "ctx.maghrib": "Deux rak‘ats après le maghrib",
+        "ctx.isha": "Deux rak‘ats après l’isha · le witr avant de dormir ou avant l’aube",
+        "fri": "Vendredi : sourate Al-Kahf et nombreuses prières sur le Prophète ﷺ",
+        "moon.0": "Nouvelle lune", "moon.1": "Premier croissant", "moon.2": "Premier quartier",
+        "moon.3": "Gibbeuse croissante", "moon.4": "Pleine lune", "moon.5": "Gibbeuse décroissante",
+        "moon.6": "Dernier quartier", "moon.7": "Dernier croissant", "moon.lit": "%d %% éclairée",
+        "white.today": "Aujourd’hui fait partie des jours blancs (13–15)", "white.in": "Jours blancs : dans %d jours",
+        "fast.tomorrow.1": "Demain lundi : jeûne de la sunna", "fast.tomorrow.4": "Demain jeudi : jeûne de la sunna",
+        "fast.today.1": "Aujourd’hui lundi : jeûne de la sunna", "fast.today.4": "Aujourd’hui jeudi : jeûne de la sunna",
+        "rawatib.before": "%@ avant", "rawatib.after": "%@ après",
+    ],
+    "es": [
+        "leave.by": "Sal a las %@ para llegar a la iqama", "travel.time": "Trayecto a la mezquita",
+        "off": "Desactivado", "min": "%d min", "in": "en %@",
+        "sunnah.now": "La sunna de este momento", "up.next": "Después: %@ · %@",
+        "ctx.lastthird": "El último tercio de la noche: tiempo de oración nocturna y súplica",
+        "ctx.night": "La noche: rezar de dos en dos y terminar con el witr antes del fajr",
+        "ctx.fajr": "Dos rak‘as antes del fajr, la sunna más recalcada",
+        "ctx.morning": "Adhkar de la mañana · sin oración voluntaria hasta que salga el sol",
+        "ctx.sunrise": "El sol está saliendo: espera unos quince minutos",
+        "ctx.duha": "El duha está abierto hasta las %@ (2 a 8 rak‘as)",
+        "ctx.zenith": "El sol está en el cénit: breve pausa antes del dhuhr",
+        "ctx.dhuhr": "Cuatro antes del dhuhr y dos después",
+        "ctx.asr": "Adhkar de la tarde · sin oración voluntaria tras el asr hasta el maghrib",
+        "ctx.sunset": "El sol se pone: el maghrib está cerca",
+        "ctx.maghrib": "Dos rak‘as después del maghrib",
+        "ctx.isha": "Dos rak‘as después del isha · el witr antes de dormir o antes del fajr",
+        "fri": "Viernes: sura Al-Kahf y abundantes salawat sobre el Profeta ﷺ",
+        "moon.0": "Luna nueva", "moon.1": "Creciente", "moon.2": "Cuarto creciente",
+        "moon.3": "Gibosa creciente", "moon.4": "Luna llena", "moon.5": "Gibosa menguante",
+        "moon.6": "Cuarto menguante", "moon.7": "Menguante", "moon.lit": "%d %% iluminada",
+        "white.today": "Hoy es uno de los días blancos (13–15)", "white.in": "Días blancos: en %d días",
+        "fast.tomorrow.1": "Mañana es lunes: ayuno de la sunna", "fast.tomorrow.4": "Mañana es jueves: ayuno de la sunna",
+        "fast.today.1": "Hoy es lunes: ayuno de la sunna", "fast.today.4": "Hoy es jueves: ayuno de la sunna",
+        "rawatib.before": "%@ antes", "rawatib.after": "%@ después",
+    ],
+    "ar": [
+        "leave.by": "اخرج %@ لتدرك الإقامة", "travel.time": "الوقت للوصول إلى المسجد",
+        "off": "إيقاف", "min": "%d دقيقة", "in": "بعد %@",
+        "sunnah.now": "سنّة هذا الوقت", "up.next": "التالي: %@ · %@",
+        "ctx.lastthird": "الثلث الأخير من الليل: وقت قيام الليل والدعاء",
+        "ctx.night": "الليل: صلِّ مثنى مثنى واختم بالوتر قبل الفجر",
+        "ctx.fajr": "ركعتا الفجر قبل الفريضة — آكد السنن",
+        "ctx.morning": "أذكار الصباح · لا نافلة حتى ترتفع الشمس",
+        "ctx.sunrise": "الشمس تشرق: انتظر نحو ربع ساعة",
+        "ctx.duha": "وقت الضحى متاح حتى %@ (من ٢ إلى ٨ ركعات)",
+        "ctx.zenith": "الشمس في كبد السماء: وقت قصير قبل الظهر",
+        "ctx.dhuhr": "أربع ركعات قبل الظهر وركعتان بعده",
+        "ctx.asr": "أذكار المساء · لا نافلة بعد العصر حتى المغرب",
+        "ctx.sunset": "الشمس تغرب: اقترب المغرب",
+        "ctx.maghrib": "ركعتان بعد المغرب",
+        "ctx.isha": "ركعتان بعد العشاء · الوتر قبل النوم أو قبل الفجر",
+        "fri": "يوم الجمعة: سورة الكهف والإكثار من الصلاة على النبي ﷺ",
+        "moon.0": "محاق", "moon.1": "هلال متزايد", "moon.2": "التربيع الأول",
+        "moon.3": "أحدب متزايد", "moon.4": "بدر", "moon.5": "أحدب متناقص",
+        "moon.6": "التربيع الأخير", "moon.7": "هلال متناقص", "moon.lit": "مضاء %d٪",
+        "white.today": "اليوم من الأيام البيض (١٣–١٥)", "white.in": "الأيام البيض: بعد %d يومًا",
+        "fast.tomorrow.1": "غدًا الاثنين: صيام سنّة", "fast.tomorrow.4": "غدًا الخميس: صيام سنّة",
+        "fast.today.1": "اليوم الاثنين: صيام سنّة", "fast.today.4": "اليوم الخميس: صيام سنّة",
+        "rawatib.before": "%@ قبل", "rawatib.after": "%@ بعد",
+    ],
+    "zh": [
+        "leave.by": "%@ 出发可赶上伊卡玛", "travel.time": "到清真寺的路程时间",
+        "off": "关闭", "min": "%d 分钟", "in": "%@ 后",
+        "sunnah.now": "此刻的圣行", "up.next": "接下来：%@ · %@",
+        "ctx.lastthird": "夜晚的最后三分之一：夜间礼拜与祈祷之时",
+        "ctx.night": "夜间：两拜两拜地礼拜，并在晨礼前以威特尔结束",
+        "ctx.fajr": "晨礼前两拜——最受重视的圣行",
+        "ctx.morning": "早晨赞词 · 太阳升起前不做副功拜",
+        "ctx.sunrise": "太阳正在升起：请等待约一刻钟",
+        "ctx.duha": "上午拜可做到 %@（2至8拜）",
+        "ctx.zenith": "日正当中：晌礼前的短暂停顿",
+        "ctx.dhuhr": "晌礼前四拜，后两拜",
+        "ctx.asr": "傍晚赞词 · 晡礼后至昏礼前不做副功拜",
+        "ctx.sunset": "太阳正在落下：昏礼将至",
+        "ctx.maghrib": "昏礼后两拜",
+        "ctx.isha": "宵礼后两拜 · 睡前或晨礼前做威特尔",
+        "fri": "主麻日：诵读山洞章，多为先知ﷺ祈福",
+        "moon.0": "新月", "moon.1": "蛾眉月", "moon.2": "上弦月", "moon.3": "盈凸月",
+        "moon.4": "满月", "moon.5": "亏凸月", "moon.6": "下弦月", "moon.7": "残月",
+        "moon.lit": "照亮 %d%%",
+        "white.today": "今天是白日（13–15日）之一", "white.in": "白日：%d 天后",
+        "fast.tomorrow.1": "明天周一：圣行斋戒", "fast.tomorrow.4": "明天周四：圣行斋戒",
+        "fast.today.1": "今天周一：圣行斋戒", "fast.today.4": "今天周四：圣行斋戒",
+        "rawatib.before": "前 %@", "rawatib.after": "后 %@",
+    ],
+    "hi": [
+        "leave.by": "इक़ामत के लिए %@ तक निकलें", "travel.time": "मस्जिद तक पहुँचने का समय",
+        "off": "बंद", "min": "%d मिनट", "in": "%@ में",
+        "sunnah.now": "इस समय की सुन्नत", "up.next": "आगे: %@ · %@",
+        "ctx.lastthird": "रात का अंतिम तिहाई: तहज्जुद और दुआ का समय",
+        "ctx.night": "रात: दो-दो रकअत पढ़ें और फ़ज्र से पहले वित्र से ख़त्म करें",
+        "ctx.fajr": "फ़ज्र से पहले दो रकअत — सबसे ताकीदी सुन्नत",
+        "ctx.morning": "सुबह के अज़कार · सूरज उगने तक नफ़्ल नहीं",
+        "ctx.sunrise": "सूरज उग रहा है: लगभग पंद्रह मिनट रुकें",
+        "ctx.duha": "चाश्त %@ तक (2 से 8 रकअत)",
+        "ctx.zenith": "सूरज ठीक ऊपर है: ज़ुहर से पहले थोड़ा ठहरें",
+        "ctx.dhuhr": "ज़ुहर से पहले चार और बाद में दो",
+        "ctx.asr": "शाम के अज़कार · अस्र के बाद मग़रिब तक नफ़्ल नहीं",
+        "ctx.sunset": "सूरज डूब रहा है: मग़रिब क़रीब है",
+        "ctx.maghrib": "मग़रिब के बाद दो रकअत",
+        "ctx.isha": "इशा के बाद दो रकअत · सोने से पहले या फ़ज्र से पहले वित्र",
+        "fri": "जुमा: सूरह अल-कहफ़ और नबी ﷺ पर अधिक दुरूद",
+        "moon.0": "अमावस्या", "moon.1": "बढ़ता अर्धचंद्र", "moon.2": "प्रथम चतुर्थांश",
+        "moon.3": "बढ़ता उभरा चाँद", "moon.4": "पूर्णिमा", "moon.5": "घटता उभरा चाँद",
+        "moon.6": "अंतिम चतुर्थांश", "moon.7": "घटता अर्धचंद्र", "moon.lit": "%d%% प्रकाशित",
+        "white.today": "आज अय्याम-ए-बीज़ (13–15) में से है", "white.in": "अय्याम-ए-बीज़: %d दिन में",
+        "fast.tomorrow.1": "कल सोमवार: सुन्नत रोज़ा", "fast.tomorrow.4": "कल गुरुवार: सुन्नत रोज़ा",
+        "fast.today.1": "आज सोमवार: सुन्नत रोज़ा", "fast.today.4": "आज गुरुवार: सुन्नत रोज़ा",
+        "rawatib.before": "%@ पहले", "rawatib.after": "%@ बाद",
+    ],
+    "bn": [
+        "leave.by": "ইকামতের জন্য %@-এ রওনা দিন", "travel.time": "মসজিদে যাওয়ার সময়",
+        "off": "বন্ধ", "min": "%d মিনিট", "in": "%@ পরে",
+        "sunnah.now": "এই সময়ের সুন্নাহ", "up.next": "পরবর্তী: %@ · %@",
+        "ctx.lastthird": "রাতের শেষ তৃতীয়াংশ: তাহাজ্জুদ ও দোয়ার সময়",
+        "ctx.night": "রাত: দুই দুই রাকাত পড়ুন, ফজরের আগে বিতর দিয়ে শেষ করুন",
+        "ctx.fajr": "ফজরের আগে দুই রাকাত — সবচেয়ে গুরুত্বপূর্ণ সুন্নাহ",
+        "ctx.morning": "সকালের জিকির · সূর্য ওঠা পর্যন্ত নফল নয়",
+        "ctx.sunrise": "সূর্য উঠছে: প্রায় পনেরো মিনিট অপেক্ষা করুন",
+        "ctx.duha": "চাশতের সময় %@ পর্যন্ত (২ থেকে ৮ রাকাত)",
+        "ctx.zenith": "সূর্য মাথার উপরে: যোহরের আগে সামান্য বিরতি",
+        "ctx.dhuhr": "যোহরের আগে চার, পরে দুই",
+        "ctx.asr": "সন্ধ্যার জিকির · আসরের পর মাগরিব পর্যন্ত নফল নয়",
+        "ctx.sunset": "সূর্য ডুবছে: মাগরিব নিকটে",
+        "ctx.maghrib": "মাগরিবের পরে দুই রাকাত",
+        "ctx.isha": "এশার পরে দুই রাকাত · ঘুমের আগে বা ফজরের আগে বিতর",
+        "fri": "জুমা: সূরা আল-কাহফ ও নবী ﷺ-এর উপর বেশি বেশি দরুদ",
+        "moon.0": "অমাবস্যা", "moon.1": "বর্ধমান অর্ধচন্দ্র", "moon.2": "প্রথম পাদ",
+        "moon.3": "বর্ধমান কুব্জ চাঁদ", "moon.4": "পূর্ণিমা", "moon.5": "ক্ষীয়মাণ কুব্জ চাঁদ",
+        "moon.6": "শেষ পাদ", "moon.7": "ক্ষীয়মাণ অর্ধচন্দ্র", "moon.lit": "%d%% আলোকিত",
+        "white.today": "আজ আইয়ামে বীযের (১৩–১৫) একটি দিন", "white.in": "আইয়ামে বীয: %d দিন পরে",
+        "fast.tomorrow.1": "আগামীকাল সোমবার: সুন্নাহ রোজা", "fast.tomorrow.4": "আগামীকাল বৃহস্পতিবার: সুন্নাহ রোজা",
+        "fast.today.1": "আজ সোমবার: সুন্নাহ রোজা", "fast.today.4": "আজ বৃহস্পতিবার: সুন্নাহ রোজা",
+        "rawatib.before": "%@ আগে", "rawatib.after": "%@ পরে",
+    ],
+    "ru": [
+        "leave.by": "Выходите в %@, чтобы успеть к икаме", "travel.time": "Время пути до мечети",
+        "off": "Выкл.", "min": "%d мин", "in": "через %@",
+        "sunnah.now": "Сунна этого времени", "up.next": "Далее: %@ · %@",
+        "ctx.lastthird": "Последняя треть ночи: время ночной молитвы и мольбы",
+        "ctx.night": "Ночь: молитесь по два ракаата и завершите витром до фаджра",
+        "ctx.fajr": "Два ракаата перед фаджром — самая подчёркнутая сунна",
+        "ctx.morning": "Утренние азкары · без добровольных молитв до восхода",
+        "ctx.sunrise": "Восходит солнце: подождите около четверти часа",
+        "ctx.duha": "Духа доступна до %@ (от 2 до 8 ракаатов)",
+        "ctx.zenith": "Солнце в зените: короткая пауза перед зухром",
+        "ctx.dhuhr": "Четыре до зухра и два после",
+        "ctx.asr": "Вечерние азкары · без добровольных молитв после асра до магриба",
+        "ctx.sunset": "Солнце садится: магриб близко",
+        "ctx.maghrib": "Два ракаата после магриба",
+        "ctx.isha": "Два ракаата после иши · витр перед сном или до фаджра",
+        "fri": "Пятница: сура «Аль-Кахф» и обильные благословения Пророку ﷺ",
+        "moon.0": "Новолуние", "moon.1": "Растущий серп", "moon.2": "Первая четверть",
+        "moon.3": "Растущая луна", "moon.4": "Полнолуние", "moon.5": "Убывающая луна",
+        "moon.6": "Последняя четверть", "moon.7": "Убывающий серп", "moon.lit": "освещено %d%%",
+        "white.today": "Сегодня один из белых дней (13–15)", "white.in": "Белые дни: через %d дн.",
+        "fast.tomorrow.1": "Завтра понедельник: пост по сунне", "fast.tomorrow.4": "Завтра четверг: пост по сунне",
+        "fast.today.1": "Сегодня понедельник: пост по сунне", "fast.today.4": "Сегодня четверг: пост по сунне",
+        "rawatib.before": "%@ до", "rawatib.after": "%@ после",
+    ],
+    "pt": [
+        "leave.by": "Saia às %@ para chegar à iqama", "travel.time": "Tempo até à mesquita",
+        "off": "Desativado", "min": "%d min", "in": "em %@",
+        "sunnah.now": "A sunna deste momento", "up.next": "A seguir: %@ · %@",
+        "ctx.lastthird": "O último terço da noite: tempo de oração noturna e súplica",
+        "ctx.night": "A noite: rezar de dois em dois e terminar com o witr antes do fajr",
+        "ctx.fajr": "Duas rak‘as antes do fajr, a sunna mais enfatizada",
+        "ctx.morning": "Adhkar da manhã · sem oração voluntária até o sol nascer",
+        "ctx.sunrise": "O sol está a nascer: espere cerca de um quarto de hora",
+        "ctx.duha": "O duha está aberto até às %@ (2 a 8 rak‘as)",
+        "ctx.zenith": "O sol está no zénite: uma breve pausa antes do dhuhr",
+        "ctx.dhuhr": "Quatro antes do dhuhr e duas depois",
+        "ctx.asr": "Adhkar da tarde · sem oração voluntária após o asr até ao maghrib",
+        "ctx.sunset": "O sol está a pôr-se: o maghrib aproxima-se",
+        "ctx.maghrib": "Duas rak‘as depois do maghrib",
+        "ctx.isha": "Duas rak‘as depois do isha · o witr antes de dormir ou antes do fajr",
+        "fri": "Sexta-feira: surata Al-Kahf e muitas salawat sobre o Profeta ﷺ",
+        "moon.0": "Lua nova", "moon.1": "Crescente", "moon.2": "Quarto crescente",
+        "moon.3": "Gibosa crescente", "moon.4": "Lua cheia", "moon.5": "Gibosa minguante",
+        "moon.6": "Quarto minguante", "moon.7": "Minguante", "moon.lit": "%d%% iluminada",
+        "white.today": "Hoje é um dos dias brancos (13–15)", "white.in": "Dias brancos: em %d dias",
+        "fast.tomorrow.1": "Amanhã é segunda-feira: jejum da sunna", "fast.tomorrow.4": "Amanhã é quinta-feira: jejum da sunna",
+        "fast.today.1": "Hoje é segunda-feira: jejum da sunna", "fast.today.4": "Hoje é quinta-feira: jejum da sunna",
+        "rawatib.before": "%@ antes", "rawatib.after": "%@ depois",
+    ],
+    "ur": [
+        "leave.by": "اقامت کے لیے %@ تک نکلیں", "travel.time": "مسجد تک پہنچنے کا وقت",
+        "off": "بند", "min": "%d منٹ", "in": "%@ میں",
+        "sunnah.now": "اس وقت کی سنت", "up.next": "اگلا: %@ · %@",
+        "ctx.lastthird": "رات کا آخری تہائی: تہجد اور دعا کا وقت",
+        "ctx.night": "رات: دو دو رکعت پڑھیں اور فجر سے پہلے وتر پر ختم کریں",
+        "ctx.fajr": "فجر سے پہلے دو رکعتیں — سب سے مؤکد سنت",
+        "ctx.morning": "صبح کے اذکار · سورج نکلنے تک نفل نہیں",
+        "ctx.sunrise": "سورج طلوع ہو رہا ہے: تقریباً پندرہ منٹ انتظار کریں",
+        "ctx.duha": "چاشت %@ تک (2 سے 8 رکعت)",
+        "ctx.zenith": "سورج عین سر پر ہے: ظہر سے پہلے مختصر وقفہ",
+        "ctx.dhuhr": "ظہر سے پہلے چار اور بعد میں دو",
+        "ctx.asr": "شام کے اذکار · عصر کے بعد مغرب تک نفل نہیں",
+        "ctx.sunset": "سورج غروب ہو رہا ہے: مغرب قریب ہے",
+        "ctx.maghrib": "مغرب کے بعد دو رکعتیں",
+        "ctx.isha": "عشاء کے بعد دو رکعتیں · سونے سے پہلے یا فجر سے پہلے وتر",
+        "fri": "جمعہ: سورۃ الکہف اور نبی ﷺ پر کثرت سے درود",
+        "moon.0": "نیا چاند", "moon.1": "بڑھتا ہلال", "moon.2": "پہلا ربع",
+        "moon.3": "بڑھتا چاند", "moon.4": "پورا چاند", "moon.5": "گھٹتا چاند",
+        "moon.6": "آخری ربع", "moon.7": "گھٹتا ہلال", "moon.lit": "%d%% روشن",
+        "white.today": "آج ایامِ بیض (13–15) میں سے ہے", "white.in": "ایامِ بیض: %d دن میں",
+        "fast.tomorrow.1": "کل پیر: سنت روزہ", "fast.tomorrow.4": "کل جمعرات: سنت روزہ",
+        "fast.today.1": "آج پیر: سنت روزہ", "fast.today.4": "آج جمعرات: سنت روزہ",
+        "rawatib.before": "%@ پہلے", "rawatib.after": "%@ بعد",
+    ],
+]
+
+func livingText(_ key: String, _ args: CVarArg...) -> String {
+    let code = Localizer.shared.current.code
+    let format = livingTranslations[code]?[key] ?? livingTranslations["en"]?[key] ?? key
+    return localizedInterfaceDigits(args.isEmpty ? format : String(format: format, arguments: args))
+}
+
+let kMosqueTravelMinutesKey = "mosqueTravelMinutes"
+let kMosqueTravelOptions = [0, 5, 10, 15, 20, 30, 45]
+
+func mosqueTravelMinutes() -> Int {
+    UserDefaults.standard.object(forKey: kMosqueTravelMinutesKey) == nil
+        ? 10 : max(0, UserDefaults.standard.integer(forKey: kMosqueTravelMinutesKey))
+}
+
+private func srgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) -> NSColor {
+    NSColor(srgbRed: r, green: g, blue: b, alpha: 1)
+}
+
+/// The moon's phase for a moment, from the mean synodic month.
+struct MoonPhase {
+    static let synodicMonth = 29.530588853
+    let age: Double                                  // days since new moon
+
+    static func at(_ date: Date) -> MoonPhase {
+        let reference = 947_182_440.0                 // 2000-01-06 18:14 UTC new moon
+        let days = (date.timeIntervalSince1970 - reference) / 86_400
+        var age = days.truncatingRemainder(dividingBy: synodicMonth)
+        if age < 0 { age += synodicMonth }
+        return MoonPhase(age: age)
+    }
+
+    var fraction: Double { age / Self.synodicMonth }
+    var illumination: Double { (1 - cos(2 * .pi * fraction)) / 2 }
+    var waxing: Bool { fraction < 0.5 }
+    var nameIndex: Int { Int((fraction * 8).rounded()) % 8 }
+}
+
+/// Colors, bodies, and stars of the living sky.
+enum LivingSky {
+    typealias Pair = (top: NSColor, horizon: NSColor)
+    static let night: Pair = (srgb(0.035, 0.05, 0.14), srgb(0.09, 0.11, 0.24))
+    static let dawn: Pair = (srgb(0.13, 0.17, 0.36), srgb(0.72, 0.42, 0.50))
+    static let sunrise: Pair = (srgb(0.30, 0.50, 0.80), srgb(0.98, 0.70, 0.42))
+    static let day: Pair = (srgb(0.16, 0.47, 0.82), srgb(0.62, 0.80, 0.96))
+    static let golden: Pair = (srgb(0.28, 0.43, 0.74), srgb(0.98, 0.74, 0.44))
+    static let sunset: Pair = (srgb(0.22, 0.22, 0.48), srgb(0.95, 0.47, 0.33))
+    static let dusk: Pair = (srgb(0.08, 0.10, 0.27), srgb(0.42, 0.26, 0.44))
+
+    static func keyframes(_ m: PrayerDayModel) -> [(Double, Pair)] {
+        let fajr = Double(m.times[0]), rise = Double(m.shuruq)
+        let set = Double(m.sunset), isha = Double(m.times[4])
+        let raw: [(Double, Pair)] = [
+            (0, night), (fajr - 15, night), ((fajr + rise) / 2, dawn), (rise, sunrise),
+            (rise + 60, day), (set - 75, day), (set - 25, golden), (set, sunset),
+            ((set + isha) / 2, dusk), (isha + 15, night), (1440, night),
+        ]
+        var result: [(Double, Pair)] = []
+        for frame in raw where frame.0 > (result.last?.0 ?? -1) { result.append(frame) }
+        return result
+    }
+
+    static func colors(at minute: Double, _ m: PrayerDayModel) -> Pair {
+        let value = ((minute.truncatingRemainder(dividingBy: 1440)) + 1440)
+            .truncatingRemainder(dividingBy: 1440)
+        let frames = keyframes(m)
+        for index in 1..<frames.count where value <= frames[index].0 {
+            let a = frames[index - 1], b = frames[index]
+            let t = CGFloat((value - a.0) / max(1, b.0 - a.0))
+            let eased = t * t * (3 - 2 * t)
+            return (a.1.top.blended(withFraction: eased, of: b.1.top) ?? a.1.top,
+                    a.1.horizon.blended(withFraction: eased, of: b.1.horizon) ?? a.1.horizon)
+        }
+        return night
+    }
+
+    /// How dark the sky is at a minute (0 = full day, 1 = night).
+    static func darkness(at minute: Double, _ m: PrayerDayModel) -> CGFloat {
+        let c = colors(at: minute, m).top.usingColorSpace(.sRGB) ?? .black
+        let luminance = 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent
+        return max(0, min(1, 1 - (luminance - 0.05) / 0.35))
+    }
+
+    static func fillSky(_ rect: NSRect, minute: Double, model: PrayerDayModel, flipped: Bool = true) {
+        let pair = colors(at: minute, model)
+        NSGradient(colors: [pair.top, pair.top.blended(withFraction: 0.5, of: pair.horizon) ?? pair.top,
+                            pair.horizon])?.draw(in: rect, angle: flipped ? -90 : 90)
+    }
+
+    /// The sun: breathing glow, slow rays, warm core.
+    static func drawSun(at center: NSPoint, radius r: CGFloat, time t: Double, alpha: CGFloat = 1) {
+        let pulse = CGFloat(1 + 0.07 * sin(t * 1.3))
+        let glowRadius = r * 3.3 * pulse
+        NSGradient(colors: [srgb(1.0, 0.86, 0.52).withAlphaComponent(0.55 * alpha),
+                            srgb(1.0, 0.72, 0.30).withAlphaComponent(0.18 * alpha),
+                            srgb(1.0, 0.70, 0.30).withAlphaComponent(0)])?
+            .draw(fromCenter: center, radius: 0, toCenter: center, radius: glowRadius, options: [])
+        NSGraphicsContext.saveGraphicsState()
+        let rays = 14
+        for index in 0..<rays {
+            let angle = CGFloat(t * 0.12) + CGFloat(index) * 2 * .pi / CGFloat(rays)
+            let long = index % 2 == 0
+            let inner = r * 1.35, outer = r * (long ? 2.15 : 1.75) * pulse
+            let ray = NSBezierPath()
+            ray.move(to: NSPoint(x: center.x + cos(angle) * inner, y: center.y + sin(angle) * inner))
+            ray.line(to: NSPoint(x: center.x + cos(angle) * outer, y: center.y + sin(angle) * outer))
+            ray.lineWidth = long ? 1.6 : 1.1
+            ray.lineCapStyle = .round
+            srgb(1.0, 0.85, 0.5).withAlphaComponent((long ? 0.55 : 0.35) * alpha).setStroke()
+            ray.stroke()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+        let core = NSRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+        NSGradient(colors: [srgb(1.0, 0.98, 0.88).withAlphaComponent(alpha),
+                            srgb(1.0, 0.80, 0.38).withAlphaComponent(alpha)])?
+            .draw(in: NSBezierPath(ovalIn: core), relativeCenterPosition: NSPoint(x: -0.3, y: 0.3))
+    }
+
+    /// The moon in its real phase: halo, earthshine disc, lit limb bounded
+    /// by the terminator ellipse, and a few soft maria.
+    static func drawMoon(at center: NSPoint, radius r: CGFloat, phase: MoonPhase,
+                         southern: Bool = false, time t: Double = 0, flipped: Bool = true) {
+        let halo = r * CGFloat(2.6 + 0.12 * sin(t * 0.9))
+        NSGradient(colors: [NSColor.white.withAlphaComponent(0.20 * (0.3 + phase.illumination)),
+                            NSColor.white.withAlphaComponent(0)])?
+            .draw(fromCenter: center, radius: r * 0.9, toCenter: center, radius: halo, options: [])
+        let disc = NSRect(x: center.x - r, y: center.y - r, width: r * 2, height: r * 2)
+        srgb(0.20, 0.22, 0.32).withAlphaComponent(0.75).setFill()
+        NSBezierPath(ovalIn: disc).fill()
+
+        let theta = 2 * .pi * phase.fraction
+        let a = r * CGFloat(cos(theta))
+        var litOnRight = phase.waxing
+        if southern { litOnRight.toggle() }
+        let side: CGFloat = litOnRight ? 1 : -1
+        let topY: (CGFloat) -> CGFloat = { psi in
+            flipped ? center.y - r * cos(psi) : center.y + r * cos(psi)
+        }
+        let lit = NSBezierPath()
+        let steps = 48
+        for step in 0...steps {                      // lit limb, top → bottom
+            let psi = CGFloat(step) / CGFloat(steps) * .pi
+            let point = NSPoint(x: center.x + side * r * sin(psi), y: topY(psi))
+            step == 0 ? lit.move(to: point) : lit.line(to: point)
+        }
+        for step in stride(from: steps, through: 0, by: -1) {   // terminator, bottom → top
+            let psi = CGFloat(step) / CGFloat(steps) * .pi
+            lit.line(to: NSPoint(x: center.x + side * a * sin(psi), y: topY(psi)))
+        }
+        lit.close()
+        NSGraphicsContext.saveGraphicsState()
+        lit.addClip()
+        NSGradient(colors: [srgb(0.99, 0.97, 0.90), srgb(0.86, 0.83, 0.74)])?
+            .draw(in: disc, angle: litOnRight ? 180 : 0)
+        srgb(0.55, 0.53, 0.48).withAlphaComponent(0.22).setFill()
+        for (dx, dy, s) in [(-0.25, -0.2, 0.28), (0.18, 0.12, 0.22), (-0.05, 0.38, 0.16),
+                            (0.35, -0.3, 0.14), (-0.4, 0.2, 0.12)] as [(CGFloat, CGFloat, CGFloat)] {
+            NSBezierPath(ovalIn: NSRect(x: center.x + dx * r - s * r, y: center.y + dy * r - s * r,
+                                        width: 2 * s * r, height: 2 * s * r)).fill()
+        }
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    /// Deterministic, twinkling stars.
+    static func drawStars(in rect: NSRect, count: Int, seed: Double, time t: Double,
+                          alpha: CGFloat, avoid: ((NSPoint) -> Bool)? = nil) {
+        guard alpha > 0.02 else { return }
+        func hash(_ value: Double) -> CGFloat {
+            let x = sin(value) * 43_758.5453
+            return CGFloat(x - floor(x))
+        }
+        for index in 0..<count {
+            let i = Double(index)
+            let point = NSPoint(x: rect.minX + hash(i * 12.9898 + seed) * rect.width,
+                                y: rect.minY + hash(i * 78.233 + seed) * rect.height)
+            if let avoid, avoid(point) { continue }
+            let size = 0.6 + hash(i * 3.7 + seed) * 1.3
+            let twinkle = 0.55 + 0.45 * sin(CGFloat(t) * (0.7 + hash(i + seed) * 1.6) + CGFloat(i))
+            NSColor.white.withAlphaComponent(alpha * (0.35 + 0.65 * twinkle)).setFill()
+            NSBezierPath(ovalIn: NSRect(x: point.x - size / 2, y: point.y - size / 2,
+                                        width: size, height: size)).fill()
+        }
+    }
+}
+
+/// Drives the sky animations (sun glow, rays, twinkling stars, entrances)
+/// at a modest frame rate, only for views that are on screen. Honors Reduce
+/// Motion by showing a still sky.
+final class SkyAnimationDriver {
+    static let shared = SkyAnimationDriver()
+    private let views = NSHashTable<NSView>.weakObjects()
+    private var timer: Timer?
+    private let start = Date()
+    var time: Double {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 0
+            : Date().timeIntervalSince(start)
+    }
+    var animates: Bool { !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    func register(_ view: NSView) {
+        views.add(view)
+        guard animates, timer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 24, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
+
+    func unregister(_ view: NSView) {
+        views.remove(view)
+        if views.allObjects.isEmpty { timer?.invalidate(); timer = nil }
+    }
+
+    private func tick() {
+        let live = views.allObjects.filter { $0.window?.isVisible == true && !$0.isHiddenOrHasHiddenAncestor }
+        live.forEach { $0.needsDisplay = true }
+        if views.allObjects.isEmpty { timer?.invalidate(); timer = nil }
+    }
+}
+
+/// Base for animated sky views: registers with the driver while on screen
+/// and tracks an entrance animation.
+class LivingSkyView: NSView {
+    override var isFlipped: Bool { true }
+    private var appearedAt: Date?
+
+    /// 0 → 1 over the entrance, eased; 1 when motion is reduced.
+    var entrance: CGFloat {
+        guard SkyAnimationDriver.shared.animates, let appearedAt else { return 1 }
+        let t = min(1, CGFloat(Date().timeIntervalSince(appearedAt) / 1.6))
+        return 1 - pow(1 - t, 3)
+    }
+    var skyTime: Double { SkyAnimationDriver.shared.time }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            if appearedAt == nil { appearedAt = Date() }
+            SkyAnimationDriver.shared.register(self)
+        } else {
+            SkyAnimationDriver.shared.unregister(self)
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+}
+
+func currentMinuteOfDay(_ date: Date = Date()) -> Double {
+    let parts = Calendar.current.dateComponents([.hour, .minute, .second], from: date)
+    return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0)) + Double(parts.second ?? 0) / 60
+}
+
+// ---------------------------------------------------------------------------
+// MARK: Education City backdrop
+
+/// Background inspired by Qatar's Education City Mosque: large folded
+/// planes like its white angular facades, hairline seams, and a faint field
+/// of points of light near the top echoing the prayer hall's ceiling.
+final class MosqueFacetBackdropView: NSView {
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        let ink = NSColor(white: dark ? 1 : 0, alpha: 1)
+        let block: CGFloat = max(720, min(1100, bounds.width * 0.9))
+        let facets: [([CGPoint], CGFloat)] = [
+            ([CGPoint(x: 0, y: 0), CGPoint(x: 0.34, y: 0), CGPoint(x: 0.16, y: 0.36)], 0.030),
+            ([CGPoint(x: 0.34, y: 0), CGPoint(x: 0.72, y: 0), CGPoint(x: 0.52, y: 0.46),
+              CGPoint(x: 0.16, y: 0.36)], 0.045),
+            ([CGPoint(x: 0.72, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 1, y: 0.58),
+              CGPoint(x: 0.52, y: 0.46)], 0.022),
+            ([CGPoint(x: 0, y: 0.36), CGPoint(x: 0.16, y: 0.36), CGPoint(x: 0.52, y: 0.46),
+              CGPoint(x: 0.30, y: 1), CGPoint(x: 0, y: 1)], 0.038),
+            ([CGPoint(x: 0.52, y: 0.46), CGPoint(x: 1, y: 0.58), CGPoint(x: 1, y: 1),
+              CGPoint(x: 0.30, y: 1)], 0.018),
+        ]
+        var offset: CGFloat = 0
+        var mirrored = false
+        while offset < bounds.height {
+            for (points, alpha) in facets {
+                let path = NSBezierPath()
+                for (index, p) in points.enumerated() {
+                    let x = (mirrored ? 1 - p.x : p.x) * bounds.width
+                    let point = NSPoint(x: x, y: offset + p.y * block)
+                    index == 0 ? path.move(to: point) : path.line(to: point)
+                }
+                path.close()
+                ink.withAlphaComponent(alpha * (dark ? 0.7 : 0.6)).setFill()
+                path.fill()
+                ink.withAlphaComponent(dark ? 0.025 : 0.022).setStroke()
+                path.lineWidth = 0.6
+                path.stroke()
+            }
+            offset += block
+            mirrored.toggle()
+        }
+        // Soft light falling from the top edge.
+        NSGradient(colors: [ink.withAlphaComponent(dark ? 0.05 : 0.0),
+                            ink.withAlphaComponent(0)])?
+            .draw(in: NSRect(x: 0, y: 0, width: bounds.width, height: min(bounds.height, 360)),
+                  angle: -90)
+        // Field of light points near the top, in a slow geometric rhythm.
+        let spacing: CGFloat = 16
+        let fieldHeight = min(bounds.height, 230)
+        var row = 0
+        var y: CGFloat = 10
+        while y < fieldHeight {
+            var x: CGFloat = row.isMultiple(of: 2) ? 8 : 8 + spacing / 2
+            while x < bounds.width {
+                let rhythm = 0.5 + 0.5 * sin(x * 0.045) * cos(y * 0.11 + x * 0.012)
+                let fade = 1 - y / fieldHeight
+                let alpha = (dark ? 0.16 : 0.10) * fade * rhythm
+                if alpha > 0.012 {
+                    NSColor.appAccent.withAlphaComponent(alpha).setFill()
+                    NSBezierPath(ovalIn: NSRect(x: x - 0.9, y: y - 0.9, width: 1.8, height: 1.8)).fill()
+                }
+                x += spacing
+            }
+            y += spacing * 0.86
+            row += 1
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+/// A small rendering of tonight's moon.
+final class MoonPhaseView: LivingSkyView {
+    var phase = MoonPhase.at(Date()) { didSet { needsDisplay = true } }
+    var southern = false
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = min(bounds.width, bounds.height) / 2 - 6
+        LivingSky.drawMoon(at: NSPoint(x: bounds.midX, y: bounds.midY), radius: r * 0.78,
+                           phase: phase, southern: southern, time: skyTime)
+    }
+}
+
+/// Contextual Sunnah guidance for the current moment and what comes next.
+func sunnahContext(model m: PrayerDayModel, minute: Int, date: Date)
+    -> (now: String, next: (String, Int)?) {
+    let fajr = m.times[0], dhuhr = m.times[1], asr = m.times[2], maghrib = m.times[3], isha = m.times[4]
+    let duhaStart = m.shuruq + 20, duhaEnd = dhuhr - 10
+    // The last third usually starts after midnight; in short summer nights
+    // it can begin before midnight.
+    func inLastThird(_ value: Int) -> Bool {
+        m.lastThird < m.sunset ? (value < fajr && value >= m.lastThird)
+                               : (value >= m.lastThird || value < fajr)
+    }
+    var now: String
+    if minute < fajr {
+        now = livingText(inLastThird(minute) ? "ctx.lastthird" : "ctx.night")
+    } else if minute < m.shuruq - 5 {
+        now = livingText(minute < fajr + 30 ? "ctx.fajr" : "ctx.morning")
+    } else if minute < duhaStart {
+        now = livingText(minute < m.shuruq + 15 ? "ctx.sunrise" : "ctx.morning")
+    } else if minute < duhaEnd {
+        now = livingText("ctx.duha", displayTime(clockString(duhaEnd)))
+    } else if minute < dhuhr {
+        now = livingText("ctx.zenith")
+    } else if minute < asr {
+        now = livingText("ctx.dhuhr")
+    } else if minute < m.sunset - 15 {
+        now = livingText("ctx.asr")
+    } else if minute < maghrib {
+        now = livingText("ctx.sunset")
+    } else if minute < isha {
+        now = livingText("ctx.maghrib")
+    } else {
+        now = livingText(inLastThird(minute) ? "ctx.lastthird" : "ctx.isha")
+    }
+    if Calendar.current.component(.weekday, from: date) == 6 && minute >= fajr && minute < maghrib {
+        now += "\n" + livingText("fri")
+    }
+    // The next sunnah moment.
+    let upcoming: [(Int, String)] = [
+        (fajr, livingText("ctx.fajr")), (duhaStart, featureText("nawafil.duha")),
+        (dhuhr, livingText("ctx.dhuhr")), (maghrib, livingText("ctx.maghrib")),
+        (isha, livingText("ctx.isha")),
+        (m.lastThird, prayerViewText("last.third")),
+    ]
+    let next = upcoming.filter { $0.0 > minute }.min(by: { $0.0 < $1.0 })
+        ?? upcoming.min(by: { $0.0 < $1.0 }).map { ($0.0 + 1440, $0.1) }
+    return (now, next.map { ($0.1, $0.0 % 1440) })
+}
+
 final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private weak var appDelegate: AppDelegate?
     private var scrollView: NSScrollView!
@@ -8917,6 +9832,10 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
     private weak var liveWindowValue: NSTextField?
     private weak var liveNextCaption: NSTextField?
     private weak var liveNextValue: NSTextField?
+    private weak var liveHeroCountdown: NSTextField?
+    private weak var liveSunnahNow: NSTextField?
+    private weak var liveSunnahNext: NSTextField?
+    private var liveTileBars: [(bar: WindowProgressBar, index: Int)] = []
 
     private struct NawafilData {
         let title: String
@@ -9059,6 +9978,12 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                                preferredEdge: edge)
     }
 
+    private func showPrayerInfo(_ knowledge: PrayerKnowledge, in view: NSView, rect: NSRect) {
+        if prayerInfoPopover.isShown { prayerInfoPopover.performClose(nil) }
+        prayerInfoPopover.contentViewController = PrayerInfoViewController(knowledge: knowledge)
+        prayerInfoPopover.show(relativeTo: rect, of: view, preferredEdge: .maxY)
+    }
+
     private func knowledge(forPrayer index: Int) -> PrayerKnowledge? {
         scheduleEvents.first { $0.kind == .obligatory && $0.prayerIndex == index }?.knowledge
     }
@@ -9112,7 +10037,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let separateExtra: CGFloat = nawafilMode == 2 ? 560 : 0
         let bodyHeight: CGFloat
         switch displayMode {
-        case 0: bodyHeight = 612 + separateExtra
+        case 0: bodyHeight = 600 + separateExtra
         default:
             // Timetable, Day path, and Dial size the document after building.
             bodyHeight = 600
@@ -9127,7 +10052,7 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             iqamaTimeAt: { app.iqamaTimeAt($0) })
         let contentX = (width - contentWidth) / 2
 
-        let pattern = MoroccanPatternView(frame: body.bounds)
+        let pattern = MosqueFacetBackdropView(frame: body.bounds)
         pattern.autoresizingMask = [.width, .height]
         body.addSubview(pattern)
 
@@ -9137,10 +10062,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         liveWindowValue = nil
         liveNextCaption = nil
         liveNextValue = nil
+        liveHeroCountdown = nil
+        liveSunnahNow = nil
+        liveSunnahNext = nil
+        liveTileBars = []
         var usedHeight: CGFloat?
         switch displayMode {
         case 0:
-            buildOverview(in: body, app: app, x: contentX, width: contentWidth)
+            usedHeight = buildOverview(in: body, app: app, x: contentX, width: contentWidth)
         case 1:
             usedHeight = buildTimetable(in: body, app: app, x: contentX, width: contentWidth)
         case 2:
@@ -9255,58 +10184,101 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         return formatter.string(from: Date())
     }
 
+    /// Overview: a living sky hero, prayer tiles with live window progress,
+    /// the Sunnah of this moment, and the moon with Hijri reminders.
     private func buildOverview(in body: NSView, app: AppDelegate,
-                               x: CGFloat, width: CGFloat) {
-        let isRTL = Localizer.shared.isRTL
-        let nextIndex = app.info.times.count >= 5 ? app.nextPrayer().index : -1
-        let validNext = (0..<5).contains(nextIndex)
-        let mosqueName = app.info.name.isEmpty ? t("mosque.default") : app.info.name
-        let nextName = validNext ? app.localizedPrayerName(at: nextIndex) : "—"
-        let nextRaw = validNext && app.info.times.indices.contains(nextIndex)
-                    ? app.info.times[nextIndex] : ""
-        let nextTime = nextRaw.isEmpty ? "—" : displayTime(nextRaw)
-        let iqamaRaw = validNext ? (app.iqamaTimeAt(nextIndex) ?? "") : ""
+                               x: CGFloat, width: CGFloat) -> CGFloat {
+        guard let model = PrayerDayModel(info: app.info, names: prayerNames(app)) else { return 40 }
+        let rtl = Localizer.shared.isRTL
+        let calendar = Calendar.current
+        let next = app.info.times.count >= 5 ? app.nextPrayer() : (index: -1, date: nil, isTomorrow: false)
+        let nextIndex = (0..<5).contains(next.index) ? next.index : -1
+        var y: CGFloat = 6
 
-        let hero = MoroccanHeroView(frame: NSRect(x: x, y: 6, width: width, height: 168))
+        // -- living sky hero
+        let heroHeight: CGFloat = 220
+        let hero = LiveSkyHeroView(frame: NSRect(x: x, y: y, width: width, height: heroHeight))
+        hero.model = model
+        hero.southern = (app.info.latitude ?? 1) < 0
+        hero.setAccessibilityElement(true)
+        hero.setAccessibilityRole(.group)
+        hero.setAccessibilityLabel(featureText("full.next_prayer"))
         body.addSubview(hero)
-        let primaryX = isRTL ? width * 0.40 : 26
-        let primaryWidth = width * 0.54
-        let timeX = isRTL ? 26 : width * 0.66
-        let timeWidth = width * 0.28
-        hero.addSubview(dashboardLabel(mosqueName,
-            frame: NSRect(x: primaryX, y: 17, width: primaryWidth, height: 24),
-            size: 13, weight: .medium, color: NSColor.white.withAlphaComponent(0.84)))
-        hero.addSubview(dashboardLabel(featureText("full.next_prayer").uppercased(),
-            frame: NSRect(x: primaryX, y: 52, width: primaryWidth, height: 19),
-            size: 11.5, weight: .bold, color: NSColor.white.withAlphaComponent(0.74)))
-        hero.addSubview(dashboardLabel(nextName,
-            frame: NSRect(x: primaryX, y: 73, width: primaryWidth, height: 40),
-            size: 30, weight: .bold, color: .white))
-        hero.addSubview(dashboardLabel(localizedLongDate(),
-            frame: NSRect(x: primaryX, y: 136, width: primaryWidth, height: 21),
-            size: 12, color: NSColor.white.withAlphaComponent(0.76)))
+        let shadow = NSShadow()
+        shadow.shadowColor = NSColor.black.withAlphaComponent(0.45)
+        shadow.shadowBlurRadius = 6
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        @discardableResult
+        func heroLabel(_ text: String, _ frame: NSRect, size: CGFloat, weight: NSFont.Weight,
+                       alpha: CGFloat = 1, mono: Bool = false, leading: Bool) -> NSTextField {
+            let label = NSTextField(labelWithString: text)
+            label.font = mono ? NSFont.monospacedDigitSystemFont(ofSize: size, weight: weight)
+                              : Localizer.shared.font(size: size, weight: weight)
+            label.textColor = NSColor.white.withAlphaComponent(alpha)
+            label.alignment = leading == rtl ? .right : .left
+            label.baseWritingDirection = rtl ? .rightToLeft : .leftToRight
+            label.lineBreakMode = .byTruncatingTail
+            label.shadow = shadow
+            label.frame = localizedTextFrame(frame, text: text.isEmpty ? "0" : text, font: label.font!)
+            hero.addSubview(label)
+            return label
+        }
+        let leadWidth = width * 0.5
+        let leadX = rtl ? width - 28 - leadWidth : 28
+        let trailWidth = width * 0.36
+        let trailX = rtl ? 28 : width - 28 - trailWidth
+        heroLabel(featureText("full.next_prayer"), NSRect(x: leadX, y: 22, width: leadWidth, height: 18),
+                  size: 12, weight: .semibold, alpha: 0.85, leading: true)
+        heroLabel(nextIndex >= 0 ? app.localizedPrayerName(at: nextIndex) : "—",
+                  NSRect(x: leadX, y: 42, width: leadWidth, height: 46),
+                  size: 36, weight: .bold, leading: true)
+        heroLabel(app.info.name.isEmpty ? t("mosque.default") : app.info.name,
+                  NSRect(x: leadX, y: 92, width: leadWidth, height: 18),
+                  size: 12, weight: .medium, alpha: 0.85, leading: true)
+        heroLabel(nextIndex >= 0 ? displayTime(app.info.times[nextIndex]) : "—",
+                  NSRect(x: trailX, y: 26, width: trailWidth, height: 54),
+                  size: 46, weight: .semibold, mono: true, leading: false)
+        liveHeroCountdown = heroLabel("", NSRect(x: trailX, y: 84, width: trailWidth, height: 20),
+                                      size: 13, weight: .semibold, alpha: 0.92, leading: false)
+        var chips: [String] = []
+        if nextIndex >= 0, mosqueTravelMinutes() > 0,
+           let iqama = app.iqamaTimeAt(nextIndex), let iqamaMinute = clockMinutes(iqama) {
+            chips.append(livingText("leave.by", displayTime(clockString(iqamaMinute - mosqueTravelMinutes()))))
+        }
+        if let key = [0: "ctx.fajr", 1: "ctx.dhuhr", 3: "ctx.maghrib", 4: "ctx.isha"][nextIndex] {
+            chips.append(livingText(key))
+        }
+        var chipEdge: CGFloat = rtl ? width - 24 : 24
+        let chipFont = Localizer.shared.font(size: 11.5, weight: .semibold)
+        for chip in chips {
+            let chipWidth = min((chip as NSString).size(withAttributes: [.font: chipFont]).width + 44,
+                                width * 0.48)
+            let rect = NSRect(x: rtl ? chipEdge - chipWidth : chipEdge, y: heroHeight - 46,
+                              width: chipWidth, height: 28)
+            hero.addSubview(AdaptiveBackgroundView(frame: rect,
+                                                   light: NSColor.white.withAlphaComponent(0.22),
+                                                   dark: NSColor.white.withAlphaComponent(0.16),
+                                                   radius: 14))
+            let label = NSTextField(labelWithString: chip)
+            label.font = chipFont
+            label.textColor = .white
+            label.alignment = .center
+            label.lineBreakMode = .byTruncatingTail
+            label.shadow = shadow
+            label.frame = localizedTextFrame(rect.insetBy(dx: 8, dy: 5), text: chip, font: chipFont)
+            hero.addSubview(label)
+            chipEdge += rtl ? -(chipWidth + 8) : chipWidth + 8
+        }
+        y += heroHeight + 16
 
-        let time = dashboardLabel(nextTime,
-            frame: NSRect(x: timeX, y: 52, width: timeWidth, height: 58),
-            size: 44, weight: .semibold, color: .white, alignment: .center)
-        time.font = NSFont.monospacedDigitSystemFont(ofSize: 44, weight: .semibold)
-        hero.addSubview(time)
-        let iqamaText = iqamaRaw.isEmpty ? t("col.adhan")
-            : "\(t("col.iqama")) · \(displayTime(iqamaRaw))"
-        hero.addSubview(dashboardLabel(iqamaText,
-            frame: NSRect(x: timeX, y: 118, width: timeWidth, height: 21),
-            size: 12, weight: .medium,
-            color: NSColor.white.withAlphaComponent(0.76), alignment: .center))
-
-        // The page header already says "Prayer times"; tiles follow the hero.
-
+        // -- prayer tiles with live window progress
         let gap: CGFloat = 10
         let tileWidth = (width - gap * 4) / 5
+        let tileHeight: CGFloat = 132
         for index in 0..<5 {
-            let visualIndex = isRTL ? 4 - index : index
-            let tileX = x + CGFloat(visualIndex) * (tileWidth + gap)
-            let card = AdaptiveCardView(frame: NSRect(x: tileX, y: 190,
-                                                       width: tileWidth, height: 144))
+            let visualIndex = rtl ? 4 - index : index
+            let card = AdaptiveCardView(frame: NSRect(x: x + CGFloat(visualIndex) * (tileWidth + gap), y: y,
+                                                       width: tileWidth, height: tileHeight))
             card.cornerRadius = 14
             card.addsDepth = index == nextIndex
             body.addSubview(card)
@@ -9319,71 +10291,163 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
             let content = FlippedView(frame: card.bounds)
             content.autoresizingMask = [.width, .height]
             card.addSubview(content)
-
-            // Icon buttons sit in the top corners and the prayer name gets
-            // the full card width on its own line; squeezing the name between
-            // two 44 pt buttons left ~36 pt and truncated it to "الـ…".
-            let mode = NSButton(frame: NSRect(x: isRTL ? 4 : tileWidth - 40,
-                                              y: 4, width: 36, height: 36))
+            let mode = NSButton(frame: NSRect(x: rtl ? 4 : tileWidth - 40, y: 4, width: 36, height: 36))
             mode.isBordered = false
             mode.title = ""
             mode.tag = index
             mode.target = app
             mode.action = #selector(AppDelegate.adhanModeButtonTapped(_:))
             mode.imagePosition = .imageOnly
-            mode.focusRingType = .default
             mode.setAccessibilityLabel(app.localizedPrayerName(at: index))
             app.applyAdhanModeIcon(to: mode, mode: adhanModeForPrayer(index))
             content.addSubview(mode)
-
             if let knowledge = knowledge(forPrayer: index) {
-                content.addSubview(makeInfoButton(
-                    for: knowledge,
-                    frame: NSRect(x: isRTL ? tileWidth - 40 : 4,
-                                  y: 4, width: 36, height: 36)))
+                content.addSubview(makeInfoButton(for: knowledge,
+                    frame: NSRect(x: rtl ? tileWidth - 40 : 4, y: 4, width: 36, height: 36)))
             }
-
+            let accent: NSColor = index == nextIndex ? .appGreenAccent : .labelColor
             content.addSubview(dashboardLabel(app.localizedPrayerName(at: index),
-                frame: NSRect(x: 8, y: 38, width: tileWidth - 16, height: 24),
-                size: 15.5, weight: .semibold,
-                color: index == nextIndex ? .appGreenAccent : .labelColor,
-                alignment: .center))
+                frame: NSRect(x: 8, y: 36, width: tileWidth - 16, height: 24),
+                size: 15.5, weight: .semibold, color: accent, alignment: .center))
             let raw = app.info.times.indices.contains(index) ? app.info.times[index] : ""
-            let adhan = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
-                frame: NSRect(x: 10, y: 66, width: tileWidth - 20, height: 36),
-                size: 27, weight: .semibold,
-                color: index == nextIndex ? .appGreenAccent : .labelColor,
-                alignment: .center)
-            adhan.font = NSFont.monospacedDigitSystemFont(ofSize: 27, weight: .semibold)
-            content.addSubview(adhan)
+            let time = dashboardLabel(raw.isEmpty ? "—" : displayTime(raw),
+                frame: NSRect(x: 8, y: 60, width: tileWidth - 16, height: 34),
+                size: 26, weight: .semibold, color: accent, alignment: .center)
+            time.font = NSFont.monospacedDigitSystemFont(ofSize: 26, weight: .semibold)
+            content.addSubview(time)
             let iqama = app.iqamaTimeAt(index).map(displayTime) ?? "—"
             content.addSubview(dashboardLabel("\(t("col.iqama")) · \(iqama)",
-                frame: NSRect(x: 8, y: 111, width: tileWidth - 16, height: 21),
-                size: 11.5, color: .secondaryLabelColor, alignment: .center))
+                frame: NSRect(x: 8, y: 96, width: tileWidth - 16, height: 18),
+                size: 11, color: .secondaryLabelColor, alignment: .center))
+            let bar = WindowProgressBar(frame: NSRect(x: 14, y: tileHeight - 12, width: tileWidth - 28, height: 4))
+            content.addSubview(bar)
+            liveTileBars.append((bar, index))
         }
+        y += tileHeight + 16
 
-        body.addSubview(dashboardLabel(featureText("full.landmarks"),
-            frame: NSRect(x: x, y: 358, width: width, height: 26),
-            size: 17, weight: .semibold))
-        addLandmarksStrip(to: body, app: app,
-                          frame: NSRect(x: x, y: 392, width: width, height: 82))
+        // -- Sunnah of this moment + moon & Hijri
+        let rowHeight: CGFloat = 138
+        let sunnahWidth = (width - 12) * 0.57
+        let moonWidth = width - 12 - sunnahWidth
+        let sunnahCard = AdaptiveCardView(frame: NSRect(x: rtl ? x + width - sunnahWidth : x, y: y,
+                                                        width: sunnahWidth, height: rowHeight))
+        sunnahCard.cornerRadius = 14
+        body.addSubview(sunnahCard)
+        let sunnahContent = FlippedView(frame: sunnahCard.bounds)
+        sunnahCard.addSubview(sunnahContent)
+        let spark = NSImageView(frame: NSRect(x: rtl ? sunnahWidth - 34 : 14, y: 13, width: 18, height: 18))
+        spark.image = templateSymbol("sparkles", pointSize: 13, weight: .semibold)
+        spark.contentTintColor = .appGreenAccent
+        sunnahContent.addSubview(spark)
+        sunnahContent.addSubview(dashboardLabel(livingText("sunnah.now"),
+            frame: NSRect(x: rtl ? 14 : 38, y: 12, width: sunnahWidth - 52, height: 20),
+            size: 13, weight: .semibold, color: .secondaryLabelColor))
+        let nowLabel = dashboardLabel("", frame: NSRect(x: 14, y: 38, width: sunnahWidth - 28, height: 56),
+                                      size: 14.5, weight: .semibold, wrapping: true)
+        nowLabel.maximumNumberOfLines = 3
+        sunnahContent.addSubview(nowLabel)
+        liveSunnahNow = nowLabel
+        let nextLabel = dashboardLabel("", frame: NSRect(x: 14, y: 104, width: sunnahWidth - 28, height: 20),
+                                       size: 12, color: .secondaryLabelColor)
+        sunnahContent.addSubview(nextLabel)
+        liveSunnahNext = nextLabel
 
-        if nawafilMode == 1 {
-            addIntegratedNawafilSummary(to: body, app: app,
-                frame: NSRect(x: x, y: 498, width: width, height: 72))
-        } else if nawafilMode == 2 {
-            body.addSubview(dashboardLabel(featureText("full.nawafil"),
-                frame: NSRect(x: x, y: 498, width: width, height: 26),
-                size: 17, weight: .semibold))
-            let rows = nawafilData(app: app)
-            for (index, row) in rows.enumerated() {
-                addNawafilRow(to: body,
-                              frame: NSRect(x: x, y: 532 + CGFloat(index) * 128,
-                                            width: width, height: 116), data: row)
+        let moonCard = AdaptiveCardView(frame: NSRect(x: rtl ? x : x + width - moonWidth, y: y,
+                                                      width: moonWidth, height: rowHeight))
+        moonCard.cornerRadius = 14
+        body.addSubview(moonCard)
+        let moonContent = FlippedView(frame: moonCard.bounds)
+        moonCard.addSubview(moonContent)
+        let phase = MoonPhase.at(Date())
+        let moonView = MoonPhaseView(frame: NSRect(x: rtl ? 12 : moonWidth - 96, y: 24, width: 84, height: 84))
+        moonView.phase = phase
+        moonView.southern = (app.info.latitude ?? 1) < 0
+        moonContent.addSubview(moonView)
+        var hijriCalendar = Calendar(identifier: .islamicUmmAlQura)
+        hijriCalendar.locale = preferredInterfaceLocale()
+        let shifted = calendar.date(byAdding: .day, value: app.info.hijriAdjustment ?? 0, to: Date()) ?? Date()
+        let hijriFormatter = DateFormatter()
+        hijriFormatter.calendar = hijriCalendar
+        hijriFormatter.locale = preferredInterfaceLocale()
+        hijriFormatter.dateFormat = "d MMMM yyyy"
+        let hijriDay = hijriCalendar.component(.day, from: shifted)
+        let monthLength = hijriCalendar.range(of: .day, in: .month, for: shifted)?.count ?? 30
+        var reminders: [String] = []
+        if (13...15).contains(hijriDay) {
+            reminders.append(livingText("white.today"))
+        } else {
+            let days = hijriDay < 13 ? 13 - hijriDay : monthLength - hijriDay + 13
+            if Localizer.shared.current.code == "ar" {
+                // Arabic counted nouns: يومين، ٣–١٠ أيام، ١١+ يومًا.
+                let phrase = days == 1 ? "غدًا" : days == 2 ? "بعد يومين"
+                    : (3...10).contains(days) ? "بعد \(days) أيام" : "بعد \(days) يومًا"
+                reminders.append(localizedInterfaceDigits("الأيام البيض: \(phrase)"))
+            } else {
+                reminders.append(livingText("white.in", days))
             }
-            addGuidance(to: body, frame: NSRect(x: x, y: 1044,
-                                                width: width, height: 38))
         }
+        switch calendar.component(.weekday, from: Date()) {
+        case 2: reminders.append(livingText("fast.today.1"))
+        case 5: reminders.append(livingText("fast.today.4"))
+        case 1: reminders.append(livingText("fast.tomorrow.1"))
+        case 4: reminders.append(livingText("fast.tomorrow.4"))
+        default: break
+        }
+        let textX: CGFloat = rtl ? 104 : 14
+        let textWidth = moonWidth - 118
+        moonContent.addSubview(dashboardLabel(hijriFormatter.string(from: shifted),
+            frame: NSRect(x: textX, y: 14, width: textWidth, height: 24), size: 16, weight: .bold))
+        moonContent.addSubview(dashboardLabel(
+            "\(livingText("moon.\(phase.nameIndex)")) · \(livingText("moon.lit", Int((phase.illumination * 100).rounded())))",
+            frame: NSRect(x: textX, y: 42, width: textWidth, height: 18), size: 12, color: .secondaryLabelColor))
+        let reminderLabel = dashboardLabel(reminders.joined(separator: "\n"),
+            frame: NSRect(x: textX, y: 68, width: textWidth, height: 56), size: 12, weight: .semibold,
+            color: .appGreenAccent, wrapping: true)
+        reminderLabel.maximumNumberOfLines = 3
+        moonContent.addSubview(reminderLabel)
+        y += rowHeight + 14
+
+        // -- the day's other moments, as quiet chips
+        let sunsetRaw = (app.info.sunset ?? "").isEmpty ? clockString(model.sunset) : (app.info.sunset ?? "")
+        var facts: [(String, String)] = [
+            (t("prayer.shuruq"), displayTime(app.info.shuruq)),
+            (featureText("full.sunset"), displayTime(sunsetRaw)),
+            (prayerViewText("midnight"), displayTime(clockString(model.midnight))),
+            (prayerViewText("last.third"), displayTime(clockString(model.lastThird))),
+        ]
+        if let jumua = app.info.jumuaTimes?.first ?? (app.info.jumua.isEmpty ? nil : app.info.jumua) {
+            facts.insert((t("label.jumua"), displayTime(jumua)), at: 2)
+        }
+        let factFont = Localizer.shared.font(size: 12, weight: .medium)
+        var edge: CGFloat = rtl ? x + width : x
+        for (title, value) in facts {
+            let text = "\(title)  \(value)"
+            let chipWidth = (text as NSString).size(withAttributes: [.font: factFont]).width + 40
+            if rtl ? edge - chipWidth < x : edge + chipWidth > x + width { break }
+            let rect = NSRect(x: rtl ? edge - chipWidth : edge, y: y, width: chipWidth, height: 30)
+            body.addSubview(AdaptiveBackgroundView(frame: rect,
+                                                   light: NSColor.black.withAlphaComponent(0.04),
+                                                   dark: NSColor.white.withAlphaComponent(0.06),
+                                                   radius: 15))
+            body.addSubview(dashboardLabel(text, frame: rect.insetBy(dx: 8, dy: 6), size: 12,
+                                           weight: .medium, color: .secondaryLabelColor,
+                                           alignment: .center))
+            edge += rtl ? -(chipWidth + 8) : chipWidth + 8
+        }
+        y += 30 + 18
+
+        if nawafilMode == 2 {
+            body.addSubview(dashboardLabel(featureText("full.nawafil"),
+                frame: NSRect(x: x, y: y, width: width, height: 26), size: 17, weight: .semibold))
+            y += 34
+            for row in nawafilData(app: app) {
+                addNawafilRow(to: body, frame: NSRect(x: x, y: y, width: width, height: 116), data: row)
+                y += 128
+            }
+            addGuidance(to: body, frame: NSRect(x: x, y: y, width: width, height: 38))
+            y += 44
+        }
+        return y
     }
 
     private func addLandmarksStrip(to parent: NSView, app: AppDelegate, frame: NSRect) {
@@ -9714,6 +10778,12 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
         let path = PrayerDayPathView(frame: NSRect(x: x, y: 8, width: width,
                                                    height: PrayerDayPathView.preferredHeight))
         path.model = model
+        path.events = scheduleEvents
+        path.southern = (app.info.latitude ?? 1) < 0
+        path.onSelectEvent = { [weak self, weak path] event, rect in
+            guard let path else { return }
+            self?.showPrayerInfo(event.knowledge, in: path, rect: rect)
+        }
         path.setAccessibilityLabel(prayerViewText("view.daypath"))
         body.addSubview(path)
         liveDayPath = path
@@ -9744,6 +10814,12 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                                                 width: dialSize, height: dialSize))
         dial.model = model
         dial.iqamaMinutes = (0..<5).map { app.iqamaTimeAt($0).flatMap(clockMinutes) }
+        dial.events = scheduleEvents
+        dial.southern = (app.info.latitude ?? 1) < 0
+        dial.onSelectEvent = { [weak self, weak dial] event, rect in
+            guard let dial else { return }
+            self?.showPrayerInfo(event.knowledge, in: dial, rect: rect)
+        }
         dial.setAccessibilityLabel(prayerViewText("view.dial"))
         body.addSubview(dial)
         liveDial = dial
@@ -9775,13 +10851,14 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                 frame: NSRect(x: textX, y: 30, width: textWidth, height: 17),
                 size: 11.5, weight: .medium, color: .secondaryLabelColor))
             let direction = prayerViewText("dir.\(Int((bearing / 45).rounded()) % 8)")
+            let degrees = "\u{200E}\(localizedInterfaceDigits(String(Int(bearing.rounded()))))°\u{200E}"
             content.addSubview(dashboardLabel(
-                prayerViewText("qibla.detail", String(Int(bearing.rounded())), direction),
+                prayerViewText("qibla.detail", degrees, direction),
                 frame: NSRect(x: textX, y: 52, width: textWidth, height: 40),
                 size: 14, weight: .semibold, wrapping: true))
             card.setAccessibilityElement(true)
             card.setAccessibilityLabel("\(prayerViewText("qibla")): " +
-                prayerViewText("qibla.detail", String(Int(bearing.rounded())), direction))
+                prayerViewText("qibla.detail", degrees, direction))
             py += 136
         }
 
@@ -9824,8 +10901,40 @@ final class PrayerDashboardViewController: NSViewController, MainTabContent {
                     format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60))
             }
         }
-        liveDial?.needsDisplay = true
-        if calendar.component(.second, from: now) % 20 == 0 { liveDayPath?.needsDisplay = true }
+        if let label = liveHeroCountdown {
+            let next = app.info.times.count >= 5 ? app.nextPrayer() : (index: -1, date: nil, isTomorrow: false)
+            if (0..<5).contains(next.index), let date = next.date {
+                let seconds = max(0, Int(date.timeIntervalSince(now)))
+                var text = livingText("in", localizedInterfaceDigits(String(
+                    format: "%02d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)))
+                if let iqama = app.iqamaTimeAt(next.index) {
+                    text += " · \(t("col.iqama")) \(displayTime(iqama))"
+                }
+                label.stringValue = text
+            }
+        }
+        let current = model.current(at: minute)
+        for (bar, index) in liveTileBars {
+            let window = model.windows[index]
+            if current.index == index {
+                let linear = minute < current.start && current.start >= 0 ? minute + 1440 : minute
+                bar.tint = .appAccent
+                bar.progress = CGFloat(linear - current.start) / CGFloat(max(1, current.end - current.start))
+            } else if minute >= window.end || (index < 4 && minute >= model.times[index + 1]) {
+                bar.tint = NSColor.appAccent.withAlphaComponent(0.35)
+                bar.progress = 1
+            } else {
+                bar.progress = 0
+            }
+        }
+        if let nowLabel = liveSunnahNow, let nextLabel = liveSunnahNext {
+            let context = sunnahContext(model: model, minute: minute, date: now)
+            if nowLabel.stringValue != context.now { nowLabel.stringValue = context.now }
+            let nextText = context.next.map {
+                livingText("up.next", $0.0, displayTime(clockString($0.1)))
+            } ?? ""
+            if nextLabel.stringValue != nextText { nextLabel.stringValue = nextText }
+        }
     }
 
     private func nawafilData(app: AppDelegate) -> [NawafilData] {
@@ -11721,13 +12830,26 @@ private final class QuranReadingBackdropView: NSView {
         bounds.fill()
         let top = palette.surface.withAlphaComponent(palette == .night ? 0.18 : 0.30)
         NSGradient(starting: top, ending: palette.background)?.draw(in: bounds, angle: 90)
-        palette.motif.setStroke()
-        for y in stride(from: CGFloat(54), through: bounds.height, by: 104) {
-            for x in [CGFloat(30), bounds.width - 30] {
-                let path = zelligeStarPath(center: NSPoint(x: x, y: y), outer: 18, inner: 8)
-                path.lineWidth = 0.8
-                path.stroke()
-            }
+        // Folded planes (Education City Mosque) instead of stars.
+        let w = bounds.width, h = max(bounds.height, 1)
+        let planes: [[CGPoint]] = [
+            [CGPoint(x: 0, y: 0), CGPoint(x: 0.3 * w, y: 0), CGPoint(x: 0.12 * w, y: 0.42 * h)],
+            [CGPoint(x: 0.7 * w, y: 0), CGPoint(x: w, y: 0), CGPoint(x: w, y: 0.5 * h),
+             CGPoint(x: 0.86 * w, y: 0.32 * h)],
+            [CGPoint(x: 0, y: 0.42 * h), CGPoint(x: 0.12 * w, y: 0.42 * h), CGPoint(x: 0.2 * w, y: h),
+             CGPoint(x: 0, y: h)],
+            [CGPoint(x: 0.86 * w, y: 0.32 * h), CGPoint(x: w, y: 0.5 * h), CGPoint(x: w, y: h),
+             CGPoint(x: 0.78 * w, y: h)],
+        ]
+        for (index, points) in planes.enumerated() {
+            let path = NSBezierPath()
+            for (i, point) in points.enumerated() { i == 0 ? path.move(to: point) : path.line(to: point) }
+            path.close()
+            palette.motif.withAlphaComponent(index.isMultiple(of: 2) ? 0.10 : 0.06).setFill()
+            path.fill()
+            palette.motif.withAlphaComponent(0.35).setStroke()
+            path.lineWidth = 0.6
+            path.stroke()
         }
     }
 }
@@ -15903,6 +17025,15 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
         preAdhanPopup.target = self
         preAdhanPopup.action = #selector(preAdhanChanged(_:))
         addRow(adhanCard, label: t("settings.notif.headsup"), control: preAdhanPopup)
+
+        let travelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+        for minutes in kMosqueTravelOptions {
+            travelPopup.addItem(withTitle: minutes == 0 ? livingText("off") : livingText("min", minutes))
+        }
+        travelPopup.selectItem(at: kMosqueTravelOptions.firstIndex(of: mosqueTravelMinutes()) ?? 2)
+        travelPopup.target = self
+        travelPopup.action = #selector(travelTimeChanged(_:))
+        addRow(adhanCard, label: livingText("travel.time"), control: travelPopup)
             endCard(adhanCard)
 
             sectionHeader(featureText("settings.prayer_modes"),
@@ -16075,6 +17206,12 @@ final class AdhkarSettingsViewController: NSViewController, MainTabContent {
     }
     @objc private func dashboardCountdownChanged(_ sender: NSButton) {
         UserDefaults.standard.set(sender.state == .on, forKey: kPrayerShowCountdown)
+        appDelegate?.mainWindow?.reloadPrayerDashboard()
+    }
+    @objc private func travelTimeChanged(_ sender: NSPopUpButton) {
+        guard kMosqueTravelOptions.indices.contains(sender.indexOfSelectedItem) else { return }
+        UserDefaults.standard.set(kMosqueTravelOptions[sender.indexOfSelectedItem],
+                                  forKey: kMosqueTravelMinutesKey)
         appDelegate?.mainWindow?.reloadPrayerDashboard()
     }
     @objc private func nawafilSettingChanged(_ sender: NSPopUpButton) {
@@ -18216,7 +19353,7 @@ final class AdhkarEditorViewController: NSViewController, MainTabContent,
     // MARK: - reading surface
 
     private func buildReadingSurface(into root: NSView) {
-        let backdrop = MoroccanPatternView()
+        let backdrop = MosqueFacetBackdropView()
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(backdrop)
 
