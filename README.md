@@ -92,30 +92,31 @@ brew install makensis
 ```
 
 `build.sh` follows the Mac build's rules:
-- It fetches the 14 adhans and the adhkar recitations from the same sources, reusing a built Mac app in `../Salat Time Source` when there is one.
+- It fetches the 14 adhans and the adhkar recitations from the same sources, reusing a built Mac app in `../mac_os` when there is one.
 - It fetches the Cairo font.
 - It refreshes `strings.json` from the Mac app when that checkout is present, and otherwise uses the committed copy.
 - It **fails if any Qur'an file doesn't match its SHA-256** in the manifest.
 
 The Mac checkout's location can be changed with `SALAT_MAC_SOURCE=/path ./build.sh`.
 
-## Working on both apps
+## Working on the different apps
 
-The Mac app and the Windows app are two branches of the same GitHub repository,
-checked out side by side:
+Each platform has its own folder and its own branch of the same GitHub
+repository. They share no code:
 
 ```
 Salat Time/
-  Salat Time Source/      Mac app      → branch main
-  Salat Time Windows/     Windows app  → branch windows-app
+  mac_os/      Mac app       → branch main
+  windows/     Windows app   → branch windows-app
+  (later: android/, ios/, ipados/ the same way)
 ```
 
-Commit and push from each folder as usual; they never touch each other's files.
-To set this up on another Mac:
+Commit and push from each folder as usual. Each folder only tracks its own branch.
+To set this up on another computer:
 
 ```bash
-git clone git@github.com:magicbox9/salat-time.git "Salat Time Source"
-cd "Salat Time Source" && git worktree add "../Salat Time Windows" windows-app
+git clone -b main        --single-branch git@github.com:magicbox9/salat-time.git mac_os
+git clone -b windows-app --single-branch git@github.com:magicbox9/salat-time.git windows
 ```
 
 ## Development

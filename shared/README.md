@@ -13,7 +13,7 @@ a change on one branch can never break the other.
 Never edit these files by hand. To pick up a newer version from the Mac app, run:
 
 ```bash
-tools/sync_from_mac.sh "../Salat Time Source"
+tools/sync_from_mac.sh ../mac_os
 ```
 
 It copies these files and refreshes `src/SalatTime/Assets/strings.json`. `build.sh`

@@ -3,7 +3,7 @@
 
 Sources: the translations.json heredoc in the Mac app's build.sh and the Swift
 string tables in its main.swift. The Mac app lives on the repository's `main`
-branch; point this at a checkout of it (default: the sibling "Salat Time Source"):
+branch; point this at a checkout of it (default: the sibling "mac_os" folder):
 
     python3 tools/extract_strings.py [path/to/mac/checkout]
 """
@@ -14,7 +14,7 @@ import sys
 
 HERE = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MAC = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else
-                      os.environ.get("SALAT_MAC_SOURCE", os.path.join(HERE, "..", "Salat Time Source")))
+                      os.environ.get("SALAT_MAC_SOURCE", os.path.join(HERE, "..", "mac_os")))
 if not os.path.isfile(os.path.join(MAC, "main.swift")):
     sys.exit(f"No Mac checkout at {MAC} (pass its path, or set SALAT_MAC_SOURCE)")
 SWIFT = open(os.path.join(MAC, "main.swift"), encoding="utf-8").read()

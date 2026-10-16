@@ -17,7 +17,7 @@ DIST="$HERE/dist"
 # Optional: a checkout of the Mac app (the repository's `main` branch). When it is
 # there, its built app saves re-downloading the recordings, and the shared strings
 # are refreshed from it. The Windows project builds without it.
-MAC_SOURCE="${SALAT_MAC_SOURCE:-$HERE/../Salat Time Source}"
+MAC_SOURCE="${SALAT_MAC_SOURCE:-$HERE/../mac_os}"
 MAC_RESOURCES="$MAC_SOURCE/Salat Time.app/Contents/Resources"
 export PATH="$HOME/.dotnet:$PATH"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
