@@ -9,8 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * A mosque's published calendar for one year.
  *
- * @property array<int, array<int, array<int, string>>> $days  12 months × days × 6 times
- * @property array<int, array<int, array<int, string>>>|null $iqama  12 months × days × 5 values
+ * @property array<int, array<int, array<int, string>>> $days 12 months × days × 6 times
+ * @property array<int, array<int, array<int, string>>>|null $iqama 12 months × days × 5 values
  */
 #[Fillable(['mosque_id', 'year', 'source', 'timezone', 'days', 'iqama', 'imsak_minutes', 'retrieved_at'])]
 class MosquePrayerCalendar extends Model

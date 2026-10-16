@@ -46,10 +46,20 @@ Redis (cache, sessions, queue), MapLibre GL for the globe and maps.
 5. **Qur'an text is never edited or regenerated.** `resources/quran/` holds the
    verified KFGQPC corpus copied unchanged from the Mac app's `QuranAssets`
    (same SHA-256). Recitation audio streams only after the user presses play.
-6. **Money is not handled yet.** Fundraising, zakat and charity need verified
-   mosques and a payment provider; until then the UI only says "coming soon".
+6. **Money never passes through the platform.** Donations go straight to the
+   mosque: PayPal Checkout with the mosque's own verified PayPal account as the
+   payee, or a bank transfer to the mosque's verified IBAN (the mosque confirms
+   receipt). Only verified mosques with a verified payout method can publish a
+   campaign, and an admin approves each campaign. IBANs are encrypted at rest.
+   PayPal stays in sandbox until the owner sets live credentials.
 7. **Hasanat are encouragement, not a judgement.** Keep the wording humble
    ("Allah alone knows the true reward").
+8. **Markdown from managers** (pages, khutbahs, campaign stories) is rendered on
+   the server with `App\Support\Markdown::toHtml` and shown only through
+   `<MarkdownContent>`. No other `dangerouslySetInnerHTML`.
+9. **Religious texts on screens** (ayat, hadith, adhkar) come only from the
+   verified files in `resources/quran` and `resources/content`, or are typed by
+   the mosque itself. Never write them from memory.
 
 ## Working rules
 

@@ -11,8 +11,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /** A post on a mosque's page (news, event, announcement, janaza notice). */
-#[Fillable(['mosque_id', 'author_id', 'type', 'title', 'body', 'image_path', 'event_starts_at', 'pinned',
-    'published_at'])]
+#[Fillable(['mosque_id', 'author_id', 'category_id', 'type', 'title', 'slug', 'excerpt', 'body', 'image_path',
+    'video_url', 'attachment_path', 'attachment_name', 'event_starts_at', 'pinned', 'published_at'])]
 class MosquePost extends Model
 {
     /** @use HasFactory<MosquePostFactory> */
@@ -37,6 +37,11 @@ class MosquePost extends Model
     public function author(): BelongsTo
     {
         return $this->belongsTo(User::class, 'author_id');
+    }
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(MosquePostCategory::class, 'category_id');
     }
 
     public function comments(): HasMany

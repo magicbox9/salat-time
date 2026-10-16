@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 
 /**
@@ -21,13 +23,13 @@ use Illuminate\Support\Str;
  * @property float $latitude
  * @property float $longitude
  * @property string $timezone
- * @property \Illuminate\Support\Carbon|null $verified_at
+ * @property Carbon|null $verified_at
  */
 #[Fillable([
     'slug', 'name', 'address', 'postcode', 'city', 'country_code', 'territory', 'latitude', 'longitude',
     'timezone', 'association', 'website', 'phone', 'email', 'description', 'logo_path', 'cover_path',
     'source', 'mawaqit_slug', 'mawaqit_id', 'directory_id', 'osm_ref', 'jumua', 'jumua2', 'jumua3',
-    'jumua_as_dhuhr', 'verified_at',
+    'jumua_as_dhuhr', 'verified_at', 'tagline', 'accent_color', 'social_links',
 ])]
 class Mosque extends Model
 {
@@ -41,6 +43,7 @@ class Mosque extends Model
             'longitude' => 'float',
             'jumua_as_dhuhr' => 'boolean',
             'verified_at' => 'datetime',
+            'social_links' => 'array',
         ];
     }
 
@@ -80,6 +83,36 @@ class Mosque extends Model
     public function posts(): HasMany
     {
         return $this->hasMany(MosquePost::class);
+    }
+
+    public function postCategories(): HasMany
+    {
+        return $this->hasMany(MosquePostCategory::class)->orderBy('sort')->orderBy('name');
+    }
+
+    public function pages(): HasMany
+    {
+        return $this->hasMany(MosquePage::class);
+    }
+
+    public function displaySetting(): HasOne
+    {
+        return $this->hasOne(MosqueDisplaySetting::class);
+    }
+
+    public function displayMessages(): HasMany
+    {
+        return $this->hasMany(MosqueDisplayMessage::class);
+    }
+
+    public function payoutMethods(): HasMany
+    {
+        return $this->hasMany(MosquePayoutMethod::class);
+    }
+
+    public function campaigns(): HasMany
+    {
+        return $this->hasMany(Campaign::class);
     }
 
     public function isVerified(): bool
