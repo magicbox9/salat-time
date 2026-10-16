@@ -39,7 +39,7 @@ export default function MyMosques({ mosques }: { mosques: MosqueCard[] }) {
                 </div>
                 {mosques.length > 0 && (
                     <Button asChild variant="outline">
-                        <Link href="/">
+                        <Link href="/explore">
                             <Globe2 />
                             {t('discover.find_more')}
                         </Link>
@@ -59,7 +59,7 @@ export default function MyMosques({ mosques }: { mosques: MosqueCard[] }) {
                         {t('discover.mine_empty_text')}
                     </p>
                     <Button asChild className="mt-6">
-                        <Link href="/">
+                        <Link href="/explore">
                             <Globe2 />
                             {t('discover.mine_empty_action')}
                         </Link>

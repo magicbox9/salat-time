@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import {
     ArrowUpRight,
     BadgeCheck,
+    Clock,
     Home,
     MapPin,
     Navigation,
@@ -98,9 +99,21 @@ export function SavedMosqueCard({
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-                <Button asChild size="sm">
+                {mosque.is_primary && (
+                    <Button asChild size="sm">
+                        <Link href="/">
+                            <Clock />
+                            {t('discover.open_my_times')}
+                        </Link>
+                    </Button>
+                )}
+                <Button
+                    asChild
+                    size="sm"
+                    variant={mosque.is_primary ? 'outline' : 'default'}
+                >
                     <Link href={href}>
-                        {t('discover.open_page')}
+                        {t('discover.mosque_page')}
                         <ArrowUpRight className="rtl:-scale-x-100" />
                     </Link>
                 </Button>

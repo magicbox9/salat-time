@@ -30,7 +30,7 @@ class DiscoverPagesTest extends TestCase
                 ->where('primary', null));
     }
 
-    public function test_signed_in_visitors_get_their_mosques_and_their_own_mosque(): void
+    public function test_signed_in_visitors_get_their_mosques_and_their_own_mosque_on_the_globe(): void
     {
         $user = User::factory()->create();
         $own = Mosque::factory()->withCalendar()->create(['name' => 'Zawiya']);
@@ -38,8 +38,9 @@ class DiscoverPagesTest extends TestCase
         Mosque::factory()->create();
         $user->favoriteMosques()->attach([$own->id => ['is_primary' => true], $saved->id => ['is_primary' => false]]);
 
+        // "/" opens on the own mosque (the hub); the globe lives at /explore.
         $this->actingAs($user)
-            ->get(route('home'))
+            ->get(route('explore'))
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('home')

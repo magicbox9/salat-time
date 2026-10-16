@@ -61,9 +61,13 @@
     "primary_unset": "{name} is no longer marked as your mosque.",
     "bounds_too_large": "Zoom in a little to see every mosque in this area.",
     "mine_title": "My mosques",
-    "mine_intro": "The mosques you saved, with today's next prayer. Your own mosque comes first and opens on the globe when you return.",
+    "mine_intro": "The mosques you saved, with today's next prayer. Your own mosque comes first, and the home page opens on its prayer times.",
     "find_more": "Find more mosques",
     "mine_empty_title": "No saved mosques yet",
     "mine_empty_text": "Find a mosque on the globe, then tap the heart to keep it here — or choose it as your own mosque.",
-    "mine_empty_action": "Explore the globe"
+    "mine_empty_action": "Explore the globe",
+    "your_mosque": "Your mosque",
+    "open_my_times": "Open my prayer times",
+    "mosque_page": "Mosque page",
+    "is_my_mosque": "This is your mosque"
 }

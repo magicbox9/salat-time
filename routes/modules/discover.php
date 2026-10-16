@@ -1,8 +1,10 @@
 <?php
 
 /*
- * Discover: the landing globe, place search, nearby mosques, the map's
- * mosque dots, and each user's saved mosques ("my mosques").
+ * Discover + home: "/" (the visitor's own mosque — the hub — or the globe
+ * before one is chosen), "/explore" (always the globe), place search, nearby
+ * mosques, the map's mosque dots, each user's saved mosques ("my mosques"),
+ * "Make it my mosque" for everyone and the hub's display preferences.
  *
  * The JSON paths below (mosques/near.json …) have a single segment after
  * "mosques/", so they must be registered before any `mosques/{mosque}` page
@@ -18,9 +20,30 @@ use App\Http\Controllers\Discover\MosquesInBoundsController;
 use App\Http\Controllers\Discover\MyMosquesController;
 use App\Http\Controllers\Discover\NearbyMosquesController;
 use App\Http\Controllers\Discover\PrimaryMosqueController;
+use App\Http\Controllers\Hub\AdoptGuestMosque;
+use App\Http\Controllers\Hub\ChosenMosqueController;
+use App\Http\Controllers\Hub\HomePreferencesController;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', HomeController::class)->name('home');
+Route::get('/', [HomeController::class, 'home'])->name('home');
+Route::get('explore', [HomeController::class, 'explore'])->name('explore');
+
+// "Make it my mosque" (guests: an encrypted cookie; users: their primary saved mosque).
+Route::middleware('throttle:30,1,my-mosque:')->group(function () {
+    Route::post('my-mosque', [ChosenMosqueController::class, 'store'])->name('my-mosque.store');
+    Route::delete('my-mosque', [ChosenMosqueController::class, 'destroy'])->name('my-mosque.destroy');
+});
+
+Route::patch('me/preferences/home', HomePreferencesController::class)
+    ->middleware(['auth', 'throttle:60,1,home-preferences:'])
+    ->name('me.preferences.home');
+
+// A mosque chosen as a guest becomes the account's own mosque at sign-in.
+// (This module owns no service provider; ChosenMosque::for() also adopts
+// lazily, so cached routes lose nothing.)
+Event::listen(Login::class, AdoptGuestMosque::class);
 
 // Address lookups reach outside services: 30 per minute per visitor.
 Route::get('geocode.json', GeocodeController::class)

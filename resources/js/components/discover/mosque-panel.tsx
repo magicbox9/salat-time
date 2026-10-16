@@ -14,10 +14,12 @@ type Props = {
     mosque: MosquePin;
     welcome: boolean;
     favorite: boolean;
-    primary: boolean;
+    /** The visitor's own mosque (signed in: primary; guest: cookie). */
+    chosen: boolean;
     busy: boolean;
+    choosing: boolean;
     onToggleFavorite: () => void;
-    onTogglePrimary: () => void;
+    onChoose: () => void;
     onClose: () => void;
     className?: string;
 };
@@ -27,10 +29,11 @@ export function MosquePanel({
     mosque,
     welcome,
     favorite,
-    primary,
+    chosen,
     busy,
+    choosing,
     onToggleFavorite,
-    onTogglePrimary,
+    onChoose,
     onClose,
     className,
 }: Props) {
@@ -52,7 +55,7 @@ export function MosquePanel({
                 <div className="min-w-0 flex-1">
                     {welcome && (
                         <p className="mb-1 text-xs font-semibold tracking-wide text-gold uppercase">
-                            {t('discover.welcome_back')}
+                            {t('discover.your_mosque')}
                         </p>
                     )}
                     <h2
@@ -119,10 +122,11 @@ export function MosquePanel({
                 <MosqueActions
                     mosque={mosque}
                     favorite={favorite}
-                    primary={primary}
+                    chosen={chosen}
                     busy={busy}
+                    choosing={choosing}
                     onToggleFavorite={onToggleFavorite}
-                    onTogglePrimary={onTogglePrimary}
+                    onChoose={onChoose}
                 />
             </div>
         </section>

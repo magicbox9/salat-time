@@ -1,6 +1,7 @@
 import { Head, usePage } from '@inertiajs/react';
 import { ScanSearch } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { chooseMosque } from '@/components/discover/choose-mosque';
 import { GlobeMap } from '@/components/discover/globe/globe-map';
 import type { GlobeApi } from '@/components/discover/globe/globe-map';
 import { MobileSheet } from '@/components/discover/mobile-sheet';
@@ -31,9 +32,10 @@ type Props = {
 const WELCOME_DELAY_MS = 2200;
 
 /**
- * The landing page: a turning 3D globe on a night sky. Choosing a place (or
- * "use my location") flies the camera down and lists the mosques nearby;
- * choosing a mosque shows its published times for today.
+ * The globe ("/" before a mosque is chosen, and always "/explore"): a turning
+ * 3D globe on a night sky. Choosing a place (or "use my location") flies the
+ * camera down and lists the mosques nearby; choosing a mosque shows its
+ * published times for today, and "Make it my mosque" makes "/" open on them.
  */
 export default function Home({
     favorites: savedMosques,
@@ -83,6 +85,12 @@ export default function Home({
         return () => window.clearTimeout(timer);
     }, [primary]);
 
+    // "Make it my mosque" (guests too): then "/" opens on its prayer times.
+    const [choosing, setChoosing] = useState(false);
+    const choose = (pin: MosquePin) => chooseMosque(pin.slug, t, setChoosing);
+    const isPrimary = (id: number) =>
+        id === primary?.id || favorites.isPrimary(id);
+
     const findPin = (id: number): MosquePin | null =>
         [
             ...(discover.nearby?.mosques ?? []),
@@ -112,7 +120,7 @@ export default function Home({
             failed={discover.failed}
             selectedId={selected?.id ?? null}
             isFavorite={favorites.isFavorite}
-            isPrimary={favorites.isPrimary}
+            isPrimary={isPrimary}
             onOpen={open}
             onHover={setHighlight}
             onRetry={() => void discover.retry()}
@@ -127,10 +135,11 @@ export default function Home({
             mosque={selected}
             welcome={welcomeId === selected.id}
             favorite={favorites.isFavorite(selected.id)}
-            primary={favorites.isPrimary(selected.id)}
+            chosen={selected.id === primary?.id}
             busy={favorites.pending === selected.id}
+            choosing={choosing}
             onToggleFavorite={() => void favorites.toggleFavorite(selected)}
-            onTogglePrimary={() => void favorites.togglePrimary(selected)}
+            onChoose={() => choose(selected)}
             onClose={discover.close}
             className={
                 isMobile

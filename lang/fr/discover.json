@@ -61,9 +61,13 @@
     "primary_unset": "{name} n'est plus indiquée comme votre mosquée.",
     "bounds_too_large": "Zoomez un peu pour voir toutes les mosquées de cette zone.",
     "mine_title": "Mes mosquées",
-    "mine_intro": "Les mosquées que vous avez enregistrées, avec la prochaine prière du jour. Votre mosquée apparaît en premier et s'ouvre sur le globe à votre retour.",
+    "mine_intro": "Les mosquées que vous avez enregistrées, avec la prochaine prière du jour. Votre mosquée apparaît en premier, et l'accueil s'ouvre sur ses horaires de prière.",
     "find_more": "Trouver d'autres mosquées",
     "mine_empty_title": "Aucune mosquée enregistrée",
     "mine_empty_text": "Trouvez une mosquée sur le globe, puis touchez le cœur pour la garder ici — ou choisissez-la comme votre mosquée.",
-    "mine_empty_action": "Explorer le globe"
+    "mine_empty_action": "Explorer le globe",
+    "your_mosque": "Votre mosquée",
+    "open_my_times": "Voir mes horaires de prière",
+    "mosque_page": "Page de la mosquée",
+    "is_my_mosque": "C'est votre mosquée"
 }

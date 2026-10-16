@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { ArrowUpRight, Heart, Home, Navigation } from 'lucide-react';
+import { ArrowUpRight, Clock, Heart, Home, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -9,32 +9,60 @@ import type { MosquePin } from './types';
 type Props = {
     mosque: MosquePin;
     favorite: boolean;
-    primary: boolean;
+    /** Already the visitor's own mosque. */
+    chosen: boolean;
     busy: boolean;
+    choosing: boolean;
     onToggleFavorite: () => void;
-    onTogglePrimary: () => void;
+    onChoose: () => void;
 };
 
-/** Open the mosque's page, save it, make it "my mosque", get directions. */
+/**
+ * The main action, for everyone (guests too): "Make it my mosque", which
+ * opens its prayer times on "/". Then: its page, save it, directions.
+ */
 export function MosqueActions({
     mosque,
     favorite,
-    primary,
+    chosen,
     busy,
+    choosing,
     onToggleFavorite,
-    onTogglePrimary,
+    onChoose,
 }: Props) {
     const t = useT();
 
     return (
         <div className="space-y-2">
-            <Button asChild className="w-full">
-                <Link href={`/mosques/${encodeURIComponent(mosque.slug)}`}>
-                    {t('discover.open_page')}
-                    <ArrowUpRight className="rtl:-scale-x-100" />
-                </Link>
-            </Button>
+            {chosen ? (
+                <Button asChild className="w-full">
+                    <Link href="/">
+                        <Clock />
+                        {t('discover.open_my_times')}
+                    </Link>
+                </Button>
+            ) : (
+                <Button
+                    className="w-full"
+                    disabled={choosing}
+                    onClick={onChoose}
+                >
+                    <Home />
+                    {t('discover.make_my_mosque')}
+                </Button>
+            )}
             <div className="grid grid-cols-3 gap-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="h-auto flex-col gap-1 py-2 text-xs whitespace-normal"
+                >
+                    <Link href={`/mosques/${encodeURIComponent(mosque.slug)}`}>
+                        <ArrowUpRight className="size-4 rtl:-scale-x-100" />
+                        {t('discover.mosque_page')}
+                    </Link>
+                </Button>
                 <Button
                     variant="outline"
                     size="sm"
@@ -57,22 +85,6 @@ export function MosqueActions({
                 <Button
                     variant="outline"
                     size="sm"
-                    disabled={busy}
-                    aria-pressed={primary}
-                    onClick={onTogglePrimary}
-                    className={cn(
-                        'h-auto flex-col gap-1 py-2 text-xs',
-                        primary && 'border-gold/60',
-                    )}
-                >
-                    <Home className={cn('size-4', primary && 'text-gold')} />
-                    {primary
-                        ? t('discover.my_mosque')
-                        : t('discover.set_my_mosque')}
-                </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
                     asChild
                     className="h-auto flex-col gap-1 py-2 text-xs"
                 >
@@ -86,6 +98,12 @@ export function MosqueActions({
                     </a>
                 </Button>
             </div>
+            {chosen && (
+                <p className="flex items-center justify-center gap-1.5 pt-1 text-xs text-gold">
+                    <Home className="size-3.5" aria-hidden />
+                    {t('discover.is_my_mosque')}
+                </p>
+            )}
         </div>
     );
 }

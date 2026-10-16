@@ -36,9 +36,10 @@ export function withQuery(
 }
 
 async function request<T>(
-    method: 'GET' | 'POST' | 'DELETE',
+    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
     url: string,
     signal?: AbortSignal,
+    data?: Record<string, unknown>,
 ): Promise<T> {
     const headers: Record<string, string> = {
         Accept: 'application/json',
@@ -50,12 +51,20 @@ async function request<T>(
         headers['X-XSRF-TOKEN'] = token;
     }
 
-    const response = await fetch(url, {
+    const init: RequestInit = {
         method,
         headers,
         signal,
         credentials: 'same-origin',
-    });
+    };
+
+    // Writes may carry a JSON body (GET never does).
+    if (data && method !== 'GET') {
+        headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(data);
+    }
+
+    const response = await fetch(url, init);
     const body = (await response.json().catch(() => null)) as
         | (T & { message?: string; errors?: Record<string, string[]> })
         | null;
@@ -83,10 +92,11 @@ export function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
 }
 
 export function sendJson<T>(
-    method: 'POST' | 'DELETE',
+    method: 'POST' | 'PATCH' | 'DELETE',
     url: string,
+    data?: Record<string, unknown>,
 ): Promise<T> {
-    return request<T>(method, url);
+    return request<T>(method, url, undefined, data);
 }
 
 export function isAbort(error: unknown): boolean {
