@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>SalatTime</AssemblyName>
+    <RootNamespace>SalatTime</RootNamespace>
+    <Product>Salat Time</Product>
+    <Company>Salat Time</Company>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- NAudio talks to Windows audio through COM interfaces. -->
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Win32 interop is guarded with OperatingSystem.IsWindows(); the app
+         also runs on macOS/Linux for development and UI snapshots. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!-- WebView2 also ships WPF/WinForms wrappers we do not use. -->
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages);MSB3277</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\**" Exclude="Assets\Audio\**;Assets\AppIcon.ico" />
+    <!-- From the Mac app (copied into ./shared, see shared/README.md): icon and adhkar library. -->
+    <AvaloniaResource Include="..\..\shared\icon.png" Link="Assets\icon.png" />
+    <AvaloniaResource Include="..\..\shared\adhkar.json" Link="Assets\adhkar.json" />
+    <!-- Offline Qur'an: the hash-pinned assets in shared/QuranAssets, copied unchanged next
+         to the executable (verified against source-manifest.json at load and by build.sh). -->
+    <AvaloniaResource Include="..\..\shared\QuranAssets\Fonts\**\*.ttf" Link="Assets\QuranFonts\%(RecursiveDir)%(Filename)%(Extension)" />
+    <None Include="..\..\shared\QuranAssets\source-manifest.json" Link="Quran\source-manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\shared\QuranAssets\Hafs\hafsData_v2-0.json" Link="Quran\Hafs\hafsData_v2-0.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\shared\QuranAssets\Warsh\warshData_v2-1.json" Link="Quran\Warsh\warshData_v2-1.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\shared\QuranAssets\Translations\QuranEnc\*" Link="Quran\Translations\QuranEnc\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Recordings (fetched by build.sh) ship next to the executable, not embedded. -->
+    <None Include="Assets\Audio\**" CopyToOutputDirectory="PreserveNewest" Link="Audio\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Desktop" Version="11.3.22" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.22" />
+    <PackageReference Include="NAudio.Core" Version="2.4.0" />
+    <PackageReference Include="NAudio.Wasapi" Version="2.4.0" />
+    <PackageReference Include="NAudio.WinMM" Version="2.4.0" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.13" />
+  </ItemGroup>
+
+</Project>

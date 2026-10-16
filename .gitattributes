@@ -1,0 +1,5 @@
+# Files copied from the Mac app stay byte-for-byte identical (hash-pinned).
+shared/** -text
+*.mp3 binary
+*.ttf binary
+*.sqlite binary

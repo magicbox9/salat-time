@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="SalatTime.Views.PopupWindow"
+        Title="Salat Time"
+        Width="324"
+        SizeToContent="Height"
+        CanResize="False"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="Manual"
+        SystemDecorations="Full"
+        ExtendClientAreaToDecorationsHint="True"
+        ExtendClientAreaChromeHints="NoChrome"
+        ExtendClientAreaTitleBarHeightHint="0"
+        TransparencyLevelHint="AcrylicBlur, Mica, None"
+        Background="Transparent">
+  <Border x:Name="Surface" Background="{DynamicResource SurfaceBrush}" ClipToBounds="True">
+    <StackPanel>
+      <!-- Header: icon, mosque name and address, mosque finder -->
+      <Border x:Name="Header" Background="{DynamicResource HeaderDeepBrush}" MinHeight="76" Padding="14,12,8,12">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <Border Width="44" Height="44" CornerRadius="10" Background="#26FFFFFF" VerticalAlignment="Center">
+            <PathIcon Data="{StaticResource Icon.WeatherMoonFilled}" Width="24" Height="24" Foreground="White" />
+          </Border>
+          <StackPanel Grid.Column="1" Margin="12,0,6,0" VerticalAlignment="Center" Spacing="1">
+            <TextBlock x:Name="MosqueName" Foreground="White" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="MosqueAddress" Foreground="#D9FFFFFF" FontSize="11" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+          </StackPanel>
+          <Button x:Name="ChooseMosqueButton" Grid.Column="2" Classes="icon onHeader" Width="40" Height="40" VerticalAlignment="Center">
+            <PathIcon Data="{StaticResource Icon.LocationRegular}" Width="20" Height="20" />
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- Adhan playing: stop control (double-clicking the tray icon also stops it) -->
+      <Border x:Name="PlayingBanner" IsVisible="False" Margin="12,12,12,0" Padding="12,8,8,8" CornerRadius="8"
+              Background="{DynamicResource DangerSoftBrush}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <PathIcon Data="{StaticResource Icon.Speaker2Filled}" Foreground="{DynamicResource DangerBrush}" Width="18" Height="18" />
+          <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center">
+            <TextBlock x:Name="PlayingTitle" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource DangerBrush}" />
+            <TextBlock x:Name="PlayingHint" FontSize="11" Classes="secondary" TextWrapping="Wrap" />
+          </StackPanel>
+          <Button x:Name="StopButton" Grid.Column="2" Padding="12,5" CornerRadius="6" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource Icon.StopFilled}" Width="12" Height="12" />
+              <TextBlock x:Name="StopLabel" FontSize="12" />
+            </StackPanel>
+          </Button>
+        </Grid>
+      </Border>
+
+      <!-- Next prayer -->
+      <StackPanel Margin="16,14,16,10" HorizontalAlignment="Center" Spacing="0">
+        <TextBlock x:Name="NextLabel" Classes="overline" HorizontalAlignment="Center" />
+        <TextBlock x:Name="Countdown" Classes="accent digits" FontSize="38" FontWeight="Bold" HorizontalAlignment="Center"
+                   FlowDirection="LeftToRight" Margin="0,-2,0,-2" />
+        <TextBlock x:Name="NextAt" Classes="secondary" FontSize="12" HorizontalAlignment="Center" />
+        <Border x:Name="IqamaChip" IsVisible="False" Margin="0,8,0,0" Padding="10,3" CornerRadius="10" HorizontalAlignment="Center"
+                Background="{DynamicResource DangerSoftBrush}">
+          <TextBlock x:Name="IqamaChipText" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource DangerBrush}" />
+        </Border>
+      </StackPanel>
+
+      <Border Classes="divider" Margin="16,0" />
+
+      <!-- Column headers -->
+      <Grid x:Name="ColumnHeaders" Margin="14,10,14,2" ColumnDefinitions="*,66,34,54,34">
+        <TextBlock x:Name="ColPrayer" Classes="overline" Margin="8,0,0,0" />
+        <TextBlock x:Name="ColAdhan" Grid.Column="1" Classes="overline" />
+        <TextBlock x:Name="ColIqama" Grid.Column="3" Classes="overline" />
+      </Grid>
+
+      <!-- Five prayers (rows built in code) -->
+      <StackPanel x:Name="Rows" Margin="12,0,12,6" Spacing="2" />
+
+      <!-- Jumua, Shuruq, Hijri and Gregorian dates -->
+      <Border Classes="card" Margin="12,4,12,12" Padding="12,9">
+        <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto">
+          <TextBlock x:Name="Jumua" Classes="accent" FontWeight="SemiBold" FontSize="13" TextTrimming="CharacterEllipsis" />
+          <TextBlock x:Name="HijriDate" Grid.Column="1" FontSize="12" FontWeight="Medium" HorizontalAlignment="Right"
+                     TextTrimming="CharacterEllipsis" />
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="5" Margin="0,4,0,0">
+            <PathIcon Data="{StaticResource Icon.WeatherSunnyLowFilled}" Foreground="{DynamicResource AccentBrush}" Width="14" Height="14" />
+            <TextBlock x:Name="Shuruq" Classes="secondary" FontSize="12" FontWeight="Medium" />
+          </StackPanel>
+          <TextBlock x:Name="GregorianDate" Grid.Row="1" Grid.Column="1" Classes="secondary" FontSize="11.5" Margin="0,4,0,0"
+                     HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
+        </Grid>
+      </Border>
+
+      <Border Classes="divider" />
+
+      <!-- Destinations -->
+      <UniformGrid Columns="4" Margin="8,6,8,8">
+        <Button x:Name="OpenAppButton" Classes="icon" Height="38" HorizontalAlignment="Stretch" Margin="4,0">
+          <PathIcon Data="{StaticResource Icon.WindowRegular}" Width="18" Height="18" />
+        </Button>
+        <Button x:Name="QuranButton" Classes="icon" Height="38" HorizontalAlignment="Stretch" Margin="4,0">
+          <PathIcon Data="{StaticResource Icon.BookOpenRegular}" Width="18" Height="18" />
+        </Button>
+        <Button x:Name="AdhkarButton" Classes="icon" Height="38" HorizontalAlignment="Stretch" Margin="4,0">
+          <PathIcon Data="{StaticResource Icon.BookRegular}" Width="18" Height="18" />
+        </Button>
+        <Button x:Name="SettingsButton" Classes="icon" Height="38" HorizontalAlignment="Stretch" Margin="4,0">
+          <PathIcon Data="{StaticResource Icon.SettingsRegular}" Width="18" Height="18" />
+        </Button>
+      </UniformGrid>
+    </StackPanel>
+  </Border>
+</Window>

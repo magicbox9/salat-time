@@ -1,0 +1,8 @@
+# Build output
+bin/
+obj/
+dist/
+.cache/
+# Downloaded at build time (same policy as the Mac app): recordings and the Cairo face
+src/SalatTime/Assets/Audio/
+src/SalatTime/Assets/Fonts/Cairo-Variable.ttf
