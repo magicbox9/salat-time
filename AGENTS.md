@@ -49,8 +49,12 @@ Update.command    Double-clickable wrapper for update.sh (gitignored)
 
 ## 3. Local dev / deploy loop
 
-We develop in `/Volumes/01_HotStorage_1TB/01_Projects/Salat Time/Salat Time Source/` and deploy to the installed app at
+We develop in `/Volumes/01_HotStorage_1TB/01_Projects/Salat Time/mac_os/` and deploy to the installed app at
 `/Applications/Salat Time.app`.
+
+Each platform has its own folder and its own branch of this repository, with no
+shared code: `mac_os/` → `main` (this app), `windows/` → `windows-app`. Future
+platforms (android, ios, ipados) follow the same pattern.
 
 ```bash
 ./update.sh          # build + swap installed app + relaunch
