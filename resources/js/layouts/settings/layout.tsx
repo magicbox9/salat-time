@@ -4,6 +4,7 @@ import Heading from '@/components/heading';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { useCurrentUrl } from '@/hooks/use-current-url';
+import { useT } from '@/lib/i18n';
 import { cn, toUrl } from '@/lib/utils';
 import { edit as editAppearance } from '@/routes/appearance';
 import { edit } from '@/routes/profile';
@@ -12,17 +13,17 @@ import type { NavItem } from '@/types';
 
 const sidebarNavItems: NavItem[] = [
     {
-        title: 'Profile',
+        title: 'settings.nav_profile',
         href: edit(),
         icon: null,
     },
     {
-        title: 'Security',
+        title: 'settings.nav_security',
         href: editSecurity(),
         icon: null,
     },
     {
-        title: 'Appearance',
+        title: 'settings.nav_appearance',
         href: editAppearance(),
         icon: null,
     },
@@ -30,21 +31,31 @@ const sidebarNavItems: NavItem[] = [
 
 export default function SettingsLayout({ children }: PropsWithChildren) {
     const { isCurrentOrParentUrl } = useCurrentUrl();
+    const t = useT();
+    const navItems: NavItem[] = [
+        ...sidebarNavItems.map((item) => ({ ...item, title: t(item.title) })),
+        // Personal access tokens for the iOS / Android companion apps.
+        {
+            title: t('prayers.settings_nav'),
+            href: '/settings/api-tokens',
+            icon: null,
+        },
+    ];
 
     return (
         <div className="px-4 py-6">
             <Heading
-                title="Settings"
-                description="Manage your profile and account settings"
+                title={t('settings.nav_title')}
+                description={t('settings.nav_description')}
             />
 
-            <div className="flex flex-col lg:flex-row lg:space-x-12">
+            <div className="flex flex-col lg:flex-row lg:gap-12">
                 <aside className="w-full max-w-xl lg:w-48">
                     <nav
-                        className="flex flex-col space-y-1 space-x-0"
-                        aria-label="Settings"
+                        className="flex flex-col gap-1"
+                        aria-label={t('settings.nav_title')}
                     >
-                        {sidebarNavItems.map((item, index) => (
+                        {navItems.map((item, index) => (
                             <Button
                                 key={`${toUrl(item.href)}-${index}`}
                                 size="sm"
