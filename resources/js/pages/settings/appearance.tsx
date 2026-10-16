@@ -1,20 +1,23 @@
 import { Head } from '@inertiajs/react';
 import AppearanceTabs from '@/components/appearance-tabs';
 import Heading from '@/components/heading';
+import { useT } from '@/lib/i18n';
 import { edit as editAppearance } from '@/routes/appearance';
 
 export default function Appearance() {
+    const t = useT();
+
     return (
         <>
-            <Head title="Appearance settings" />
+            <Head title={t('settings.appearance_title')} />
 
-            <h1 className="sr-only">Appearance settings</h1>
+            <h1 className="sr-only">{t('settings.appearance_title')}</h1>
 
             <div className="space-y-6">
                 <Heading
                     variant="small"
-                    title="Appearance settings"
-                    description="Update the appearance settings for your account"
+                    title={t('settings.appearance_title')}
+                    description={t('settings.appearance_description')}
                 />
                 <AppearanceTabs />
             </div>
@@ -22,10 +25,11 @@ export default function Appearance() {
     );
 }
 
+// Breadcrumb titles are translation keys.
 Appearance.layout = {
     breadcrumbs: [
         {
-            title: 'Appearance settings',
+            title: 'settings.appearance_title',
             href: editAppearance(),
         },
     ],

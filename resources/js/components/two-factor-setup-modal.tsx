@@ -21,6 +21,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { useAppearance } from '@/hooks/use-appearance';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { OTP_MAX_LENGTH } from '@/hooks/use-two-factor-auth';
+import { useT } from '@/lib/i18n';
 import { confirm } from '@/routes/two-factor';
 
 function GridScanIcon() {
@@ -31,7 +32,7 @@ function GridScanIcon() {
                     {Array.from({ length: 5 }, (_, i) => (
                         <div
                             key={`col-${i + 1}`}
-                            className="border-r border-border last:border-r-0"
+                            className="border-e border-border last:border-e-0"
                         />
                     ))}
                 </div>
@@ -62,6 +63,7 @@ function TwoFactorSetupStep({
     onNextStep: () => void;
     errors: string[];
 }) {
+    const t = useT();
     const { resolvedAppearance } = useAppearance();
     const [copiedText, copy] = useClipboard();
     const IconComponent = copiedText === manualSetupKey ? Check : Copy;
@@ -95,7 +97,7 @@ function TwoFactorSetupStep({
                         </div>
                     </div>
 
-                    <div className="flex w-full space-x-5">
+                    <div className="flex w-full gap-5">
                         <Button className="w-full" onClick={onNextStep}>
                             {buttonText}
                         </Button>
@@ -104,11 +106,12 @@ function TwoFactorSetupStep({
                     <div className="relative flex w-full items-center justify-center">
                         <div className="absolute inset-0 top-1/2 h-px w-full bg-border" />
                         <span className="relative bg-card px-2 py-1">
-                            or, enter the code manually
+                            {t('settings.setup_manual')}
                         </span>
                     </div>
 
-                    <div className="flex w-full space-x-2">
+                    {/* The setup key reads left to right in every language. */}
+                    <div dir="ltr" className="flex w-full gap-2">
                         <div className="flex w-full items-stretch overflow-hidden rounded-xl border border-border">
                             {!manualSetupKey ? (
                                 <div className="flex h-full w-full items-center justify-center bg-muted p-3">
@@ -120,11 +123,17 @@ function TwoFactorSetupStep({
                                         type="text"
                                         readOnly
                                         value={manualSetupKey}
+                                        aria-label={t('settings.setup_manual')}
                                         className="h-full w-full bg-background p-3 text-foreground outline-none"
                                     />
                                     <button
+                                        type="button"
                                         onClick={() => copy(manualSetupKey)}
-                                        className="border-l border-border px-3 hover:bg-muted"
+                                        aria-label={t(
+                                            'settings.setup_copy_key',
+                                        )}
+                                        title={t('settings.setup_copy_key')}
+                                        className="border-s border-border px-3 hover:bg-muted"
                                     >
                                         <IconComponent className="w-4" />
                                     </button>
@@ -145,6 +154,7 @@ function TwoFactorVerificationStep({
     onClose: () => void;
     onBack: () => void;
 }) {
+    const t = useT();
     const [code, setCode] = useState<string>('');
     const pinInputContainerRef = useRef<HTMLDivElement>(null);
 
@@ -174,27 +184,30 @@ function TwoFactorVerificationStep({
                         className="relative w-full space-y-3"
                     >
                         <div className="flex w-full flex-col items-center space-y-3 py-2">
-                            <InputOTP
-                                id="otp"
-                                name="code"
-                                maxLength={OTP_MAX_LENGTH}
-                                onChange={setCode}
-                                disabled={processing}
-                                pattern={REGEXP_ONLY_DIGITS}
-                                autoFocus
-                            >
-                                <InputOTPGroup>
-                                    {Array.from(
-                                        { length: OTP_MAX_LENGTH },
-                                        (_, index) => (
-                                            <InputOTPSlot
-                                                key={index}
-                                                index={index}
-                                            />
-                                        ),
-                                    )}
-                                </InputOTPGroup>
-                            </InputOTP>
+                            {/* Codes read left to right in every language. */}
+                            <div dir="ltr">
+                                <InputOTP
+                                    id="otp"
+                                    name="code"
+                                    maxLength={OTP_MAX_LENGTH}
+                                    onChange={setCode}
+                                    disabled={processing}
+                                    pattern={REGEXP_ONLY_DIGITS}
+                                    autoFocus
+                                >
+                                    <InputOTPGroup>
+                                        {Array.from(
+                                            { length: OTP_MAX_LENGTH },
+                                            (_, index) => (
+                                                <InputOTPSlot
+                                                    key={index}
+                                                    index={index}
+                                                />
+                                            ),
+                                        )}
+                                    </InputOTPGroup>
+                                </InputOTP>
+                            </div>
                             <InputError
                                 message={
                                     errors?.confirmTwoFactorAuthentication?.code
@@ -202,7 +215,7 @@ function TwoFactorVerificationStep({
                             />
                         </div>
 
-                        <div className="flex w-full space-x-5">
+                        <div className="flex w-full gap-5">
                             <Button
                                 type="button"
                                 variant="outline"
@@ -210,7 +223,7 @@ function TwoFactorVerificationStep({
                                 onClick={onBack}
                                 disabled={processing}
                             >
-                                Back
+                                {t('settings.back')}
                             </Button>
                             <Button
                                 type="submit"
@@ -219,7 +232,7 @@ function TwoFactorVerificationStep({
                                     processing || code.length < OTP_MAX_LENGTH
                                 }
                             >
-                                Confirm
+                                {t('settings.confirm')}
                             </Button>
                         </div>
                     </div>
@@ -252,9 +265,11 @@ export default function TwoFactorSetupModal({
     fetchSetupData,
     errors,
 }: Props) {
+    const t = useT();
     const [showVerificationStep, setShowVerificationStep] =
         useState<boolean>(false);
 
+    // Translation keys, translated when rendered.
     const modalConfig = useMemo<{
         title: string;
         description: string;
@@ -262,27 +277,24 @@ export default function TwoFactorSetupModal({
     }>(() => {
         if (twoFactorEnabled) {
             return {
-                title: 'Two-factor authentication enabled',
-                description:
-                    'Two-factor authentication is now enabled. Scan the QR code or enter the setup key in your authenticator app.',
-                buttonText: 'Close',
+                title: 'settings.setup_enabled_title',
+                description: 'settings.setup_enabled_description',
+                buttonText: 'settings.close',
             };
         }
 
         if (showVerificationStep) {
             return {
-                title: 'Verify authentication code',
-                description:
-                    'Enter the 6-digit code from your authenticator app',
-                buttonText: 'Continue',
+                title: 'settings.setup_verify_title',
+                description: 'settings.setup_verify_description',
+                buttonText: 'settings.continue',
             };
         }
 
         return {
-            title: 'Enable two-factor authentication',
-            description:
-                'To finish enabling two-factor authentication, scan the QR code or enter the setup key in your authenticator app',
-            buttonText: 'Continue',
+            title: 'settings.setup_enable_title',
+            description: 'settings.setup_enable_description',
+            buttonText: 'settings.continue',
         };
     }, [twoFactorEnabled, showVerificationStep]);
 
@@ -327,9 +339,9 @@ export default function TwoFactorSetupModal({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader className="flex items-center justify-center">
                     <GridScanIcon />
-                    <DialogTitle>{modalConfig.title}</DialogTitle>
+                    <DialogTitle>{t(modalConfig.title)}</DialogTitle>
                     <DialogDescription className="text-center">
-                        {modalConfig.description}
+                        {t(modalConfig.description, { count: OTP_MAX_LENGTH })}
                     </DialogDescription>
                 </DialogHeader>
 
@@ -343,7 +355,7 @@ export default function TwoFactorSetupModal({
                         <TwoFactorSetupStep
                             qrCodeSvg={qrCodeSvg}
                             manualSetupKey={manualSetupKey}
-                            buttonText={modalConfig.buttonText}
+                            buttonText={t(modalConfig.buttonText)}
                             onNextStep={handleModalNextStep}
                             errors={errors}
                         />
