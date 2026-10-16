@@ -1,0 +1,9 @@
+{
+    "title": "Development: sign in as",
+    "admin": "Admin",
+    "admin_hint": "Platform administration",
+    "manager": "Mosque manager",
+    "manager_hint": "Manages El Houda",
+    "user": "Visitor",
+    "user_hint": "Own mosque: El Houda"
+}

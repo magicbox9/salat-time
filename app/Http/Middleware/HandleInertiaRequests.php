@@ -51,6 +51,10 @@ class HandleInertiaRequests extends Middleware
             'dir' => Ui::direction(app()->getLocale()),
             'locales' => Ui::LOCALES,
             'ui' => fn () => Ui::strings(app()->getLocale()),
+            // dev login: test accounts offered on the sign-in page (config/devlogin.php)
+            'devAccounts' => config('devlogin.enabled') && app()->isLocal() && ! $request->user()
+                ? array_keys(config('devlogin.accounts'))
+                : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];
     }
