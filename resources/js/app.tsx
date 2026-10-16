@@ -14,6 +14,8 @@ void createInertiaApp({
         switch (true) {
             // Full-screen pages render their own header (the globe).
             case name === 'home':
+            // The full-screen display (mosque TVs and personal screens).
+            case name === 'display/screen':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

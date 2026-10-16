@@ -53,5 +53,7 @@
     "dash_favorites": "Saved: {count}",
     "dash_claims_pending": "Pending: {count}",
     "dash_claims_none": "No request yet",
-    "close": "Close"
+    "close": "Close",
+    "nav_home": "Home",
+    "nav_campaigns": "Donate"
 }

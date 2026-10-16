@@ -53,5 +53,7 @@
     "dash_favorites": "Enregistrées : {count}",
     "dash_claims_pending": "En attente : {count}",
     "dash_claims_none": "Aucune demande pour l'instant",
-    "close": "Fermer"
+    "close": "Fermer",
+    "nav_home": "Accueil",
+    "nav_campaigns": "Dons"
 }

@@ -53,5 +53,7 @@
     "dash_favorites": "المساجد المحفوظة: {count}",
     "dash_claims_pending": "قيد المراجعة: {count}",
     "dash_claims_none": "لا توجد طلبات بعد",
-    "close": "إغلاق"
+    "close": "إغلاق",
+    "nav_home": "الرئيسية",
+    "nav_campaigns": "التبرعات"
 }
