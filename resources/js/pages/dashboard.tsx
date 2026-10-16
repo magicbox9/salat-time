@@ -1,36 +1,39 @@
-import { Head } from '@inertiajs/react';
-import { PlaceholderPattern } from '@/components/ui/placeholder-pattern';
-import { dashboard } from '@/routes';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { Building2, HandHeart, Heart, ShieldCheck } from 'lucide-react';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useT } from '@/lib/i18n';
 
+/** "My space": the signed-in visitor's hub. */
 export default function Dashboard() {
+    const t = useT();
+    const { auth } = usePage().props;
+    const tiles = [
+        { href: '/me/mosques', title: t('site.nav_favorites'), icon: Heart },
+        { href: '/prayers', title: t('site.nav_prayers'), icon: HandHeart },
+        ...(auth.managedMosques.length > 0
+            ? [{ href: '/manage', title: t('site.nav_manage'), icon: Building2 }]
+            : []),
+        ...(auth.isAdmin ? [{ href: '/admin', title: t('site.nav_admin'), icon: ShieldCheck }] : []),
+    ];
+
     return (
         <>
-            <Head title="Dashboard" />
-            <div className="flex h-full flex-1 flex-col gap-4 overflow-x-auto rounded-xl p-4">
-                <div className="grid auto-rows-min gap-4 md:grid-cols-3">
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                    <div className="relative aspect-video overflow-hidden rounded-xl border border-sidebar-border/70 dark:border-sidebar-border">
-                        <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                    </div>
-                </div>
-                <div className="relative min-h-[100vh] flex-1 overflow-hidden rounded-xl border border-sidebar-border/70 md:min-h-min dark:border-sidebar-border">
-                    <PlaceholderPattern className="absolute inset-0 size-full stroke-neutral-900/20 dark:stroke-neutral-100/20" />
-                </div>
+            <Head title={t('site.dashboard_title')} />
+            <h1 className="text-2xl font-semibold">{t('site.dashboard_title')}</h1>
+            <p className="mt-1 text-muted-foreground">{t('site.dashboard_intro')}</p>
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {tiles.map((tile) => (
+                    <Link key={tile.href} href={tile.href}>
+                        <Card className="h-full transition-colors hover:border-primary/50">
+                            <CardHeader>
+                                <tile.icon className="size-6 text-primary" />
+                                <CardTitle>{tile.title}</CardTitle>
+                                <CardDescription>{tile.href}</CardDescription>
+                            </CardHeader>
+                        </Card>
+                    </Link>
+                ))}
             </div>
         </>
     );
 }
-
-Dashboard.layout = {
-    breadcrumbs: [
-        {
-            title: 'Dashboard',
-            href: dashboard(),
-        },
-    ],
-};

@@ -25,6 +25,8 @@ export default function Profile(
     },
 ) {
     const { auth } = usePage<PageProps>().props;
+    // Settings pages are behind the auth middleware.
+    const user = auth.user!;
 
     return (
         <>
@@ -54,7 +56,7 @@ export default function Profile(
                                 <Input
                                     id="name"
                                     className="mt-1 block w-full"
-                                    defaultValue={auth.user.name}
+                                    defaultValue={user.name}
                                     name="name"
                                     required
                                     autoComplete="name"
@@ -74,7 +76,7 @@ export default function Profile(
                                     id="email"
                                     type="email"
                                     className="mt-1 block w-full"
-                                    defaultValue={auth.user.email}
+                                    defaultValue={user.email}
                                     name="email"
                                     required
                                     autoComplete="username"
@@ -88,7 +90,7 @@ export default function Profile(
                             </div>
 
                             {mustVerifyEmail &&
-                                auth.user.email_verified_at === null && (
+                                user.email_verified_at === null && (
                                     <div>
                                         <p className="-mt-4 text-sm text-muted-foreground">
                                             Your email address is unverified.{' '}

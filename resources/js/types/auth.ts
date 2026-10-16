@@ -11,7 +11,9 @@ export type User = {
 };
 
 export type Auth = {
-    user: User;
+    user: User | null;
+    isAdmin: boolean;
+    managedMosques: { slug: string; name: string }[];
 };
 
 export type Passkey = {
