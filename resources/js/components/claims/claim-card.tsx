@@ -5,6 +5,7 @@ import { useT } from '@/lib/i18n';
 import { ClaimStatusBadge } from './claim-status-badge';
 import type { ClaimantClaim } from './types';
 import { useFormatDate } from './use-format-date';
+import { WithdrawClaim } from './withdraw-claim';
 
 /** One of the signed-in user's requests (/me/claims). */
 export function ClaimCard({ claim }: { claim: ClaimantClaim }) {
@@ -95,6 +96,12 @@ export function ClaimCard({ claim }: { claim: ClaimantClaim }) {
                             {t('claims.send_again')}
                         </Link>
                     </Button>
+                )}
+                {claim.status === 'pending' && (
+                    <WithdrawClaim
+                        claimId={claim.id}
+                        mosqueName={mosque?.name ?? ''}
+                    />
                 )}
                 {claim.document_url && (
                     <Button asChild size="sm" variant="ghost">

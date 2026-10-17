@@ -78,5 +78,10 @@
     "mail_rejected_subject": "About your request for {mosque}",
     "mail_rejected_line": "After review, we could not approve your request to manage the page of {mosque}.",
     "mail_rejected_next": "You are welcome to send a new request with more details or a supporting document.",
-    "mail_rejected_action": "See my requests"
+    "mail_rejected_action": "See my requests",
+    "withdraw": "Withdraw request",
+    "withdraw_title": "Withdraw your request?",
+    "withdraw_text": "Your request to manage {mosque} and its supporting document will be deleted. You can send a new request later.",
+    "withdraw_keep": "Keep it",
+    "withdrawn": "Your request for {mosque} was withdrawn."
 }

@@ -27,6 +27,8 @@ class AdminServiceProvider extends ServiceProvider
 
         // A claim's document is private: only platform admins and the person who sent it.
         Gate::define('view-claim-document', fn (User $user, MosqueClaim $claim): bool => $user->is_admin === true || $claim->user_id === $user->id);
+        // Only the claimant, and only while the request waits for review.
+        Gate::define('withdraw-claim', fn (User $user, MosqueClaim $claim): bool => $claim->user_id === $user->id && $claim->status === MosqueClaim::PENDING);
 
         $key = fn (Request $request): string => (string) ($request->user()?->getAuthIdentifier() ?? $request->ip());
 

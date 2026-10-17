@@ -78,5 +78,10 @@
     "mail_rejected_subject": "Votre demande pour {mosque}",
     "mail_rejected_line": "Après examen, nous n'avons pas pu accepter votre demande de gestion de la page de {mosque}.",
     "mail_rejected_next": "Vous pouvez envoyer une nouvelle demande avec plus de détails ou un justificatif.",
-    "mail_rejected_action": "Voir mes demandes"
+    "mail_rejected_action": "Voir mes demandes",
+    "withdraw": "Retirer la demande",
+    "withdraw_title": "Retirer votre demande ?",
+    "withdraw_text": "Votre demande pour gérer {mosque} et son justificatif seront supprimés. Vous pourrez envoyer une nouvelle demande plus tard.",
+    "withdraw_keep": "La garder",
+    "withdrawn": "Votre demande pour {mosque} a été retirée."
 }

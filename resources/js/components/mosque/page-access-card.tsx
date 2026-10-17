@@ -43,9 +43,16 @@ export function PageAccessCard({
                 {t('mosque.team_body')}
             </p>
             {viewer.pending_claim ? (
-                <p className="mt-4 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-sm">
+                <p className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-muted px-3 py-2 text-sm">
                     <Hourglass className="size-4 text-gold" />
                     {t('mosque.claim_pending')}
+                    {/* Where the request can be followed or withdrawn. */}
+                    <Link
+                        href="/me/claims"
+                        className="font-medium text-primary hover:underline"
+                    >
+                        {t('claims.mine_title')}
+                    </Link>
                 </p>
             ) : (
                 <Button asChild variant="outline" className="mt-4 w-full">

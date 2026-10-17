@@ -78,5 +78,10 @@
     "mail_rejected_subject": "بخصوص طلبك لـ {mosque}",
     "mail_rejected_line": "بعد المراجعة، لم نتمكن من قبول طلبك لإدارة صفحة {mosque}.",
     "mail_rejected_next": "يسعدنا أن ترسل طلبًا جديدًا بتفاصيل أكثر أو مع وثيقة داعمة.",
-    "mail_rejected_action": "عرض طلباتي"
+    "mail_rejected_action": "عرض طلباتي",
+    "withdraw": "سحب الطلب",
+    "withdraw_title": "هل تريد سحب طلبك؟",
+    "withdraw_text": "سيُحذف طلبك لإدارة صفحة «{mosque}» والوثيقة المرفقة به. يمكنك إرسال طلب جديد لاحقًا.",
+    "withdraw_keep": "الإبقاء عليه",
+    "withdrawn": "تم سحب طلبك بشأن «{mosque}»."
 }
