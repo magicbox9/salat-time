@@ -87,6 +87,11 @@ export default defineConfig({
             'composer.json',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
+            // Verified sources pinned by SHA-256: never reformat a byte.
+            'resources/quran/**',
+            'resources/content/**',
+            'resources/prayer-method/**',
+            'tests/Fixtures/**',
         ],
         sortTailwindcss: {
             functions: ['clsx', 'cn', 'cva'],

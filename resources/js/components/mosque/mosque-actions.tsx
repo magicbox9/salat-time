@@ -143,12 +143,12 @@ export function MosqueActions({ mosque, viewer, shareUrl }: Props) {
                     }
 
                     if (state.primary) {
-                        send('DELETE', 'primary', {
+                        void send('DELETE', 'primary', {
                             favorite: true,
                             primary: false,
                         });
                     } else {
-                        send('POST', 'primary', {
+                        void send('POST', 'primary', {
                             favorite: true,
                             primary: true,
                         });
