@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useT } from '@/lib/i18n';
+import { useSignInUrl } from '@/lib/sign-in';
 import { api, errorMessage } from './api';
 import { CommentForm } from './comment-form';
 import { CommentItem } from './comment-item';
@@ -20,6 +21,7 @@ type Props = {
 /** Comments under a post, loaded when the visitor opens them. */
 export function PostComments({ slug, postId, initialCount, viewer }: Props) {
     const t = useT();
+    const signIn = useSignInUrl();
     const base = `/mosques/${slug}/posts/${postId}/comments`;
     const [open, setOpen] = useState(false);
     const [count, setCount] = useState(initialCount);
@@ -155,7 +157,7 @@ export function PostComments({ slug, postId, initialCount, viewer }: Props) {
                                 </Link>
                             ) : (
                                 <Link
-                                    href="/login"
+                                    href={signIn}
                                     className="font-medium text-primary hover:underline"
                                 >
                                     {t('mosque.login_to_comment')}

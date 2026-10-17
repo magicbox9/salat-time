@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { BookMarked, BookOpen, LogIn, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
+import { useSignInUrl } from '@/lib/sign-in';
 import { surahName } from './types';
 import type { IndexBookmark, SurahMeta } from './types';
 
@@ -117,12 +118,13 @@ export function BookmarkList({ bookmarks }: { bookmarks: IndexBookmark[] }) {
 /** Shown to visitors instead of their bookmarks. */
 export function BookmarksLoginHint() {
     const t = useT();
+    const signIn = useSignInUrl();
 
     return (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
             <span>{t('quran.bookmarks_login')}</span>
             <Button asChild variant="outline" size="sm">
-                <Link href="/login">
+                <Link href={signIn}>
                     <LogIn />
                     {t('site.log_in')}
                 </Link>

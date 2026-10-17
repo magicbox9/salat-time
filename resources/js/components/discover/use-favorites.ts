@@ -2,13 +2,15 @@ import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
+import { useSignInUrl } from '@/lib/sign-in';
 import { RequestError, sendJson } from './api';
 import type { FavoriteState, MosquePin } from './types';
 
-/** The visitor's saved mosques on the globe, changed in place (guests are sent to log in). */
+/** The visitor's saved mosques on the globe, changed in place (guests sign in, then come back). */
 export function useFavorites(initial: MosquePin[]) {
     const { auth } = usePage().props;
     const t = useT();
+    const signIn = useSignInUrl();
     const [favorites, setFavorites] = useState<MosquePin[]>(initial);
     const [pending, setPending] = useState<number | null>(null);
 
@@ -22,7 +24,7 @@ export function useFavorites(initial: MosquePin[]) {
         path: 'favorite' | 'primary',
     ) => {
         if (!auth.user) {
-            router.visit('/login');
+            router.visit(signIn);
 
             return;
         }
@@ -39,7 +41,7 @@ export function useFavorites(initial: MosquePin[]) {
         } catch (error) {
             // Signed out meanwhile (session expired, other tab): sign in again.
             if (error instanceof RequestError && error.status === 401) {
-                router.visit('/login');
+                router.visit(signIn);
 
                 return;
             }

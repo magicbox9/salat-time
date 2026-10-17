@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import { HandHeart, LogIn, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
+import { useSignInUrl } from '@/lib/sign-in';
 
 /**
  * In place of the tracker check-in: guests are invited to an account (their
@@ -9,6 +10,7 @@ import { useT } from '@/lib/i18n';
  * tracker is not open yet get a link to it.
  */
 export function AccountCard({ guest }: { guest: boolean }) {
+    const signIn = useSignInUrl();
     const t = useT();
 
     return (
@@ -36,7 +38,7 @@ export function AccountCard({ guest }: { guest: boolean }) {
                             </Link>
                         </Button>
                         <Button asChild size="sm" variant="outline">
-                            <Link href="/login">
+                            <Link href={signIn}>
                                 <LogIn />
                                 {t('site.log_in')}
                             </Link>

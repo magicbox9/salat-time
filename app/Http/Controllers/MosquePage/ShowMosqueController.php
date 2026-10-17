@@ -9,6 +9,7 @@ use App\Http\Controllers\MosquePage\Support\MosqueSite;
 use App\Http\Controllers\MosquePage\Support\PostPresenter;
 use App\Models\Mosque;
 use App\Services\PrayerTimes\MosqueTimetable;
+use App\Support\ChosenMosque;
 use App\Support\MosquePresenter;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -46,7 +47,7 @@ class ShowMosqueController extends Controller
             // Calculated (or missing) times: point to the nearest mosques that publish their own.
             'nearbyWithTimes' => fn () => ($getLive()['today']['source'] ?? null) !== MosqueTimetable::SOURCE_PUBLISHED
                 ? $this->nearbyWithTimes($mosque) : [],
-            'viewer' => fn () => MosqueProfile::viewer($user, $mosque, $canManage),
+            'viewer' => fn () => MosqueProfile::viewer($user, $mosque, $canManage, ! $user && ChosenMosque::for($request)?->is($mosque)),
             'pinned' => fn () => HomeSections::pinned($mosque),
             'latest' => fn () => HomeSections::latestByCategory($mosque),
             'events' => fn () => HomeSections::upcomingEvents($mosque),

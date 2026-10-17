@@ -12,6 +12,7 @@ use App\Http\Controllers\MosquePage\Support\Slugs;
 use App\Models\Mosque;
 use App\Models\MosquePost;
 use App\Models\MosquePostCategory;
+use App\Support\ChosenMosque;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
@@ -97,7 +98,7 @@ class BlogController extends Controller
             'site' => fn () => MosqueSite::shell($mosque),
             'post' => ArticlePresenter::article($post, $mosque),
             'neighbours' => fn () => ArticlePresenter::neighbours($post, $mosque),
-            'viewer' => fn () => MosqueProfile::viewer($user, $mosque, $canManage),
+            'viewer' => fn () => MosqueProfile::viewer($user, $mosque, $canManage, ! $user && ChosenMosque::for($request)?->is($mosque)),
             'shareUrl' => $url,
             'meta' => MosqueSite::meta(
                 $post->title.' · '.$mosque->name,

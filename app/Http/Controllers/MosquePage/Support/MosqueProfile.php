@@ -30,8 +30,11 @@ class MosqueProfile
         ];
     }
 
-    /** @return array<string, bool> */
-    public static function viewer(?User $user, Mosque $mosque, bool $canManage): array
+    /**
+     * @param  bool  $guestChoice  a guest chose this mosque as their own (cookie)
+     * @return array<string, bool>
+     */
+    public static function viewer(?User $user, Mosque $mosque, bool $canManage, bool $guestChoice = false): array
     {
         $favorite = $user ? DB::table('favorite_mosques')
             ->where('user_id', $user->id)
@@ -42,7 +45,7 @@ class MosqueProfile
             'signed_in' => $user !== null,
             'verified' => $user?->hasVerifiedEmail() ?? false,
             'favorite' => $favorite !== null,
-            'primary' => (bool) ($favorite->is_primary ?? false),
+            'primary' => $user ? (bool) ($favorite->is_primary ?? false) : $guestChoice,
             'can_manage' => $canManage,
             'pending_claim' => $user !== null && ! $canManage && $mosque->claims()
                 ->where('user_id', $user->id)

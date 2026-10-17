@@ -25,6 +25,7 @@ import type {
 import { useReaderNavigation } from '@/components/quran/use-reader-navigation';
 import { useRecitation } from '@/components/quran/use-recitation';
 import { useT } from '@/lib/i18n';
+import { useSignInUrl } from '@/lib/sign-in';
 import { cn } from '@/lib/utils';
 
 type Props = {
@@ -66,6 +67,7 @@ export default function QuranShow({
 }: Props) {
     const t = useT();
     const { auth, dir, locale } = usePage().props;
+    const signIn = useSignInUrl();
     const recitation = useRecitation({
         surah: surah.number,
         ayahCount: surah.ayah_count,
@@ -112,7 +114,7 @@ export default function QuranShow({
             toast.info(t('quran.bookmark_login'), {
                 action: {
                     label: t('site.log_in'),
-                    onClick: () => router.visit('/login'),
+                    onClick: () => router.visit(signIn),
                 },
             });
 

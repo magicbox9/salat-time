@@ -49,13 +49,7 @@ export function PageAccessCard({
                 </p>
             ) : (
                 <Button asChild variant="outline" className="mt-4 w-full">
-                    <Link
-                        href={
-                            viewer.signed_in
-                                ? `/mosques/${mosque.slug}/claim`
-                                : '/login'
-                        }
-                    >
+                    <Link href={`/mosques/${mosque.slug}/claim`}>
                         {viewer.signed_in
                             ? t('mosque.request_manage')
                             : t('mosque.login_to_request')}

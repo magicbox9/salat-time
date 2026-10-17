@@ -2,9 +2,11 @@ import { router } from '@inertiajs/react';
 import { Heart, Home, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { chooseMosque } from '@/components/discover/choose-mosque';
 import { Button } from '@/components/ui/button';
 import { useClipboard } from '@/hooks/use-clipboard';
 import { useT } from '@/lib/i18n';
+import { useSignInUrl } from '@/lib/sign-in';
 import { cn } from '@/lib/utils';
 import { api, errorMessage } from './api';
 import type { MosqueDetails, MosqueViewer } from './types';
@@ -22,9 +24,14 @@ type Props = {
     shareUrl: string;
 };
 
-/** Save the mosque, make it "my mosque", share the page. */
+/**
+ * Save the mosque, make it "my mosque", share the page. Saving needs an
+ * account (a guest signs in and comes back here); "my mosque" works for
+ * guests too, kept in a cookie like on the globe.
+ */
 export function MosqueActions({ mosque, viewer, shareUrl }: Props) {
     const t = useT();
+    const signIn = useSignInUrl();
     const [, copy] = useClipboard();
     const [busy, setBusy] = useState(false);
     const [state, setState] = useState({
@@ -44,7 +51,7 @@ export function MosqueActions({ mosque, viewer, shareUrl }: Props) {
         next: typeof state,
     ) => {
         if (!viewer.signed_in) {
-            router.visit('/login');
+            router.visit(signIn);
 
             return;
         }
@@ -123,17 +130,30 @@ export function MosqueActions({ mosque, viewer, shareUrl }: Props) {
                 aria-pressed={state.primary}
                 title={state.primary ? t('mosque.unset_my_mosque') : undefined}
                 className={cn(state.primary && 'border-gold/60 bg-gold/10')}
-                onClick={() =>
-                    state.primary
-                        ? send('DELETE', 'primary', {
-                              favorite: true,
-                              primary: false,
-                          })
-                        : send('POST', 'primary', {
-                              favorite: true,
-                              primary: true,
-                          })
-                }
+                onClick={() => {
+                    if (!viewer.signed_in) {
+                        // Guests: the "my mosque" cookie; "/" then opens on its times.
+                        if (state.primary) {
+                            router.delete('/my-mosque');
+                        } else {
+                            chooseMosque(mosque.slug, t, setBusy);
+                        }
+
+                        return;
+                    }
+
+                    if (state.primary) {
+                        send('DELETE', 'primary', {
+                            favorite: true,
+                            primary: false,
+                        });
+                    } else {
+                        send('POST', 'primary', {
+                            favorite: true,
+                            primary: true,
+                        });
+                    }
+                }}
             >
                 <Home className={cn('size-4', state.primary && 'text-gold')} />
                 {state.primary
