@@ -44,7 +44,7 @@ class HubPreferences
             'compact' => ['sometimes', 'boolean:strict'],
             'adhan' => ['sometimes', 'string', Rule::in(self::ADHAN_MODES)],
             // An id from GET /adhan/catalog.json (checked again when played).
-            'adhan_id' => ['sometimes', 'nullable', 'string', 'max:64', 'regex:/^[A-Za-z0-9_.:-]+$/'],
+            'adhan_id' => ['sometimes', 'nullable', 'string', 'max:128', 'regex:/^[A-Za-z0-9_.:-]+$/'],
             'muted' => ['sometimes', 'boolean:strict'],
         ];
     }
@@ -75,7 +75,7 @@ class HubPreferences
                 'style' => in_array($value, self::STYLES, true),
                 'clock' => in_array($value, self::CLOCKS, true),
                 'adhan' => in_array($value, self::ADHAN_MODES, true),
-                'adhan_id' => $value === null || (is_string($value) && preg_match('/^[A-Za-z0-9_.:-]{1,64}$/', $value) === 1),
+                'adhan_id' => $value === null || (is_string($value) && preg_match('/^[A-Za-z0-9_.:-]{1,128}$/', $value) === 1),
                 'show_iqama', 'show_seconds', 'show_hijri', 'compact', 'muted' => is_bool($value),
                 default => false,
             };

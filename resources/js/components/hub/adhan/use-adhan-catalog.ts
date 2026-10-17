@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { getJson, isAbort } from '@/components/discover/api';
+import { getJson, isAbort, withQuery } from '@/components/discover/api';
 import type { AdhanTrack } from '../types';
 
 /** Same pattern as App\Http\Controllers\Hub\Support\HubPreferences (adhan_id). */
-const SAVABLE_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
+const SAVABLE_ID = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 /** Only playable http(s) or same-origin URLs are kept. */
 function playable(url: unknown): url is string {
@@ -21,11 +21,15 @@ function playable(url: unknown): url is string {
 }
 
 /**
- * The adhan recordings offered by GET /adhan/catalog.json. A missing
- * endpoint, an error or an empty list all mean "no recording": the hub then
- * offers the visual adhan only.
+ * The adhan recordings offered by GET /adhan/catalog.json (with the
+ * mosque's own recording, when it uploaded one). A missing endpoint, an
+ * error or an empty list all mean "no recording": the hub then offers the
+ * visual adhan only.
  */
-export function useAdhanCatalog(): { tracks: AdhanTrack[]; loaded: boolean } {
+export function useAdhanCatalog(mosqueSlug: string): {
+    tracks: AdhanTrack[];
+    loaded: boolean;
+} {
     const [state, setState] = useState<{
         tracks: AdhanTrack[];
         loaded: boolean;
@@ -37,7 +41,10 @@ export function useAdhanCatalog(): { tracks: AdhanTrack[]; loaded: boolean } {
     useEffect(() => {
         const controller = new AbortController();
 
-        getJson<{ adhans?: unknown }>('/adhan/catalog.json', controller.signal)
+        getJson<{ adhans?: unknown }>(
+            withQuery('/adhan/catalog.json', { mosque: mosqueSlug }),
+            controller.signal,
+        )
             .then((body) => {
                 const list: unknown[] = Array.isArray(body?.adhans)
                     ? body.adhans
@@ -72,7 +79,7 @@ export function useAdhanCatalog(): { tracks: AdhanTrack[]; loaded: boolean } {
             });
 
         return () => controller.abort();
-    }, []);
+    }, [mosqueSlug]);
 
     return state;
 }

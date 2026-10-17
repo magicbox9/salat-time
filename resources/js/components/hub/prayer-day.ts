@@ -1,6 +1,7 @@
 import { dateInZone } from '@/components/discover/format';
-import { dayMinutes, minutesInZone, toMinutes } from '@/lib/prayer-time';
-import type { DayTimes } from '@/types/mosque';
+import { minutesInZone, toMinutes } from '@/lib/prayer-time';
+import type { DayTimes, PrayerName } from '@/types/mosque';
+import { PRAYERS } from '@/types/mosque';
 
 /**
  * How long after an Isha published past midnight ("00:02") the evening's
@@ -19,6 +20,28 @@ export type PrayerDay = {
      */
     offset: number;
 };
+
+/**
+ * A day's published times as minutes after its midnight, each on its own
+ * clock: only an Isha earlier than both Maghrib and Fajr is the same
+ * night's, after midnight (+1440), as on the server (HubPage). Imported
+ * calendars hold rows out of order (a Fajr fixed at "07:00" after a "05:47"
+ * sunrise, a mistyped Isha); a running "earlier than the one before means
+ * tomorrow" rule would push the rest of such a day to the next one.
+ */
+export function hubDayMinutes(day: DayTimes): Record<PrayerName, number> {
+    const out = {} as Record<PrayerName, number>;
+
+    for (const prayer of PRAYERS) {
+        out[prayer] = toMinutes(day.times[prayer]);
+    }
+
+    if (out.isha < out.maghrib && out.isha < out.fajr) {
+        out.isha += 1440;
+    }
+
+    return out;
+}
 
 /** "2026-06-20" → "2026-06-21". */
 function dayAfter(iso: string): string {
@@ -49,11 +72,10 @@ export function iqamaMinutes(iqama: string, adhan: number): number | null {
  * before keeps the night, or null when its Isha is not after midnight.
  */
 function nightEnd(evening: DayTimes, morning: DayTimes): number | null {
-    const minutes = dayMinutes(evening);
-    const ishaClock = toMinutes(evening.times.isha);
+    const minutes = hubDayMinutes(evening);
 
     // An Isha past Fajr on the clock ("09:45") is a typo, never a night prayer.
-    if (minutes.isha < 1440 || ishaClock >= toMinutes(evening.times.fajr)) {
+    if (minutes.isha < 1440) {
         return null;
     }
 

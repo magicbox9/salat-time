@@ -98,8 +98,8 @@ class HubPage
                     'published_at' => $publishedAt instanceof CarbonInterface ? $publishedAt->toIso8601String() : null,
                     'category' => $category instanceof MosquePostCategory ? $category->name : null,
                     'url' => $post->slug
-                        ? '/mosques/'.$mosque->slug.'/blog/'.$post->slug
-                        : '/mosques/'.$mosque->slug,
+                        ? '/mosques/'.rawurlencode($mosque->slug).'/blog/'.rawurlencode($post->slug)
+                        : '/mosques/'.rawurlencode($mosque->slug),
                 ];
             })
             ->values()
@@ -110,17 +110,20 @@ class HubPage
      * Today and tomorrow (MosqueTimetable::live), plus the evening before
      * while it still holds the night: summer timetables publish Isha after
      * midnight ("00:02"), and that Isha belongs to the previous day's
-     * prayers. The page keeps that night until its Isha is over.
+     * prayers. The page keeps that night until its Isha is over. A day whose
+     * six times are not all clock times counts as unpublished (PublishedDay).
      *
      * @return array<string, mixed>
      */
     private function live(Mosque $mosque): array
     {
         $live = $this->timetable->live($mosque);
+        $live['today'] = PublishedDay::clean($live['today']);
+        $live['tomorrow'] = PublishedDay::clean($live['tomorrow']);
         $live['yesterday'] = null;
 
         if ($live['today'] !== null) {
-            $before = $this->timetable->day($mosque, CarbonImmutable::parse($live['now'])->setTimezone($mosque->timezone)->subDay());
+            $before = PublishedDay::clean($this->timetable->day($mosque, CarbonImmutable::parse($live['now'])->setTimezone($mosque->timezone)->subDay()));
             if ($before !== null && self::ishaAfterMidnight($before['times'])) {
                 $live['yesterday'] = $before;
             }

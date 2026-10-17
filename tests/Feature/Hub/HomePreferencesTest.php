@@ -76,10 +76,22 @@ class HomePreferencesTest extends TestCase
             ->assertJsonValidationErrors(['style', 'clock', 'adhan', 'show_iqama', 'compact', 'adhan_id', 'muted']);
 
         $this->actingAs($user)
-            ->patchJson(route('me.preferences.home'), ['adhan_id' => str_repeat('a', 65)])
+            ->patchJson(route('me.preferences.home'), ['adhan_id' => str_repeat('a', 129)])
             ->assertJsonValidationErrors(['adhan_id']);
 
         $this->assertNull($user->fresh()->preferences);
+    }
+
+    public function test_the_longest_catalog_ids_can_be_saved(): void
+    {
+        // GET /adhan/catalog.json names a dropped-in file "file:" + up to 60 characters.
+        $id = 'file:'.str_repeat('a', 60);
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->patchJson(route('me.preferences.home'), ['adhan_id' => $id])
+            ->assertOk()
+            ->assertJsonPath('preferences.adhan_id', $id);
     }
 
     public function test_the_adhan_choice_can_be_cleared(): void

@@ -43,7 +43,7 @@ export function cleanPrefs(value: unknown): Partial<HubPrefs> {
     if (
         input.adhan_id === null ||
         (typeof input.adhan_id === 'string' &&
-            /^[A-Za-z0-9_.:-]{1,64}$/.test(input.adhan_id))
+            /^[A-Za-z0-9_.:-]{1,128}$/.test(input.adhan_id))
     ) {
         out.adhan_id = input.adhan_id as string | null;
     }

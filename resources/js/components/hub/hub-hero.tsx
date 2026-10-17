@@ -184,7 +184,11 @@ export function HubHero({ mosque, view, prefs, now, corner }: Props) {
                         </>
                     ) : view ? null : (
                         <p className="max-w-xl text-lg text-white/90">
-                            {t('hub.no_times_hero')}
+                            {t(
+                                mosque.has_times
+                                    ? 'hub.no_times_today_hero'
+                                    : 'hub.no_times_hero',
+                            )}
                         </p>
                     )}
 

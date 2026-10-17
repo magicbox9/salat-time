@@ -1,7 +1,8 @@
 import { Clock } from 'lucide-react';
+import { buildDayView } from '@/components/hub/day';
 import { useNow } from '@/hooks/use-now';
 import { useT } from '@/lib/i18n';
-import { formatCountdown, nextPrayer } from '@/lib/prayer-time';
+import { formatCountdown } from '@/lib/prayer-time';
 import { cn } from '@/lib/utils';
 import { currentDays, dateInZone } from './format';
 import type { DayTimesLite } from './types';
@@ -33,9 +34,15 @@ export function NextPrayerLine({
         tomorrow,
         dateInZone(timezone, now),
     );
-    const next = nextPrayer(full(day), full(following), timezone, now);
+    // As the hub counts: by time (rows published out of order stay right)
+    // and between real instants (right across a DST change too).
+    const current = full(day);
+    const view = current
+        ? buildDayView(current, full(following), timezone, now)
+        : null;
+    const next = view?.next ?? null;
 
-    if (!next) {
+    if (!next || view?.untilNext == null) {
         return null;
     }
 
@@ -54,7 +61,7 @@ export function NextPrayerLine({
             <span className="text-primary">
                 <InTime
                     label={t('site.in_time', { time: MARK })}
-                    countdown={formatCountdown(next.inMinutes)}
+                    countdown={formatCountdown(view.untilNext)}
                 />
             </span>
         </p>

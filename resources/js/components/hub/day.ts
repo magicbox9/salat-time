@@ -1,10 +1,20 @@
-import { dayMinutes, minutesInZone, toMinutes } from '@/lib/prayer-time';
+import { minutesInZone, toMinutes } from '@/lib/prayer-time';
 import type { DayTimes, PrayerName } from '@/types/mosque';
 import { PRAYERS } from '@/types/mosque';
-import { iqamaMinutes } from './prayer-day';
+import { hubDayMinutes, iqamaMinutes } from './prayer-day';
 import type { SkyDay } from './sky';
 import type { DayView, RowState, TimeRow } from './types';
 import { instantAt } from './zone-time';
+
+/** The prayer at the earliest minute that passes `test` (day order on a tie). */
+function earliest(
+    minutes: Record<PrayerName, number>,
+    test: (at: number) => boolean,
+): PrayerName | undefined {
+    return PRAYERS.filter((prayer) => test(minutes[prayer])).sort(
+        (a, b) => minutes[a] - minutes[b],
+    )[0];
+}
 
 /**
  * Today's six published times as rows with their live state: passed,
@@ -21,8 +31,9 @@ export function buildDayView(
     offset = 0,
 ): DayView {
     const nowMinutes = minutesInZone(timezone, now) + offset;
-    const minutes = dayMinutes(today);
-    const upcoming = PRAYERS.find((prayer) => minutes[prayer] > nowMinutes);
+    const minutes = hubDayMinutes(today);
+    // By time, not by name: rows published out of order still count right.
+    const upcoming = earliest(minutes, (at) => at > nowMinutes);
     const fajrTomorrow = tomorrow
         ? 1440 + toMinutes(tomorrow.times.fajr)
         : null;
@@ -45,7 +56,10 @@ export function buildDayView(
             ? at - nowMinutes
             : Math.max(0, (instant - now.getTime()) / 60_000);
     };
-    const reached = PRAYERS.filter((prayer) => minutes[prayer] <= nowMinutes);
+    // The latest time already reached (stable sort: day order on a tie).
+    const reached = PRAYERS.filter(
+        (prayer) => minutes[prayer] <= nowMinutes,
+    ).sort((a, b) => minutes[a] - minutes[b]);
     const last = reached.at(-1) ?? null;
     const current = last === 'shuruq' ? null : last;
 
@@ -143,17 +157,18 @@ export function isDaytime(view: DayView): boolean {
 
 /** Today's minutes by prayer (even when the Fajr row shows tomorrow's time). */
 export function minutesOf(view: DayView): Record<PrayerName, number> {
-    return dayMinutes(view.today);
+    return hubDayMinutes(view.today);
 }
 
-/** The four moments that colour the sky. */
+/** The four moments that colour the sky, kept in order for drawing. */
 export function skyDayOf(view: DayView): SkyDay {
     const m = minutesOf(view);
+    const maghrib = Math.max(m.maghrib, m.shuruq + 1);
 
     return {
         fajr: Math.min(m.fajr, m.shuruq - 1),
         shuruq: m.shuruq,
-        maghrib: m.maghrib,
-        isha: m.isha,
+        maghrib,
+        isha: Math.max(m.isha, maghrib + 1),
     };
 }

@@ -64,6 +64,23 @@ class PublishedTodayTest extends TestCase
         $this->assertSame(['today' => null, 'tomorrow' => null], PublishedToday::for([$mosque])[$mosque->id]);
     }
 
+    public function test_rows_that_are_not_clock_times_count_as_unpublished(): void
+    {
+        // Imported calendars hold empty cells and "ERROR": no countdown to them.
+        $broken = Mosque::factory()->withCalendar(['06:00', '07:30', '13:00', '16:00', '19:00', ''])->create();
+        $error = Mosque::factory()->withCalendar(['06:00', 'ERROR', '13:00', '16:00', '19:00', '20:30'])->create();
+        $written = Mosque::factory()->withCalendar(['6:05', '07h30', '13:00', '16:00:00', '18h30', '20:00'])->create();
+
+        $batch = PublishedToday::for([$broken, $error, $written]);
+
+        $this->assertSame(['today' => null, 'tomorrow' => null], $batch[$broken->id]);
+        $this->assertSame(['today' => null, 'tomorrow' => null], $batch[$error->id]);
+        $this->assertSame(
+            ['fajr' => '06:05', 'shuruq' => '07:30', 'dhuhr' => '13:00', 'asr' => '16:00', 'maghrib' => '18:30', 'isha' => '20:00'],
+            $batch[$written->id]['today']['times'],
+        );
+    }
+
     private function assertSameAsTimetable(Mosque $mosque): void
     {
         $timetable = new MosqueTimetable;

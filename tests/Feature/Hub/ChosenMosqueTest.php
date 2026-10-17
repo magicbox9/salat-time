@@ -9,6 +9,7 @@ use App\Support\ChosenMosque;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 /** The visitor's own mosque: primary saved mosque, guest cookie, sign-in adoption. */
@@ -187,6 +188,33 @@ class ChosenMosqueTest extends TestCase
             ->assertCookieExpired(ChosenMosque::COOKIE);
 
         $this->assertSame($mosque->id, $this->primaryOf($user));
+    }
+
+    public function test_a_guest_choice_that_cannot_be_adopted_still_counts(): void
+    {
+        // C7: the primary saved mosque, else the cookie. A full list of saved
+        // mosques cannot take the guest choice, which then stays the visitor's own.
+        $user = User::factory()->create();
+        $user->favoriteMosques()->attach(Mosque::factory()->count(FavoriteMosqueController::MAX)->create()->modelKeys());
+        $mosque = Mosque::factory()->withCalendar()->create();
+
+        $this->assertTrue(ChosenMosque::for($this->requestWith($user, $mosque->slug))->is($mosque));
+        $this->assertNull($this->primaryOf($user));
+
+        $this->actingAs($user)
+            ->withCookie(ChosenMosque::COOKIE, $mosque->slug)
+            ->withoutVite()
+            ->get(route('home'))
+            ->assertOk()
+            ->assertCookieMissing(ChosenMosque::COOKIE)
+            ->assertInertia(fn (Assert $page) => $page->component('hub/index')->where('mosque.slug', $mosque->slug));
+    }
+
+    public function test_saved_mosque_routes_only_take_slugs(): void
+    {
+        foreach (['mosques.favorite.store', 'mosques.favorite.destroy', 'mosques.primary.store', 'mosques.primary.destroy'] as $name) {
+            $this->assertSame('[a-z0-9-]+', app('router')->getRoutes()->getByName($name)?->wheres['mosque'] ?? null, $name);
+        }
     }
 
     public function test_no_longer_my_mosque_from_my_mosques_forgets_the_guest_cookie(): void

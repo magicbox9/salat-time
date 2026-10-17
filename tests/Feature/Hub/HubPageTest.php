@@ -106,7 +106,7 @@ class HubPageTest extends TestCase
     {
         $mosque = Mosque::factory()->withCalendar()->create();
         $category = MosquePostCategory::query()->create(['mosque_id' => $mosque->id, 'name' => 'Khutbah', 'slug' => 'khutbah']);
-        MosquePost::factory()->for($mosque)->create(['title' => 'Older', 'published_at' => now()->subDays(3)]);
+        MosquePost::factory()->for($mosque)->create(['title' => 'Older', 'slug' => null, 'published_at' => now()->subDays(3)]);
         MosquePost::factory()->for($mosque)->create([
             'title' => 'Newest', 'slug' => 'newest', 'category_id' => $category->id, 'excerpt' => 'Short summary', 'published_at' => now()->subHour(),
         ]);
@@ -189,6 +189,43 @@ class HubPageTest extends TestCase
             $this->withCookie(ChosenMosque::COOKIE, $mosque->slug)
                 ->get(route('home'))
                 ->assertInertia(fn (Assert $page) => $page->where('live.yesterday', null)->has('live.today.times'));
+        }
+    }
+
+    public function test_published_times_written_another_way_are_read_as_clock_times(): void
+    {
+        // Imported calendars hold "18h30" and "20:00:00" for 18:30 and 20:00.
+        $mosque = Mosque::factory()->withCalendar(['6:05', '07h30', '13:00', '16:00:00', '18h30', '20:00:00'])->create();
+
+        $this->withCookie(ChosenMosque::COOKIE, $mosque->slug)
+            ->get(route('home'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('live.today.times', [
+                    'fajr' => '06:05', 'shuruq' => '07:30', 'dhuhr' => '13:00',
+                    'asr' => '16:00', 'maghrib' => '18:30', 'isha' => '20:00',
+                ])
+                ->where('live.today.iqama.fajr', '06:15')
+                ->where('live.tomorrow.times.maghrib', '18:30'));
+    }
+
+    public function test_a_day_missing_one_of_its_times_counts_as_unpublished(): void
+    {
+        // Never filled with a guess: the hub says today's times are incomplete
+        // and offers the closest mosques that publish theirs.
+        $rows = [['06:00', '07:30', '13:00', '16:00', '19:00', ''], ['', '', '', '', '', ''], ['06:00', 'ERROR', '13:00', '16:00', '19:00', '20:30']];
+        foreach ($rows as $i => $row) {
+            $mosque = Mosque::factory()->withCalendar($row)->at(40.0 + 2 * $i, 4.85)->create();
+            $near = Mosque::factory()->withCalendar()->at(40.01 + 2 * $i, 4.85)->create();
+
+            $this->withCookie(ChosenMosque::COOKIE, $mosque->slug)
+                ->get(route('home'))
+                ->assertInertia(fn (Assert $page) => $page
+                    ->component('hub/index')
+                    ->where('live.today', null)
+                    ->where('live.tomorrow', null)
+                    ->where('live.yesterday', null)
+                    ->where('mosque.has_times', true)
+                    ->where('nearbyWithTimes.0.slug', $near->slug));
         }
     }
 

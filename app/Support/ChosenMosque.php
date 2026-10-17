@@ -20,7 +20,8 @@ use Symfony\Component\HttpFoundation\Cookie as SymfonyCookie;
  * When a signed-in user has no own mosque yet but this browser holds a guest
  * choice, that choice is adopted (made primary) and the cookie is dropped:
  * at sign-in (AdoptGuestMosque listens to Login) and, as a fallback, on the
- * first resolution after it.
+ * first resolution after it. When it cannot be adopted (a full list of
+ * saved mosques), the cookie's mosque is still the visitor's own.
  */
 class ChosenMosque
 {
@@ -72,8 +73,9 @@ class ChosenMosque
         try {
             $adopted = MyMosque::choose($user, $mosque, onlyIfNone: true);
         } catch (ValidationException) {
-            // A full list of saved mosques: keep the guest choice for later.
-            return null;
+            // A full list of saved mosques: the guest choice stays in this
+            // browser's cookie and still counts (C7: primary, else cookie).
+            return $mosque;
         }
         // The choice now lives on the account; the cookie is only for guests.
         Cookie::queue(self::forget());

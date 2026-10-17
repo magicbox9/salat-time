@@ -99,6 +99,10 @@
     "no_times_text": "{name} ne publie pas encore ses horaires de prière ici. Nous n'estimons jamais les horaires d'une mosquée — voici les mosquées les plus proches qui publient les leurs.",
     "no_times_text_alone": "{name} ne publie pas encore ses horaires de prière ici, et aucune mosquée proche non plus. Nous n'estimons jamais les horaires d'une mosquée — vous pouvez en choisir une autre sur le globe.",
     "no_times_nearby": "Mosquées proches avec des horaires publiés",
+    "no_times_today_hero": "Cette mosquée n'a pas publié d'horaires complets pour aujourd'hui.",
+    "no_times_today_title": "Pas d'horaires complets aujourd'hui",
+    "no_times_today_text": "{name} n'a pas publié d'horaires de prière complets pour aujourd'hui. Nous n'estimons jamais les horaires d'une mosquée — voici les mosquées les plus proches qui publient les leurs.",
+    "no_times_today_text_alone": "{name} n'a pas publié d'horaires de prière complets pour aujourd'hui, et aucune mosquée proche ne publie les siens. Nous n'estimons jamais les horaires d'une mosquée — vous pouvez en choisir une autre sur le globe.",
     "manage_note": "Vous gérez cette mosquée.",
     "manage_open": "Gérer sa page et son affichage"
 }

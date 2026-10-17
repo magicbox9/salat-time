@@ -48,7 +48,7 @@ export default function Hub({
     const now = useNow();
     const { prefs, update, reset } = useHubPreferences(preferences, defaults);
     const [sheetOpen, setSheetOpen] = useState(false);
-    const catalog = useAdhanCatalog();
+    const catalog = useAdhanCatalog(mosque.slug);
     const track =
         catalog.tracks.find((item) => item.id === prefs.adhan_id) ??
         catalog.tracks[0] ??
@@ -66,9 +66,25 @@ export default function Hub({
     const view = day
         ? buildDayView(day.today, day.tomorrow, live.timezone, now, day.offset)
         : null;
-    useMidnightReload(date, live.today?.date ?? null);
+    // The server's date at the mosque when nothing is published today: a
+    // page left open still picks up the next published day after midnight.
+    useMidnightReload(date, live.today?.date ?? live.now.slice(0, 10));
 
     const adhan = useAdhan({ view, prefs, track, now });
+
+    // The adhan comes first: an open Customise sheet (a modal that blocks
+    // clicks and focus outside it) closes so the overlay can be used.
+    const momentKey = adhan.moment?.key ?? null;
+    const [seenMoment, setSeenMoment] = useState<string | null>(null);
+
+    if (momentKey !== seenMoment) {
+        setSeenMoment(momentKey);
+
+        if (momentKey !== null) {
+            setSheetOpen(false);
+        }
+    }
+
     const StyleIcon = STYLE_ICON[prefs.style];
 
     return (
@@ -150,6 +166,7 @@ export default function Hub({
                 ) : (
                     <NoTimes
                         mosqueName={mosque.name}
+                        publishes={mosque.has_times}
                         nearby={nearbyWithTimes}
                     />
                 )}

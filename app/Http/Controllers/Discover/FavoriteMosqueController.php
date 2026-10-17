@@ -26,9 +26,14 @@ class FavoriteMosqueController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $saved = $user->favoriteMosques()->whereKey($mosque->id)->exists();
+        $saved = DB::transaction(function () use ($user, $mosque): bool {
+            // Serialise this user's saves (as MyMosque::choose): two tabs
+            // at 99 saved mosques never make 101.
+            DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
 
-        if (! $saved) {
+            if ($user->favoriteMosques()->whereKey($mosque->id)->exists()) {
+                return true;
+            }
             if ($user->favoriteMosques()->count() >= self::MAX) {
                 throw ValidationException::withMessages(['mosque' => ui('discover.favorites_full', ['max' => self::MAX])]);
             }
@@ -40,7 +45,9 @@ class FavoriteMosqueController extends Controller
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
-        }
+
+            return false;
+        });
 
         return self::answer($request, $user, $mosque, $saved ? 'discover.favorite_already' : 'discover.favorite_added');
     }

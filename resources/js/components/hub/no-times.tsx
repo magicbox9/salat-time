@@ -9,20 +9,24 @@ import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 
 /**
- * The chosen mosque publishes no times here: say so kindly (never invent
- * them) and offer the closest mosques that do.
+ * The chosen mosque publishes no times here (or none complete for today):
+ * say so kindly (never invent them) and offer the closest mosques that do.
  */
 export function NoTimes({
     mosqueName,
+    publishes,
     nearby,
 }: {
     mosqueName: string;
+    /** It has a published calendar, but today's times are missing or incomplete. */
+    publishes: boolean;
     nearby: MosqueCard[];
 }) {
     const t = useT();
     const { locale } = usePage().props;
     const [busy, setBusy] = useState(false);
     const choose = (slug: string) => chooseMosque(slug, t, setBusy);
+    const prefix = publishes ? 'hub.no_times_today' : 'hub.no_times';
 
     return (
         <section
@@ -34,13 +38,13 @@ export function NoTimes({
                 className="flex items-center gap-2 text-lg font-semibold"
             >
                 <CalendarX2 className="size-5 text-gold" aria-hidden />
-                {t('hub.no_times_title')}
+                {t(`${prefix}_title`)}
             </h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                 {t(
                     nearby.length > 0
-                        ? 'hub.no_times_text'
-                        : 'hub.no_times_text_alone',
+                        ? `${prefix}_text`
+                        : `${prefix}_text_alone`,
                     { name: mosqueName },
                 )}
             </p>
@@ -67,7 +71,7 @@ export function NoTimes({
                                         href={`/mosques/${encodeURIComponent(mosque.slug)}`}
                                         className="font-medium hover:underline"
                                     >
-                                        {mosque.name}
+                                        <bdi>{mosque.name}</bdi>
                                     </Link>
                                     <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
                                         <MapPin

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Discover\Support;
 
+use App\Http\Controllers\Hub\Support\PublishedDay;
 use App\Models\Mosque;
 use App\Models\MosquePrayerCalendar;
 use App\Services\PrayerTimes\MosqueTimetable;
@@ -13,7 +14,9 @@ use Illuminate\Support\Collection;
  * cards, "my mosques"), read with one query per local date instead of one
  * per mosque. It reads exactly the rows MosqueTimetable::day() reads (same
  * calendar choice, same 29 February rule) and pulls only those two rows out
- * of each yearly JSON calendar. Nothing is calculated.
+ * of each yearly JSON calendar. Nothing is calculated: a row whose six times
+ * are not all clock times ("", "ERROR") counts as unpublished, so no card
+ * counts down to a time that does not exist (PublishedDay).
  */
 class PublishedToday
 {
@@ -73,10 +76,16 @@ class PublishedToday
             return null;
         }
 
-        return [
-            'date' => $date->toDateString(),
-            'times' => array_combine(MosqueTimetable::PRAYERS, array_map('strval', array_slice(array_values($row), 0, 6))),
-        ];
+        $times = [];
+        foreach (array_slice(array_values($row), 0, 6) as $i => $value) {
+            $time = PublishedDay::clock($value);
+            if ($time === null) {
+                return null;
+            }
+            $times[MosqueTimetable::PRAYERS[$i]] = $time;
+        }
+
+        return ['date' => $date->toDateString(), 'times' => $times];
     }
 
     /**

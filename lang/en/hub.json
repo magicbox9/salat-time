@@ -99,6 +99,10 @@
     "no_times_text": "{name} does not publish its prayer times here yet. We never estimate a mosque's times — here are the closest mosques that do publish theirs.",
     "no_times_text_alone": "{name} does not publish its prayer times here yet, and no nearby mosque does either. We never estimate a mosque's times — you can choose another mosque on the globe.",
     "no_times_nearby": "Nearby mosques with published times",
+    "no_times_today_hero": "This mosque has not published complete prayer times for today.",
+    "no_times_today_title": "No complete times for today",
+    "no_times_today_text": "{name} has not published complete prayer times for today. We never estimate a mosque's times — here are the closest mosques that publish theirs.",
+    "no_times_today_text_alone": "{name} has not published complete prayer times for today, and no nearby mosque publishes its times. We never estimate a mosque's times — you can choose another mosque on the globe.",
     "manage_note": "You manage this mosque.",
     "manage_open": "Manage its page and display"
 }
