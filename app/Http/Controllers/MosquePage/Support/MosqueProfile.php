@@ -22,6 +22,9 @@ class MosqueProfile
             'phone' => $mosque->phone,
             'email' => $mosque->email,
             'cover_url' => PostPresenter::url($mosque->cover_path),
+            'tagline' => $mosque->tagline,
+            'accent' => AccentColor::present($mosque->accent_color),
+            'social_links' => SocialLinks::present($mosque->social_links),
             'jumua' => array_values(array_filter([$mosque->jumua, $mosque->jumua2, $mosque->jumua3])),
             'jumua_as_dhuhr' => (bool) $mosque->jumua_as_dhuhr,
         ];
@@ -49,7 +52,7 @@ class MosqueProfile
     }
 
     /** Imported websites are shown as links only when they are plain http(s) URLs. */
-    private static function safeWebsite(?string $url): ?string
+    public static function safeWebsite(?string $url): ?string
     {
         if (! $url) {
             return null;

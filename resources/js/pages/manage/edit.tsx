@@ -1,8 +1,11 @@
 import { useForm } from '@inertiajs/react';
 import { Info } from 'lucide-react';
+import { AccentColorField } from '@/components/manage/accent-color-field';
 import { Field, FormSection, Textarea } from '@/components/manage/fields';
 import { ImageField } from '@/components/manage/image-field';
-import { ManageHeader } from '@/components/manage/manage-header';
+import { ManageLayout } from '@/components/manage/manage-layout';
+import { SocialLinksFields } from '@/components/manage/social-links-fields';
+import type { SocialNetwork } from '@/components/mosque/site-types';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -12,6 +15,9 @@ import { useT } from '@/lib/i18n';
 import type { MosqueSummary } from '@/types/mosque';
 
 type Values = {
+    tagline: string;
+    accent_color: string;
+    social_links: Record<string, string>;
     description: string;
     association: string;
     website: string;
@@ -23,13 +29,30 @@ type Values = {
     jumua_as_dhuhr: boolean;
 };
 
+type TextField =
+    | 'tagline'
+    | 'association'
+    | 'website'
+    | 'phone'
+    | 'email'
+    | 'jumua'
+    | 'jumua2'
+    | 'jumua3';
+
 type Props = {
     mosque: MosqueSummary & { cover_url: string | null };
     values: Values;
+    palette: string[];
+    networks: SocialNetwork[];
 };
 
-/** The details a mosque's managers keep up to date on its page. */
-export default function ManageEdit({ mosque, values }: Props) {
+/** The details and look of the mosque's site. */
+export default function ManageEdit({
+    mosque,
+    values,
+    palette,
+    networks,
+}: Props) {
     const t = useT();
     const form = useForm({
         ...values,
@@ -39,6 +62,7 @@ export default function ManageEdit({ mosque, values }: Props) {
         remove_cover: false,
     });
     const { data, setData, errors, processing } = form;
+    const fieldErrors = errors as Record<string, string | undefined>;
 
     const submit = (event: React.FormEvent) => {
         event.preventDefault();
@@ -58,11 +82,12 @@ export default function ManageEdit({ mosque, values }: Props) {
     };
 
     const text = (
-        name: keyof Values,
+        name: TextField,
         label: string,
         props: React.ComponentProps<typeof Input> = {},
+        hint?: string,
     ) => (
-        <Field id={name} label={label} error={errors[name]}>
+        <Field id={name} label={label} hint={hint} error={errors[name]}>
             <Input
                 id={name}
                 value={String(data[name] ?? '')}
@@ -74,15 +99,16 @@ export default function ManageEdit({ mosque, values }: Props) {
     );
 
     return (
-        <div className="mx-auto max-w-3xl space-y-6">
-            <ManageHeader
-                mosque={mosque}
-                title={t('manage.details_title')}
-                description={t('manage.details_intro')}
-            />
-
+        <ManageLayout
+            mosque={mosque}
+            title={t('manage.details_title')}
+            description={t('manage.details_intro')}
+        >
             <form onSubmit={submit} className="space-y-6">
-                <FormSection title={t('manage.section_page')}>
+                <FormSection
+                    title={t('manage.section_identity')}
+                    description={t('manage.section_identity_hint')}
+                >
                     <ImageField
                         label={t('manage.logo')}
                         hint={t('manage.logo_hint')}
@@ -104,6 +130,21 @@ export default function ManageEdit({ mosque, values }: Props) {
                         onRemove={(removed) => setData('remove_cover', removed)}
                         error={errors.cover}
                     />
+                    {text(
+                        'tagline',
+                        t('manage.tagline'),
+                        { maxLength: 200, dir: 'auto' },
+                        t('manage.tagline_hint'),
+                    )}
+                    <AccentColorField
+                        value={data.accent_color}
+                        onChange={(value) => setData('accent_color', value)}
+                        palette={palette}
+                        error={errors.accent_color}
+                    />
+                </FormSection>
+
+                <FormSection title={t('manage.section_about')}>
                     <Field
                         id="description"
                         label={t('manage.description')}
@@ -114,18 +155,19 @@ export default function ManageEdit({ mosque, values }: Props) {
                             id="description"
                             rows={6}
                             maxLength={5000}
+                            dir="auto"
                             value={data.description}
                             onChange={(event) =>
                                 setData('description', event.target.value)
                             }
                         />
                     </Field>
-                </FormSection>
-
-                <FormSection title={t('manage.section_contact')}>
                     {text('association', t('manage.association'), {
                         maxLength: 200,
                     })}
+                </FormSection>
+
+                <FormSection title={t('manage.section_contact')}>
                     <div className="grid gap-5 sm:grid-cols-2">
                         {text('website', t('manage.website'), {
                             type: 'url',
@@ -144,6 +186,23 @@ export default function ManageEdit({ mosque, values }: Props) {
                         dir: 'ltr',
                         maxLength: 200,
                     })}
+                </FormSection>
+
+                <FormSection
+                    title={t('manage.section_social')}
+                    description={t('manage.section_social_hint')}
+                >
+                    <SocialLinksFields
+                        networks={networks}
+                        values={data.social_links}
+                        errors={fieldErrors}
+                        onChange={(network, value) =>
+                            setData('social_links', {
+                                ...data.social_links,
+                                [network]: value,
+                            })
+                        }
+                    />
                 </FormSection>
 
                 <FormSection
@@ -179,11 +238,11 @@ export default function ManageEdit({ mosque, values }: Props) {
                 </FormSection>
 
                 <p className="flex items-start gap-2 rounded-xl bg-muted px-4 py-3 text-sm text-muted-foreground">
-                    <Info className="mt-0.5 size-4 shrink-0" />
+                    <Info className="mt-0.5 size-4 shrink-0" aria-hidden />
                     {t('manage.admin_fields_note')}
                 </p>
 
-                <div className="flex items-center justify-end gap-3">
+                <div className="sticky bottom-4 z-10 flex items-center justify-end gap-3 rounded-2xl border bg-background/90 p-3 shadow-lg backdrop-blur">
                     {form.recentlySuccessful && (
                         <span className="text-sm text-muted-foreground">
                             {t('manage.saved')}
@@ -195,6 +254,6 @@ export default function ManageEdit({ mosque, values }: Props) {
                     </Button>
                 </div>
             </form>
-        </div>
+        </ManageLayout>
     );
 }

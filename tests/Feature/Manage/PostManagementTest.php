@@ -60,7 +60,7 @@ class PostManagementTest extends TestCase
         $this->assertNotNull($post->published_at);
 
         $this->get("/mosques/{$this->mosque->slug}")
-            ->assertInertia(fn (Assert $page) => $page->where('feed.data.0.title', 'Cours de tajwid'));
+            ->assertInertia(fn (Assert $page) => $page->where('latest.0.posts.0.title', 'Cours de tajwid'));
     }
 
     public function test_drafts_stay_private_until_published(): void
@@ -71,7 +71,7 @@ class PostManagementTest extends TestCase
 
         $this->app['auth']->forgetGuards();
         $this->get("/mosques/{$this->mosque->slug}")
-            ->assertInertia(fn (Assert $page) => $page->has('feed.data', 0)->has('pinned', 0));
+            ->assertInertia(fn (Assert $page) => $page->has('latest', 0)->has('pinned', 0));
 
         $this->actingAs($this->manager)->get($this->base().'?status=drafts')
             ->assertInertia(fn (Assert $page) => $page->component('manage/posts')->has('posts.data', 1));
@@ -107,7 +107,7 @@ class PostManagementTest extends TestCase
         $this->actingAs($this->manager)->post($this->base(), [
             'type' => 'advert',
             'title' => str_repeat('t', 201),
-            'body' => str_repeat('b', 10001),
+            'body' => str_repeat('b', 30001),
             'image' => UploadedFile::fake()->create('notes.txt', 3, 'text/plain'),
         ])->assertSessionHasErrors(['type', 'title', 'body', 'image']);
 
@@ -148,7 +148,7 @@ class PostManagementTest extends TestCase
         $this->assertSoftDeleted($post);
 
         $this->get("/mosques/{$this->mosque->slug}")
-            ->assertInertia(fn (Assert $page) => $page->has('feed.data', 0));
+            ->assertInertia(fn (Assert $page) => $page->has('latest', 0));
     }
 
     public function test_posts_of_another_mosque_cannot_be_reached_through_this_one(): void

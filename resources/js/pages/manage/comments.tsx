@@ -1,7 +1,7 @@
 import { Link, router, usePage } from '@inertiajs/react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
-import { ManageHeader } from '@/components/manage/manage-header';
+import { ManageLayout } from '@/components/manage/manage-layout';
 import { Pager } from '@/components/manage/pager';
 import type { Paginated } from '@/components/manage/pager';
 import { timeAgo } from '@/components/mosque/post-type-badge';
@@ -38,13 +38,11 @@ export default function ManageComments({ mosque, comments, filter }: Props) {
         );
 
     return (
-        <div className="mx-auto max-w-4xl space-y-6">
-            <ManageHeader
-                mosque={mosque}
-                title={t('manage.comments_title')}
-                description={t('manage.comments_intro')}
-            />
-
+        <ManageLayout
+            mosque={mosque}
+            title={t('manage.comments_title')}
+            description={t('manage.comments_intro')}
+        >
             <div className="flex gap-1 rounded-xl bg-muted p-1 sm:w-fit">
                 {(['all', 'hidden'] as const).map((value) => (
                     <Link
@@ -130,6 +128,6 @@ export default function ManageComments({ mosque, comments, filter }: Props) {
             )}
 
             <Pager page={comments} />
-        </div>
+        </ManageLayout>
     );
 }

@@ -87,9 +87,9 @@ class MosquePageTest extends TestCase
         $this->get("/mosques/{$mosque->slug}")
             ->assertInertia(fn (Assert $page) => $page
                 ->has('pinned', 0)
-                ->has('feed.data', 1)
-                ->where('feed.data.0.id', $published->id)
-                ->where('feed.next_cursor', null));
+                ->has('latest', 1)
+                ->has('latest.0.posts', 1)
+                ->where('latest.0.posts.0.id', $published->id));
 
         $this->getJson("/mosques/{$mosque->slug}/posts.json")
             ->assertOk()
@@ -105,11 +105,12 @@ class MosquePageTest extends TestCase
 
         $this->get("/mosques/{$mosque->slug}")
             ->assertInertia(fn (Assert $page) => $page
+                ->has('pinned', 1)
                 ->where('pinned.0.id', $pinned->id)
                 ->where('pinned.0.pinned', true)
-                ->has('feed.data', 2)
-                ->where('feed.data.0.id', $newer->id)
-                ->where('feed.data.1.id', $older->id));
+                ->has('latest.0.posts', 3)
+                ->where('latest.0.posts.0.id', $newer->id)
+                ->where('latest.0.posts.1.id', $older->id));
     }
 
     public function test_the_feed_loads_more_with_a_cursor(): void
@@ -135,18 +136,20 @@ class MosquePageTest extends TestCase
     public function test_hidden_comments_are_not_counted_for_the_public(): void
     {
         $mosque = Mosque::factory()->create();
-        $post = MosquePost::factory()->for($mosque)->create();
+        $post = MosquePost::factory()->for($mosque)->create(['slug' => 'iftar']);
         PostComment::factory()->for($post, 'post')->create();
         PostComment::factory()->for($post, 'post')->create(['hidden_at' => now()]);
 
         $this->get("/mosques/{$mosque->slug}")
-            ->assertInertia(fn (Assert $page) => $page->where('feed.data.0.comments_count', 1));
+            ->assertInertia(fn (Assert $page) => $page->where('latest.0.posts.0.comments_count', 1));
+        $this->get("/mosques/{$mosque->slug}/blog/iftar")
+            ->assertInertia(fn (Assert $page) => $page->where('post.comments_count', 1));
 
         $manager = User::factory()->create();
         $mosque->managers()->attach($manager, ['role' => 'owner']);
 
-        $this->actingAs($manager)->get("/mosques/{$mosque->slug}")
-            ->assertInertia(fn (Assert $page) => $page->where('feed.data.0.comments_count', 2));
+        $this->actingAs($manager)->get("/mosques/{$mosque->slug}/blog/iftar")
+            ->assertInertia(fn (Assert $page) => $page->where('post.comments_count', 2));
     }
 
     public function test_the_viewer_flags_come_from_the_database(): void

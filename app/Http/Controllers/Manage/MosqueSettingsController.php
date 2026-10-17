@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Manage;
 
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Manage\Support\ImageStore;
+use App\Http\Controllers\MosquePage\Support\AccentColor;
 use App\Http\Controllers\MosquePage\Support\PostPresenter;
+use App\Http\Controllers\MosquePage\Support\SocialLinks;
 use App\Http\Requests\Manage\UpdateMosqueRequest;
 use App\Models\Mosque;
 use App\Support\MosquePresenter;
@@ -13,7 +15,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use Throwable;
 
-/** The page details a mosque's managers keep up to date. */
+/** The details and look of a mosque's site, kept up to date by its managers. */
 class MosqueSettingsController extends Controller
 {
     public function edit(Mosque $mosque): Response
@@ -24,6 +26,9 @@ class MosqueSettingsController extends Controller
                 'cover_url' => PostPresenter::url($mosque->cover_path),
             ],
             'values' => [
+                'tagline' => $mosque->tagline ?? '',
+                'accent_color' => AccentColor::normalize($mosque->accent_color) ?? '',
+                'social_links' => SocialLinks::formValues($mosque->social_links),
                 'description' => $mosque->description ?? '',
                 'association' => $mosque->association ?? '',
                 'website' => $mosque->website ?? '',
@@ -34,6 +39,8 @@ class MosqueSettingsController extends Controller
                 'jumua3' => $mosque->jumua3 ?? '',
                 'jumua_as_dhuhr' => (bool) $mosque->jumua_as_dhuhr,
             ],
+            'palette' => AccentColor::PALETTE,
+            'networks' => SocialLinks::NETWORKS,
         ]);
     }
 
@@ -42,6 +49,13 @@ class MosqueSettingsController extends Controller
         $data = $request->safe()->only(UpdateMosqueRequest::FIELDS);
         if ($request->has('jumua_as_dhuhr')) {
             $data['jumua_as_dhuhr'] = $request->boolean('jumua_as_dhuhr');
+        }
+        if (array_key_exists('accent_color', $data)) {
+            $data['accent_color'] = AccentColor::normalize($data['accent_color']);
+        }
+        if ($request->has('social_links')) {
+            $links = $request->socialLinks();
+            $data['social_links'] = $links === [] ? null : $links;
         }
 
         $stored = [];

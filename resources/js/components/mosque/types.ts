@@ -31,6 +31,8 @@ export type MosquePost = {
     id: number;
     type: PostType;
     title: string;
+    slug?: string | null;
+    url?: string | null;
     body: string;
     image_url: string | null;
     event_starts_at: string | null;

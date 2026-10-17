@@ -24,7 +24,7 @@ export function PostTypePicker({ types, value, onChange }: Props) {
         <div
             role="radiogroup"
             aria-label={t('manage.post_kind')}
-            className="grid grid-cols-2 gap-2 sm:grid-cols-4"
+            className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2"
         >
             {types.map((type) => {
                 const Icon = ICONS[type] ?? Newspaper;

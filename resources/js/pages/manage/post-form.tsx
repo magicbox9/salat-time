@@ -1,55 +1,73 @@
 import { Link, useForm } from '@inertiajs/react';
+import { ExternalLink } from 'lucide-react';
+import { useState } from 'react';
 import { Field, FormSection, Textarea } from '@/components/manage/fields';
-import { ImageField } from '@/components/manage/image-field';
-import { ManageHeader } from '@/components/manage/manage-header';
-import { PostTypePicker } from '@/components/manage/post-type-picker';
+import { ManageLayout } from '@/components/manage/manage-layout';
+import { MarkdownEditor } from '@/components/manage/markdown-editor';
+import type {
+    CategoryOption,
+    EditablePost,
+    PostFormData,
+} from '@/components/manage/post-form-types';
+import { PostSettings } from '@/components/manage/post-settings';
+import { PublishPanel } from '@/components/manage/publish-panel';
+import { SlugField, slugify, trimSlug } from '@/components/manage/slug-field';
 import type { PostType } from '@/components/mosque/types';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
 import { useT } from '@/lib/i18n';
 import type { MosqueSummary } from '@/types/mosque';
-
-type EditablePost = {
-    id: number;
-    type: PostType;
-    title: string;
-    body: string;
-    image_url: string | null;
-    event_starts_at: string;
-    pinned: boolean;
-    published: boolean;
-};
 
 type Props = {
     mosque: MosqueSummary;
     post: EditablePost | null;
     types: PostType[];
+    categories: CategoryOption[];
+    limits: { body: number; attachment_mb: number };
 };
 
-/** Writing or editing a post: publish now or keep it as a draft. */
-export default function PostForm({ mosque, post, types }: Props) {
+/** Writing or editing a post: Markdown text, address, category, media, publication. */
+export default function PostForm({
+    mosque,
+    post,
+    types,
+    categories,
+    limits,
+}: Props) {
     const t = useT();
     const editing = post !== null;
-    const form = useForm({
-        type: post?.type ?? ('news' as PostType),
+    const [slugTouched, setSlugTouched] = useState(editing);
+    const form = useForm<PostFormData>({
+        type: post?.type ?? 'news',
+        category_id: post?.category_id ? String(post.category_id) : '',
         title: post?.title ?? '',
+        slug: post?.slug ?? '',
+        excerpt: post?.excerpt ?? '',
         body: post?.body ?? '',
+        video_url: post?.video_url ?? '',
         event_starts_at: post?.event_starts_at ?? '',
         pinned: post?.pinned ?? false,
-        image: null as File | null,
+        status: post?.status ?? 'published',
+        publish_at: post?.publish_at ?? '',
+        image: null,
         remove_image: false,
+        attachment: null,
+        remove_attachment: false,
     });
     const { data, setData, errors, processing } = form;
 
-    const save = (publish: boolean) => {
+    const submit = (event: React.FormEvent) => {
+        event.preventDefault();
         form.transform((current) => ({
             ...current,
+            // "my-post-" typed and submitted without leaving the field: the server wants "my-post".
+            slug: trimSlug(current.slug),
+            category_id: current.category_id || null,
             event_starts_at:
                 current.type === 'event' ? current.event_starts_at : '',
-            publish,
+            publish_at:
+                current.status === 'scheduled' ? current.publish_at : '',
             ...(editing ? { _method: 'put' } : {}),
         }));
         form.post(
@@ -63,158 +81,146 @@ export default function PostForm({ mosque, post, types }: Props) {
         );
     };
 
+    const submitLabel =
+        data.status === 'draft'
+            ? t('manage.save_draft')
+            : data.status === 'scheduled'
+              ? t('manage.schedule')
+              : editing && post.published
+                ? t('manage.update')
+                : t('manage.publish');
+
     return (
-        <div className="mx-auto max-w-3xl space-y-6">
-            <ManageHeader
-                mosque={mosque}
-                title={editing ? t('manage.edit_post') : t('manage.new_post')}
-            />
-
+        <ManageLayout
+            mosque={mosque}
+            title={editing ? t('manage.edit_post') : t('manage.new_post')}
+            actions={
+                editing && (
+                    <Button asChild variant="outline" size="sm">
+                        <Link href={post.url}>
+                            <ExternalLink className="size-4" aria-hidden />
+                            {post.published
+                                ? t('manage.view_post')
+                                : t('manage.preview_post')}
+                        </Link>
+                    </Button>
+                )
+            }
+        >
             <form
-                onSubmit={(event) => {
-                    event.preventDefault();
-                    save(true);
-                }}
-                className="space-y-6"
+                onSubmit={submit}
+                className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start"
             >
-                <FormSection title={t('manage.post_kind')}>
-                    <PostTypePicker
-                        types={types}
-                        value={data.type}
-                        onChange={(type) => setData('type', type)}
-                    />
-                    {errors.type && (
-                        <p className="text-sm text-red-600 dark:text-red-400">
-                            {errors.type}
-                        </p>
-                    )}
-                </FormSection>
-
-                <FormSection title={t('manage.post_content')}>
-                    <Field
-                        id="title"
-                        label={t('manage.post_title')}
-                        error={errors.title}
-                    >
-                        <Input
-                            id="title"
-                            value={data.title}
-                            maxLength={200}
-                            required
-                            onChange={(event) =>
-                                setData('title', event.target.value)
-                            }
-                            aria-invalid={errors.title ? true : undefined}
-                        />
-                    </Field>
-
-                    {data.type === 'event' && (
+                <div className="min-w-0 space-y-6">
+                    <FormSection title={t('manage.post_content')}>
                         <Field
-                            id="event_starts_at"
-                            label={t('manage.event_starts_at')}
-                            hint={t('manage.event_hint', {
-                                timezone: mosque.timezone,
-                            })}
-                            error={errors.event_starts_at}
+                            id="title"
+                            label={t('manage.post_title')}
+                            error={errors.title}
                         >
                             <Input
-                                id="event_starts_at"
-                                type="datetime-local"
-                                dir="ltr"
+                                id="title"
+                                value={data.title}
+                                maxLength={200}
                                 required
-                                value={data.event_starts_at}
-                                onChange={(event) =>
-                                    setData(
-                                        'event_starts_at',
-                                        event.target.value,
-                                    )
-                                }
-                                className="sm:w-64"
+                                dir="auto"
+                                className="text-base font-medium"
+                                onChange={(event) => {
+                                    setData((current) => ({
+                                        ...current,
+                                        title: event.target.value,
+                                        slug: slugTouched
+                                            ? current.slug
+                                            : slugify(event.target.value),
+                                    }));
+                                }}
+                                aria-invalid={errors.title ? true : undefined}
                             />
                         </Field>
-                    )}
-
-                    <Field
-                        id="body"
-                        label={t('manage.post_body')}
-                        hint={t('manage.post_body_hint')}
-                        error={errors.body}
-                    >
-                        <Textarea
-                            id="body"
-                            rows={10}
-                            maxLength={10000}
-                            required
-                            value={data.body}
-                            onChange={(event) =>
-                                setData('body', event.target.value)
-                            }
-                            aria-invalid={errors.body ? true : undefined}
+                        <SlugField
+                            prefix={`/mosques/${mosque.slug}/blog/`}
+                            value={data.slug}
+                            max={200}
+                            error={errors.slug}
+                            onChange={(value) => {
+                                setSlugTouched(true);
+                                setData('slug', value);
+                            }}
                         />
-                        <span
-                            className="text-end text-xs text-muted-foreground tabular-nums"
-                            dir="ltr"
+                        <Field
+                            id="excerpt"
+                            label={t('manage.excerpt')}
+                            hint={t('manage.excerpt_hint')}
+                            error={errors.excerpt}
                         >
-                            {data.body.length}/10000
-                        </span>
-                    </Field>
+                            <Textarea
+                                id="excerpt"
+                                rows={2}
+                                maxLength={400}
+                                dir="auto"
+                                className="min-h-16"
+                                value={data.excerpt}
+                                onChange={(event) =>
+                                    setData('excerpt', event.target.value)
+                                }
+                            />
+                        </Field>
+                        <Field
+                            id="body"
+                            label={t('manage.post_body')}
+                            error={errors.body}
+                        >
+                            <MarkdownEditor
+                                id="body"
+                                value={data.body}
+                                onChange={(value) => setData('body', value)}
+                                mosqueSlug={mosque.slug}
+                                maxLength={limits.body}
+                                invalid={Boolean(errors.body)}
+                                required
+                            />
+                        </Field>
+                    </FormSection>
 
-                    <ImageField
-                        label={t('manage.post_image')}
-                        hint={t('manage.post_image_hint')}
-                        currentUrl={post?.image_url ?? null}
-                        file={data.image}
-                        removed={data.remove_image}
-                        onFile={(file) => setData('image', file)}
-                        onRemove={(removed) => setData('remove_image', removed)}
-                        error={errors.image}
-                    />
-
-                    <div className="flex items-start gap-2">
-                        <Checkbox
-                            id="pinned"
-                            checked={data.pinned}
-                            onCheckedChange={(checked) =>
-                                setData('pinned', checked === true)
+                    <FormSection title={t('manage.publication')}>
+                        <PublishPanel
+                            status={data.status}
+                            publishAt={data.publish_at}
+                            timezone={mosque.timezone}
+                            wasPublished={editing && post.published}
+                            onStatus={(status) => setData('status', status)}
+                            onPublishAt={(value) =>
+                                setData('publish_at', value)
                             }
+                            error={errors.publish_at ?? errors.status}
                         />
-                        <div className="grid gap-0.5">
-                            <Label htmlFor="pinned" className="font-normal">
-                                {t('manage.pin')}
-                            </Label>
-                            <p className="text-xs text-muted-foreground">
-                                {t('manage.pin_hint')}
-                            </p>
-                        </div>
-                    </div>
-                </FormSection>
+                    </FormSection>
+                </div>
 
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 space-y-6 xl:sticky xl:top-24">
+                    <PostSettings
+                        form={form}
+                        post={post}
+                        mosqueSlug={mosque.slug}
+                        timezone={mosque.timezone}
+                        types={types}
+                        categories={categories}
+                        attachmentMb={limits.attachment_mb}
+                    />
+                </div>
+
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between xl:col-span-2">
                     <Button asChild variant="ghost">
                         <Link href={`/manage/${mosque.slug}/posts`}>
                             {t('manage.cancel')}
                         </Link>
                     </Button>
-                    <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            disabled={processing}
-                            onClick={() => save(false)}
-                        >
-                            {editing && post.published
-                                ? t('manage.unpublish')
-                                : t('manage.save_draft')}
-                        </Button>
-                        <Button type="submit" disabled={processing}>
-                            {processing && <Spinner />}
-                            {editing && post.published
-                                ? t('manage.update')
-                                : t('manage.publish')}
-                        </Button>
-                    </div>
+                    <Button type="submit" disabled={processing} size="lg">
+                        {processing && <Spinner />}
+                        {submitLabel}
+                    </Button>
                 </div>
             </form>
-        </div>
+        </ManageLayout>
     );
 }

@@ -27,7 +27,7 @@ class PostFeed
             ->orderByDesc('id')
             ->limit(self::MAX_PINNED)
             ->get()
-            ->map(fn (MosquePost $post) => PostPresenter::post($post))
+            ->map(fn (MosquePost $post) => PostPresenter::post($post, $mosque->slug))
             ->values()
             ->all();
     }
@@ -54,7 +54,7 @@ class PostFeed
             ->cursorPaginate(self::PER_PAGE, ['*'], 'cursor', $from);
 
         return [
-            'data' => collect($page->items())->map(fn (MosquePost $post) => PostPresenter::post($post))->values()->all(),
+            'data' => collect($page->items())->map(fn (MosquePost $post) => PostPresenter::post($post, $mosque->slug))->values()->all(),
             'next_cursor' => $page->nextCursor()?->encode(),
         ];
     }

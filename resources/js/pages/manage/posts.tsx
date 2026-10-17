@@ -1,49 +1,61 @@
 import { Link, usePage } from '@inertiajs/react';
-import { MessageCircle, PencilLine, Pin, Plus } from 'lucide-react';
-import { formatInstant } from '@/components/mosque/calendar';
-import { PostTypeBadge } from '@/components/mosque/post-type-badge';
-import type { MosquePost } from '@/components/mosque/types';
+import {
+    ExternalLink,
+    MessageCircle,
+    PencilLine,
+    Pin,
+    Plus,
+} from 'lucide-react';
 import { ConfirmDelete } from '@/components/manage/confirm-delete';
-import { ManageHeader } from '@/components/manage/manage-header';
+import { ManageLayout } from '@/components/manage/manage-layout';
 import { Pager } from '@/components/manage/pager';
 import type { Paginated } from '@/components/manage/pager';
+import { StatusBadge } from '@/components/manage/status-badge';
+import type { PublishStatus } from '@/components/manage/status-badge';
+import { formatInstant } from '@/components/mosque/calendar';
+import type { PostCategoryRef } from '@/components/mosque/site-types';
+import type { MosquePost } from '@/components/mosque/types';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import type { MosqueSummary } from '@/types/mosque';
 
-type ManagedPost = MosquePost & { updated_at: string | null };
+type ManagedPost = MosquePost & {
+    category: PostCategoryRef | null;
+    status: PublishStatus;
+    updated_at: string | null;
+};
+
+type Filter = 'all' | 'published' | 'scheduled' | 'drafts';
 
 type Props = {
     mosque: MosqueSummary;
     posts: Paginated<ManagedPost>;
-    status: 'all' | 'drafts' | 'published';
+    status: Filter;
 };
 
-/** A mosque's posts, drafts included. */
+/** A mosque's posts, drafts and scheduled ones included. */
 export default function ManagePosts({ mosque, posts, status }: Props) {
     const t = useT();
     const { locale } = usePage().props;
     const base = `/manage/${mosque.slug}/posts`;
-    const filters: Props['status'][] = ['all', 'published', 'drafts'];
+    const filters: Filter[] = ['all', 'published', 'scheduled', 'drafts'];
 
     return (
-        <div className="mx-auto max-w-4xl space-y-6">
-            <ManageHeader
-                mosque={mosque}
-                title={t('manage.posts_title')}
-                description={t('manage.posts_intro')}
-                actions={
-                    <Button asChild>
-                        <Link href={`${base}/create`}>
-                            <Plus className="size-4" />
-                            {t('manage.new_post')}
-                        </Link>
-                    </Button>
-                }
-            />
-
-            <div className="flex gap-1 rounded-xl bg-muted p-1 sm:w-fit">
+        <ManageLayout
+            mosque={mosque}
+            title={t('manage.posts_title')}
+            description={t('manage.posts_intro')}
+            actions={
+                <Button asChild>
+                    <Link href={`${base}/create`}>
+                        <Plus className="size-4" aria-hidden />
+                        {t('manage.new_post')}
+                    </Link>
+                </Button>
+            }
+        >
+            <div className="flex gap-1 overflow-x-auto rounded-xl bg-muted p-1 sm:w-fit">
                 {filters.map((filter) => (
                     <Link
                         key={filter}
@@ -53,7 +65,7 @@ export default function ManagePosts({ mosque, posts, status }: Props) {
                         preserveScroll
                         aria-current={filter === status ? 'page' : undefined}
                         className={cn(
-                            'flex-1 rounded-lg px-3 py-1.5 text-center text-sm font-medium transition-colors',
+                            'flex-1 shrink-0 rounded-lg px-3 py-1.5 text-center text-sm font-medium whitespace-nowrap transition-colors',
                             filter === status
                                 ? 'bg-background shadow-sm'
                                 : 'text-muted-foreground hover:text-foreground',
@@ -87,43 +99,86 @@ export default function ManagePosts({ mosque, posts, status }: Props) {
                             )}
                             <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <PostTypeBadge type={post.type} />
-                                    {post.published_at ? (
-                                        <span>
-                                            {t('manage.published_on', {
-                                                date: formatInstant(
-                                                    post.published_at,
-                                                    locale,
-                                                    mosque.timezone,
-                                                ),
-                                            })}
+                                    <StatusBadge status={post.status} />
+                                    {post.category && (
+                                        <span className="font-medium text-foreground">
+                                            {post.category.name}
                                         </span>
-                                    ) : (
-                                        <span className="rounded-full bg-gold/20 px-2 py-0.5 font-medium text-foreground">
-                                            {t('manage.draft')}
+                                    )}
+                                    {post.published_at && (
+                                        <span>
+                                            {t(
+                                                post.status === 'scheduled'
+                                                    ? 'manage.scheduled_for'
+                                                    : 'manage.published_on',
+                                                {
+                                                    date: formatInstant(
+                                                        post.published_at,
+                                                        locale,
+                                                        mosque.timezone,
+                                                        {
+                                                            dateStyle: 'medium',
+                                                            ...(post.status ===
+                                                            'scheduled'
+                                                                ? {
+                                                                      timeStyle:
+                                                                          'short',
+                                                                  }
+                                                                : {}),
+                                                        },
+                                                    ),
+                                                },
+                                            )}
                                         </span>
                                     )}
                                     {post.pinned && (
                                         <span className="inline-flex items-center gap-1">
-                                            <Pin className="size-3.5 text-gold" />
+                                            <Pin
+                                                className="size-3.5 text-gold"
+                                                aria-hidden
+                                            />
                                             {t('manage.pinned')}
                                         </span>
                                     )}
                                     <span className="inline-flex items-center gap-1">
-                                        <MessageCircle className="size-3.5" />
+                                        <MessageCircle
+                                            className="size-3.5"
+                                            aria-hidden
+                                        />
                                         <span className="tabular-nums">
                                             {post.comments_count}
                                         </span>
+                                        <span className="sr-only">
+                                            {t('manage.stat_comments')}
+                                        </span>
                                     </span>
                                 </div>
-                                <p className="mt-1 truncate font-medium">
+                                <p
+                                    dir="auto"
+                                    className="mt-1 truncate font-medium"
+                                >
                                     {post.title}
                                 </p>
                             </div>
                             <div className="flex shrink-0 items-center gap-1">
+                                {post.url && (
+                                    <Button
+                                        asChild
+                                        variant="ghost"
+                                        size="icon"
+                                        aria-label={t('manage.view_post')}
+                                    >
+                                        <Link href={post.url}>
+                                            <ExternalLink className="size-4" />
+                                        </Link>
+                                    </Button>
+                                )}
                                 <Button asChild variant="outline" size="sm">
                                     <Link href={`${base}/${post.id}/edit`}>
-                                        <PencilLine className="size-4" />
+                                        <PencilLine
+                                            className="size-4"
+                                            aria-hidden
+                                        />
                                         {t('manage.edit')}
                                     </Link>
                                 </Button>
@@ -142,6 +197,6 @@ export default function ManagePosts({ mosque, posts, status }: Props) {
             )}
 
             <Pager page={posts} />
-        </div>
+        </ManageLayout>
     );
 }

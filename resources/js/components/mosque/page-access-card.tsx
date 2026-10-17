@@ -1,5 +1,5 @@
 import { Link } from '@inertiajs/react';
-import { Building2, HandCoins, Hourglass, Settings2 } from 'lucide-react';
+import { Building2, Hourglass, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import type { MosqueDetails, MosqueViewer } from './types';
@@ -62,27 +62,6 @@ export function PageAccessCard({
                     </Link>
                 </Button>
             )}
-        </div>
-    );
-}
-
-/** Verified mosques only: giving will come later, through a payment provider. */
-export function DonationsCard() {
-    const t = useT();
-
-    return (
-        <div className="relative overflow-hidden rounded-2xl border border-gold/40 bg-gold/5 p-5">
-            <HandCoins
-                aria-hidden="true"
-                className="absolute -end-3 -bottom-3 size-20 text-gold/15"
-            />
-            <p className="font-semibold">{t('mosque.donations_title')}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-                {t('mosque.donations_body')}
-            </p>
-            <span className="mt-3 inline-flex rounded-full bg-gold/20 px-2.5 py-0.5 text-xs font-medium">
-                {t('mosque.coming_soon')}
-            </span>
         </div>
     );
 }

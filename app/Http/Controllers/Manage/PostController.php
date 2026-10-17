@@ -3,109 +3,148 @@
 namespace App\Http\Controllers\Manage;
 
 use App\Http\Controllers\Controller;
-use App\Http\Controllers\Manage\Support\ImageStore;
+use App\Http\Controllers\Manage\Support\DefaultCategories;
+use App\Http\Controllers\Manage\Support\PostWriter;
+use App\Http\Controllers\MosquePage\Support\ArticlePresenter;
+use App\Http\Controllers\MosquePage\Support\BlogPosts;
 use App\Http\Controllers\MosquePage\Support\PostPresenter;
 use App\Http\Requests\Manage\SavePostRequest;
 use App\Models\Mosque;
 use App\Models\MosquePost;
+use App\Models\MosquePostCategory;
 use App\Support\MosquePresenter;
-use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
-use Throwable;
 
-/** Posts on a mosque's page: news, events, announcements and janaza notices. */
+/** The posts of a mosque's blog: khutbahs, news, events, announcements, janaza notices. */
 class PostController extends Controller
 {
-    public function index(Request $request, Mosque $mosque): Response
+    private const FILTERS = ['published', 'scheduled', 'drafts'];
+
+    public function index(Request $request, Mosque $mosque, DefaultCategories $defaults): Response
     {
+        $defaults->ensure($mosque, $request->user());
         $status = $request->query('status');
+        $status = in_array($status, self::FILTERS, true) ? $status : 'all';
+
         /** @var LengthAwarePaginator<int, MosquePost> $posts */
         $posts = $mosque->posts()
+            ->with('category:id,name,slug')
             ->withCount('comments')
             ->when($status === 'drafts', fn ($q) => $q->whereNull('published_at'))
-            ->when($status === 'published', fn ($q) => $q->whereNotNull('published_at'))
+            ->when($status === 'scheduled', fn ($q) => $q->where('published_at', '>', now()))
+            ->when($status === 'published', fn ($q) => $q->where('published_at', '<=', now()))
             ->orderByRaw('published_at IS NOT NULL')
-            ->orderByDesc('pinned')
             ->orderByDesc('published_at')
             ->orderByDesc('id')
             ->paginate(20)
             ->withQueryString();
         $posts->through(fn (MosquePost $post) => [
-            ...PostPresenter::post($post),
+            ...PostPresenter::post($post, $mosque->slug),
+            'category' => PostPresenter::category($post),
+            'status' => BlogPosts::status($post),
             'updated_at' => PostPresenter::iso($post->updated_at),
         ]);
 
         return Inertia::render('manage/posts', [
             'mosque' => MosquePresenter::summary($mosque),
             'posts' => $posts,
-            'status' => in_array($status, ['drafts', 'published'], true) ? $status : 'all',
+            'status' => $status,
         ]);
     }
 
-    public function create(Mosque $mosque): Response
+    public function create(Request $request, Mosque $mosque, DefaultCategories $defaults): Response
     {
+        $defaults->ensure($mosque, $request->user());
+
         return Inertia::render('manage/post-form', [
             'mosque' => MosquePresenter::summary($mosque),
             'post' => null,
-            'types' => MosquePost::TYPES,
+            ...$this->formOptions($mosque),
         ]);
     }
 
-    public function store(SavePostRequest $request, Mosque $mosque, ImageStore $images): RedirectResponse
+    public function store(SavePostRequest $request, Mosque $mosque, PostWriter $writer): RedirectResponse
     {
         $post = new MosquePost(['mosque_id' => $mosque->id, 'author_id' => $request->user()->id]);
-        $this->fill($post, $request, $mosque, $images);
+        $writer->save($post, $request, $mosque);
 
-        return $this->toIndex($mosque, $post->published_at ? 'manage.post_published' : 'manage.post_saved_draft');
+        return $this->toIndex($mosque, match (BlogPosts::status($post)) {
+            'published' => 'manage.post_published',
+            'scheduled' => 'manage.post_scheduled',
+            default => 'manage.post_saved_draft',
+        });
     }
 
-    public function edit(Mosque $mosque, MosquePost $post): Response
+    public function edit(Request $request, Mosque $mosque, MosquePost $post, DefaultCategories $defaults): Response
     {
         // Besides the route's scoped binding: the post's own mosque must be managed.
         Gate::authorize('update', $post);
-        $start = $post->getAttribute('event_starts_at');
+        $defaults->ensure($mosque, $request->user());
+        $local = fn (mixed $at) => $at instanceof CarbonInterface ? $at->setTimezone($mosque->timezone)->format('Y-m-d\TH:i') : '';
+        $status = BlogPosts::status($post);
 
         return Inertia::render('manage/post-form', [
             'mosque' => MosquePresenter::summary($mosque),
             'post' => [
                 'id' => $post->id,
                 'type' => $post->type,
+                'category_id' => $post->category_id,
                 'title' => $post->title,
+                'slug' => (string) $post->slug,
+                'excerpt' => (string) $post->excerpt,
                 'body' => $post->body,
                 'image_url' => PostPresenter::url($post->image_path),
-                'event_starts_at' => $start instanceof CarbonInterface
-                    ? $start->setTimezone($mosque->timezone)->format('Y-m-d\TH:i')
-                    : '',
+                'video_url' => (string) $post->video_url,
+                'attachment' => ArticlePresenter::attachment($post),
+                'event_starts_at' => $local($post->getAttribute('event_starts_at')),
                 'pinned' => (bool) $post->pinned,
-                'published' => $post->published_at !== null,
+                'status' => $status,
+                'publish_at' => $status === 'scheduled' ? $local($post->getAttribute('published_at')) : '',
+                'published' => $status === 'published',
+                'url' => PostPresenter::articleUrl($mosque->slug, $post),
             ],
-            'types' => MosquePost::TYPES,
+            ...$this->formOptions($mosque),
         ]);
     }
 
-    public function update(SavePostRequest $request, Mosque $mosque, MosquePost $post, ImageStore $images): RedirectResponse
+    public function update(SavePostRequest $request, Mosque $mosque, MosquePost $post, PostWriter $writer): RedirectResponse
     {
         Gate::authorize('update', $post);
-        $this->fill($post, $request, $mosque, $images);
+        $writer->save($post, $request, $mosque);
 
         return $this->toIndex($mosque, 'manage.post_updated');
     }
 
-    public function destroy(Mosque $mosque, MosquePost $post, ImageStore $images): RedirectResponse
+    public function destroy(Mosque $mosque, MosquePost $post, PostWriter $writer): RedirectResponse
     {
         Gate::authorize('delete', $post);
-        // The record is soft-deleted; the picture goes at once (it may show people).
-        $images->delete($mosque, $post->image_path);
-        $post->forceFill(['image_path' => null])->save();
-        $post->delete();
+        // The record is soft-deleted; its files go at once (a picture may show people).
+        $writer->delete($post, $mosque);
 
         return $this->toIndex($mosque, 'manage.post_deleted');
+    }
+
+    /** @return array<string, mixed> */
+    private function formOptions(Mosque $mosque): array
+    {
+        /** @var Collection<int, MosquePostCategory> $categories */
+        $categories = $mosque->postCategories()->get(['id', 'name', 'slug']);
+
+        return [
+            'types' => MosquePost::TYPES,
+            'categories' => $categories
+                ->map(fn (MosquePostCategory $c) => ['id' => $c->id, 'name' => $c->name, 'slug' => $c->slug])
+                ->values()
+                ->all(),
+            'limits' => ['body' => SavePostRequest::BODY_MAX, 'attachment_mb' => 10],
+        ];
     }
 
     private function toIndex(Mosque $mosque, string $message): RedirectResponse
@@ -113,44 +152,5 @@ class PostController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => ui($message)]);
 
         return to_route('manage.posts.index', $mosque);
-    }
-
-    private function fill(MosquePost $post, SavePostRequest $request, Mosque $mosque, ImageStore $images): void
-    {
-        $data = $request->validated();
-        $isEvent = $data['type'] === 'event';
-        $publish = $request->boolean('publish');
-
-        $post->fill([
-            'type' => $data['type'],
-            'title' => $data['title'],
-            'body' => $data['body'],
-            'pinned' => $request->boolean('pinned'),
-            'event_starts_at' => $isEvent && ! empty($data['event_starts_at'])
-                ? CarbonImmutable::createFromFormat('Y-m-d\TH:i', $data['event_starts_at'], $mosque->timezone)->utc()
-                : null,
-            'published_at' => $publish ? ($post->published_at ?? now()) : null,
-        ]);
-
-        $old = $post->image_path;
-        $stored = null;
-        if ($request->hasFile('image')) {
-            $post->image_path = $stored = $images->store($mosque, $request->file('image'), 'image', 'posts', 1600);
-        } elseif ($request->boolean('remove_image')) {
-            $post->image_path = null;
-        }
-
-        try {
-            $post->save();
-        } catch (Throwable $e) {
-            $images->delete($mosque, $stored);
-
-            throw $e;
-        }
-
-        // The old picture goes only once the post points elsewhere.
-        if ($old !== null && $old !== $post->image_path) {
-            $images->delete($mosque, $old);
-        }
     }
 }

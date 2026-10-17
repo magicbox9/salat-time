@@ -3,6 +3,7 @@
 namespace Tests\Feature\Manage;
 
 use App\Models\Mosque;
+use App\Models\MosquePage;
 use App\Models\MosquePost;
 use App\Models\PostComment;
 use App\Models\User;
@@ -28,9 +29,13 @@ class ManageAccessTest extends TestCase
     {
         $slug = $this->mosque->slug;
         $post = MosquePost::factory()->for($this->mosque)->create();
+        $page = MosquePage::query()->create([
+            'mosque_id' => $this->mosque->id, 'title' => 'À propos', 'slug' => 'a-propos', 'body' => 'Bienvenue.',
+        ]);
 
-        return ["/manage/{$slug}", "/manage/{$slug}/posts", "/manage/{$slug}/posts/create",
-            "/manage/{$slug}/posts/{$post->id}/edit", "/manage/{$slug}/comments"];
+        return ["/manage/{$slug}", "/manage/{$slug}/details", "/manage/{$slug}/posts", "/manage/{$slug}/posts/create",
+            "/manage/{$slug}/posts/{$post->id}/edit", "/manage/{$slug}/categories", "/manage/{$slug}/pages",
+            "/manage/{$slug}/pages/create", "/manage/{$slug}/pages/{$page->id}/edit", "/manage/{$slug}/comments"];
     }
 
     public function test_guests_are_sent_to_the_login_page(): void
@@ -69,9 +74,18 @@ class ManageAccessTest extends TestCase
 
         $this->actingAs($manager)->get("/manage/{$this->mosque->slug}")
             ->assertInertia(fn (Assert $page) => $page
+                ->component('manage/overview')
+                ->where('mosque.slug', $this->mosque->slug)
+                ->has('stats')
+                ->has('checklist'));
+
+        $this->actingAs($manager)->get("/manage/{$this->mosque->slug}/details")
+            ->assertInertia(fn (Assert $page) => $page
                 ->component('manage/edit')
                 ->where('mosque.slug', $this->mosque->slug)
-                ->has('values.description'));
+                ->has('values.description')
+                ->has('values.social_links.facebook')
+                ->has('palette'));
     }
 
     public function test_admins_manage_any_mosque(): void

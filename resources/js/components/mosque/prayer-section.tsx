@@ -34,11 +34,19 @@ export function PrayerSection({
     const tabs = useId();
 
     if (!live.today) {
-        return <NoTimes mosque={mosque} nearby={nearbyWithTimes} />;
+        return (
+            <div id="prayer-times" className="scroll-mt-40">
+                <NoTimes mosque={mosque} nearby={nearbyWithTimes} />
+            </div>
+        );
     }
 
     return (
-        <section aria-labelledby="prayer-times" className="space-y-4">
+        <section
+            id="prayer-times"
+            aria-labelledby="prayer-times-title"
+            className="scroll-mt-40 space-y-4"
+        >
             <NextPrayerHero
                 today={live.today}
                 tomorrow={live.tomorrow}
@@ -47,7 +55,10 @@ export function PrayerSection({
 
             <div className="rounded-2xl border bg-card p-4 shadow-xs sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 id="prayer-times" className="text-lg font-semibold">
+                    <h2
+                        id="prayer-times-title"
+                        className="text-lg font-semibold"
+                    >
                         {t('mosque.prayer_times')}
                     </h2>
                     <Segmented

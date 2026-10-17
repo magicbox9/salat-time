@@ -126,7 +126,7 @@ export default function ManageIndex({ mosques, isAdmin }: Props) {
                                     </Button>
                                     <Button asChild size="sm" variant="ghost">
                                         <Link href={`/mosques/${mosque.slug}`}>
-                                            {t('manage.view_page')}
+                                            {t('manage.view_site')}
                                         </Link>
                                     </Button>
                                 </div>
