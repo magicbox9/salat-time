@@ -2,6 +2,7 @@ import { Link } from '@inertiajs/react';
 import {
     ArrowLeft,
     Building2,
+    HandCoins,
     Inbox,
     LayoutDashboard,
     ShieldCheck,
@@ -60,6 +61,13 @@ export function AdminShell({
             href: '/admin/users',
             label: t('admin.nav_users'),
             icon: Users,
+            exact: false,
+            badge: 0,
+        },
+        {
+            href: '/admin/fundraising',
+            label: t('fundraising.admin_nav'),
+            icon: HandCoins,
             exact: false,
             badge: 0,
         },
