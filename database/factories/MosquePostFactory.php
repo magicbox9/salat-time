@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Mosque;
 use App\Models\MosquePost;
 use Illuminate\Database\Eloquent\Factories\Factory;
+use Illuminate\Support\Str;
 
 /** @extends Factory<MosquePost> */
 class MosquePostFactory extends Factory
@@ -14,7 +15,8 @@ class MosquePostFactory extends Factory
         return [
             'mosque_id' => Mosque::factory(),
             'type' => 'news',
-            'title' => fake()->sentence(5),
+            'title' => $title = fake()->sentence(5),
+            'slug' => Str::slug($title).'-'.Str::lower(Str::random(6)),
             'body' => fake()->paragraphs(2, true),
             'published_at' => now(),
         ];

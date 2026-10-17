@@ -20,11 +20,8 @@ use App\Http\Controllers\Discover\MosquesInBoundsController;
 use App\Http\Controllers\Discover\MyMosquesController;
 use App\Http\Controllers\Discover\NearbyMosquesController;
 use App\Http\Controllers\Discover\PrimaryMosqueController;
-use App\Http\Controllers\Hub\AdoptGuestMosque;
 use App\Http\Controllers\Hub\ChosenMosqueController;
 use App\Http\Controllers\Hub\HomePreferencesController;
-use Illuminate\Auth\Events\Login;
-use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'home'])->name('home');
@@ -40,11 +37,6 @@ Route::patch('me/preferences/home', HomePreferencesController::class)
     ->middleware(['auth', 'throttle:60,1,home-preferences:'])
     ->name('me.preferences.home');
 
-// A mosque chosen as a guest becomes the account's own mosque at sign-in.
-// (This module owns no service provider; ChosenMosque::for() also adopts
-// lazily, so cached routes lose nothing.)
-Event::listen(Login::class, AdoptGuestMosque::class);
-
 // Address lookups reach outside services: 30 per minute per visitor.
 Route::get('geocode.json', GeocodeController::class)
     ->middleware('throttle:30,1,geocode:')
@@ -56,7 +48,8 @@ Route::middleware('throttle:120,1,discover:')->group(function () {
     Route::get('mosques/search.json', MosqueSearchController::class)->name('mosques.search');
 });
 
-Route::middleware(['auth', 'throttle:60,1,favorites:'])->group(function () {
+// Slugs only: a {mosque} segment never captures a ".json" path.
+Route::middleware(['auth', 'throttle:60,1,favorites:'])->where(['mosque' => '[a-z0-9-]+'])->group(function () {
     Route::post('mosques/{mosque}/favorite', [FavoriteMosqueController::class, 'store'])->name('mosques.favorite.store');
     Route::delete('mosques/{mosque}/favorite', [FavoriteMosqueController::class, 'destroy'])->name('mosques.favorite.destroy');
     Route::post('mosques/{mosque}/primary', [PrimaryMosqueController::class, 'store'])->name('mosques.primary.store');

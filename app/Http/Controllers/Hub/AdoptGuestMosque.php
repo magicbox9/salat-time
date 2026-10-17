@@ -11,9 +11,8 @@ use Illuminate\Http\Request;
  * At sign-in (and right after registration), a mosque chosen as a guest in
  * this browser becomes the account's own mosque when it has none yet.
  *
- * Registered in routes/modules/discover.php (the module owns no provider);
- * ChosenMosque::for() adopts the same way on the first page after sign-in,
- * so nothing is lost when routes are cached and this listener is not bound.
+ * Called by App\Listeners\AdoptGuestMosqueOnLogin; ChosenMosque::for() also
+ * adopts on the first page after sign-in.
  */
 class AdoptGuestMosque
 {

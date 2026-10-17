@@ -2,6 +2,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import {
     Building2,
     FileCheck2,
+    HandCoins,
     Heart,
     LayoutDashboard,
     LogOut,
@@ -70,6 +71,7 @@ export function UserNav() {
                 {item('/dashboard', t('site.nav_my_space'), LayoutDashboard)}
                 {item('/me/mosques', t('site.nav_favorites'), Heart)}
                 {item('/me/claims', t('site.nav_claims'), FileCheck2)}
+                {item('/me/donations', t('fundraising.my_title'), HandCoins)}
                 {auth.managedMosques.length > 0 &&
                     item('/manage', t('site.nav_manage'), Building2)}
                 {auth.isAdmin && item('/admin', t('site.nav_admin'), ShieldCheck)}
