@@ -209,5 +209,6 @@
     "has_errors": "Some settings need a look.",
     "unit_minutes": "min",
     "unit_seconds": "s",
-    "unit_days": "days"
+    "unit_days": "days",
+    "screen_calculated": "Calculated times"
 }

@@ -49,14 +49,18 @@ class DisplayDataTest extends TestCase
         $this->assertSame('العشاء', $response->json('labels.ar.prayer_isha'));
     }
 
-    public function test_a_mosque_without_a_calendar_has_no_times_rather_than_estimated_ones(): void
+    public function test_a_mosque_without_a_calendar_shows_calculated_times_marked_as_such(): void
     {
         $mosque = Mosque::factory()->create();
 
-        $this->getJson("/mosques/{$mosque->slug}/display.json")
+        $days = $this->getJson("/mosques/{$mosque->slug}/display.json")
             ->assertOk()
-            ->assertJsonPath('days', [])
-            ->assertJsonPath('yesterday', null);
+            ->assertJsonPath('yesterday.source', 'calculated')
+            ->json('days');
+
+        $this->assertCount(7, $days);
+        $this->assertSame(['calculated'], array_values(array_unique(array_column($days, 'source'))));
+        $this->assertSame([null, null, null, null, null], array_values($days[0]['iqama']));
     }
 
     public function test_only_messages_inside_their_window_are_shown(): void

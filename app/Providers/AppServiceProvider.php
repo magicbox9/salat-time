@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\PrayerTimes\Calculation\ConventionTable;
 use Carbon\CarbonImmutable;
 use Illuminate\Mail\Markdown;
 use Illuminate\Support\Facades\Date;
@@ -16,7 +17,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // The prayer-method data files are read once per process.
+        $this->app->singleton(ConventionTable::class);
     }
 
     /**

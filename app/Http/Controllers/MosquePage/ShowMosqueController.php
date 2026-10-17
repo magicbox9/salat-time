@@ -15,8 +15,8 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * A mosque's home page: its published times at the centre, then its news,
- * events, campaigns and how to reach it.
+ * A mosque's home page: its times at the centre (published, or calculated and
+ * labelled as such), then its news, events, campaigns and how to reach it.
  */
 class ShowMosqueController extends Controller
 {
@@ -43,7 +43,9 @@ class ShowMosqueController extends Controller
                 return MosqueProfile::details($mosque);
             },
             'live' => $getLive,
-            'nearbyWithTimes' => fn () => $getLive()['today'] === null ? $this->nearbyWithTimes($mosque) : [],
+            // Calculated (or missing) times: point to the nearest mosques that publish their own.
+            'nearbyWithTimes' => fn () => ($getLive()['today']['source'] ?? null) !== MosqueTimetable::SOURCE_PUBLISHED
+                ? $this->nearbyWithTimes($mosque) : [],
             'viewer' => fn () => MosqueProfile::viewer($user, $mosque, $canManage),
             'pinned' => fn () => HomeSections::pinned($mosque),
             'latest' => fn () => HomeSections::latestByCategory($mosque),

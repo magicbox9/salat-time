@@ -73,7 +73,8 @@ class DiscoverPagesTest extends TestCase
                 ->where('mosques.0.today.times.fajr', '06:00')
                 ->has('mosques.0.tomorrow.times')
                 ->where('mosques.1.slug', $saved->slug)
-                ->where('mosques.1.today', null));
+                // No calendar: calculated times, marked as such.
+                ->where('mosques.1.today.source', 'calculated'));
     }
 
     public function test_my_mosques_requires_a_verified_account(): void

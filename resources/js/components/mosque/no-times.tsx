@@ -6,13 +6,9 @@ import type { MosqueDetails } from './types';
 
 type Props = { mosque: MosqueDetails; nearby: MosqueSummary[] };
 
-/** No published calendar: say so plainly (times are never guessed) and point to neighbours. */
+/** No times for today in the mosque's own calendar: say so plainly (a gap is never guessed) and point to neighbours. */
 export function NoTimes({ mosque, nearby }: Props) {
     const t = useT();
-    const { locale } = usePage().props;
-    const km = new Intl.NumberFormat(intlLocale(locale), {
-        maximumFractionDigits: 1,
-    });
 
     return (
         <section
@@ -33,58 +29,77 @@ export function NoTimes({ mosque, nearby }: Props) {
                 </div>
             </div>
 
-            {nearby.length > 0 && (
-                <div className="mt-5">
-                    <h3 className="text-sm font-medium">
-                        {t('mosque.nearby_with_times')}
-                    </h3>
-                    <ul className="mt-2 divide-y rounded-xl border">
-                        {nearby.map((other) => (
-                            <li key={other.id}>
-                                <Link
-                                    href={`/mosques/${other.slug}`}
-                                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60"
-                                >
-                                    <span className="min-w-0 flex-1">
-                                        <span className="flex items-center gap-1.5 font-medium">
-                                            <span className="truncate">
-                                                {other.name}
-                                            </span>
-                                            {other.verified && (
-                                                <BadgeCheck className="size-4 shrink-0 text-gold" />
-                                            )}
-                                        </span>
-                                        <span className="block truncate text-xs text-muted-foreground">
-                                            {[other.city, other.postcode]
-                                                .filter(Boolean)
-                                                .join(' · ')}
-                                        </span>
-                                    </span>
-                                    {other.distance_m !== null && (
-                                        <span
-                                            className="shrink-0 text-xs text-muted-foreground tabular-nums"
-                                            dir="ltr"
-                                        >
-                                            {other.distance_m >= 1000
-                                                ? t('site.km_away', {
-                                                      distance: km.format(
-                                                          other.distance_m /
-                                                              1000,
-                                                      ),
-                                                  })
-                                                : t('site.m_away', {
-                                                      distance:
-                                                          other.distance_m,
-                                                  })}
-                                        </span>
-                                    )}
-                                    <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" />
-                                </Link>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
+            <NearbyWithTimes nearby={nearby} />
         </section>
+    );
+}
+
+/** The closest mosques that publish their own times. */
+export function NearbyWithTimes({
+    nearby,
+    className = 'mt-5',
+}: {
+    nearby: MosqueSummary[];
+    className?: string;
+}) {
+    const t = useT();
+    const { locale } = usePage().props;
+    const km = new Intl.NumberFormat(intlLocale(locale), {
+        maximumFractionDigits: 1,
+    });
+
+    if (nearby.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className={className}>
+            <h3 className="text-sm font-medium">
+                {t('mosque.nearby_with_times')}
+            </h3>
+            <ul className="mt-2 divide-y rounded-xl border">
+                {nearby.map((other) => (
+                    <li key={other.id}>
+                        <Link
+                            href={`/mosques/${other.slug}`}
+                            className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-accent/60"
+                        >
+                            <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5 font-medium">
+                                    <span className="truncate">
+                                        {other.name}
+                                    </span>
+                                    {other.verified && (
+                                        <BadgeCheck className="size-4 shrink-0 text-gold" />
+                                    )}
+                                </span>
+                                <span className="block truncate text-xs text-muted-foreground">
+                                    {[other.city, other.postcode]
+                                        .filter(Boolean)
+                                        .join(' · ')}
+                                </span>
+                            </span>
+                            {other.distance_m !== null && (
+                                <span
+                                    className="shrink-0 text-xs text-muted-foreground tabular-nums"
+                                    dir="ltr"
+                                >
+                                    {other.distance_m >= 1000
+                                        ? t('site.km_away', {
+                                              distance: km.format(
+                                                  other.distance_m / 1000,
+                                              ),
+                                          })
+                                        : t('site.m_away', {
+                                              distance: other.distance_m,
+                                          })}
+                                </span>
+                            )}
+                            <ChevronRight className="size-4 shrink-0 text-muted-foreground rtl:rotate-180" />
+                        </Link>
+                    </li>
+                ))}
+            </ul>
+        </div>
     );
 }

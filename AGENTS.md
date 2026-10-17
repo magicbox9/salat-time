@@ -37,9 +37,16 @@ Redis (cache, sessions, queue), MapLibre GL for the globe and maps.
    from the request.
 2. **Schema changes only in new migrations**, with foreign keys and explicit
    `ON DELETE`. Never edit a committed migration.
-3. **Prayer times come from published mosque calendars** (Mawaqit data imported
-   from the research studies) until the automatic calculation lands. Never
-   invent or estimate a mosque's times; show "no published times" instead.
+3. **A mosque's own published calendar always comes first** (Mawaqit data
+   imported from the research studies). A mosque that publishes none gets
+   times calculated with the France method (`resources/prayer-method`, copied
+   verbatim from `Prayer Times Study/final-method` and checked against all
+   308,520 test values), always shown as calculated (`source: "calculated"`,
+   no iqama), never as the mosque's own. A gap in a published calendar is
+   never filled with a calculation. Never edit the method's data or test
+   vectors by hand; refresh them from the study package (SHA-256 pinned).
+   `PRAYER_FRANCE_TABLE=false` drops the département table (decision D1)
+   for UOIF 12° with safety minutes.
 4. **No calls to mawaqit.net** unless `MAWAQIT_SYNC_ENABLED=true` was set by the
    owner. Mawaqit describes its API as private; the imported data is subject to
    its terms. Before going public, the owner must clear data use with Mawaqit.
@@ -82,6 +89,6 @@ points in one app without changing them in all.
   commit, explicit-path staging. Commit after every step.
 - Ship tests with every feature: allowed user, denied user, validation.
 - Files under ~300 lines; extract before growing a big file.
-- Strings go through the translation files (`lang/en.json`, `lang/fr.json`,
-  `lang/ar.json`); Arabic switches the layout to right-to-left.
+- Strings go through the translation files (`lang/{en,fr,ar}/<group>.json`,
+  keys `group.key`); Arabic switches the layout to right-to-left.
 - Check UI changes in a browser in light and dark mode, at phone and desktop widths.

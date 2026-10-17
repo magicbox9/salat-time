@@ -105,7 +105,7 @@ export function MosqueListItem({
                                 {t('discover.times_published')}
                             </span>
                         )}
-                        {mosque.has_times ? (
+                        {mosque.has_times || mosque.today ? (
                             <NextPrayerLine
                                 today={mosque.today}
                                 tomorrow={mosque.tomorrow}

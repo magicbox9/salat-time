@@ -15,11 +15,15 @@ import { STYLE_ICON } from '@/components/hub/customise/style-picker';
 import { buildDayView } from '@/components/hub/day';
 import { HubHero } from '@/components/hub/hub-hero';
 import { LatestPosts } from '@/components/hub/latest-posts';
-import { NoTimes } from '@/components/hub/no-times';
+import { NearbyPublishing, NoTimes } from '@/components/hub/no-times';
 import { prayerDay } from '@/components/hub/prayer-day';
 import { QuickActions } from '@/components/hub/quick-actions';
 import { TimesDisplay } from '@/components/hub/styles/times-display';
 import { TrackerCheckIn } from '@/components/hub/tracker-check-in';
+import {
+    CalculatedNotice,
+    isCalculated,
+} from '@/components/prayer/calculated-notice';
 import type { HubPageProps } from '@/components/hub/types';
 import { useHubPreferences } from '@/components/hub/use-hub-preferences';
 import { useMidnightReload } from '@/components/hub/use-midnight-reload';
@@ -28,10 +32,11 @@ import { useNow } from '@/hooks/use-now';
 import { useT } from '@/lib/i18n';
 
 /**
- * The hub: "/" once the visitor has chosen a mosque. Its published times
- * are the centre — a live countdown, today's times in the visitor's chosen
- * style, the adhan in the page — with the tracker, adhkar, campaigns and
- * the mosque's news around them.
+ * The hub: "/" once the visitor has chosen a mosque. Its times are the
+ * centre — a live countdown, today's times in the visitor's chosen style,
+ * the adhan in the page — with the tracker, adhkar, campaigns and the
+ * mosque's news around them. A mosque that publishes no calendar gets
+ * calculated times, said plainly, with the nearest mosques that publish.
  */
 export default function Hub({
     mosque,
@@ -71,6 +76,7 @@ export default function Hub({
     useMidnightReload(date, live.today?.date ?? live.now.slice(0, 10));
 
     const adhan = useAdhan({ view, prefs, track, now });
+    const calculated = isCalculated(live.today);
 
     // The adhan comes first: an open Customise sheet (a modal that blocks
     // clicks and focus outside it) closes so the overlay can be used.
@@ -97,6 +103,7 @@ export default function Hub({
                     view={view}
                     prefs={prefs}
                     now={now}
+                    calculated={calculated}
                     corner={
                         view && (
                             <AdhanPill
@@ -162,6 +169,15 @@ export default function Hub({
                             southern={mosque.lat < 0}
                             now={now}
                         />
+                        {calculated && (
+                            <CalculatedNotice
+                                name={mosque.name}
+                                method={live.today?.method}
+                                className="mt-4"
+                            >
+                                <NearbyPublishing nearby={nearbyWithTimes} />
+                            </CalculatedNotice>
+                        )}
                     </section>
                 ) : (
                     <NoTimes

@@ -8,14 +8,22 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 /**
- * Prayer times exactly as a mosque publishes them (its Mawaqit calendar),
- * read the same way the Mac app reads them: the row for a date is found by
- * month and day, and iqama values are either "+N" minutes after the adhan or a
- * fixed "HH:MM". Nothing is calculated or estimated here.
+ * A mosque's prayer times. Its published calendar (Mawaqit) always comes
+ * first, read the same way the Mac app reads it: the row for a date is found
+ * by month and day, and iqama values are either "+N" minutes after the adhan
+ * or a fixed "HH:MM". A mosque that publishes no calendar gets calculated
+ * times instead (CalculatedTimes), marked with source "calculated" and
+ * without iqama, so no screen ever passes them off as the mosque's own.
  */
 class MosqueTimetable
 {
     public const PRAYERS = ['fajr', 'shuruq', 'dhuhr', 'asr', 'maghrib', 'isha'];
+
+    /** The mosque's own calendar. */
+    public const SOURCE_PUBLISHED = 'published';
+
+    /** Calculated for the mosque's place (no calendar published). */
+    public const SOURCE_CALCULATED = 'calculated';
 
     /** Prayers that have an iqama (Shuruq has none). */
     public const IQAMA_PRAYERS = ['fajr', 'dhuhr', 'asr', 'maghrib', 'isha'];
@@ -23,7 +31,10 @@ class MosqueTimetable
     /** @var array<int, MosquePrayerCalendar|null> */
     private array $calendars = [];
 
-    public function hasTimes(Mosque $mosque): bool
+    public function __construct(private readonly CalculatedTimes $calculated) {}
+
+    /** Whether the mosque publishes its own calendar (otherwise its times are calculated). */
+    public function publishesTimes(Mosque $mosque): bool
     {
         return $this->calendar($mosque, (int) now($mosque->timezone)->year) !== null;
     }
@@ -43,15 +54,17 @@ class MosqueTimetable
     }
 
     /**
-     * One day's times, or null when the mosque publishes none.
+     * One day's times: the published ones, or calculated ones when the mosque
+     * publishes no calendar. Null only when a published calendar lacks that
+     * day (a gap in a mosque's own calendar is never filled with a guess).
      *
-     * @return array{date: string, times: array<string, string>, iqama: array<string, string|null>, jumua: string|null}|null
+     * @return array{date: string, times: array<string, string>, iqama: array<string, string|null>, jumua: string|null, source: string, method?: array<string, string|null>}|null
      */
     public function day(Mosque $mosque, CarbonInterface $date): ?array
     {
         $calendar = $this->calendar($mosque, (int) $date->year);
         if (! $calendar) {
-            return null;
+            return $this->calculated->mosqueDay($mosque, $date);
         }
         $row = $this->row($calendar->days, $date);
         if (! $row || count($row) < 6) {
@@ -70,6 +83,7 @@ class MosqueTimetable
             'times' => $times,
             'iqama' => $iqama,
             'jumua' => $isFriday ? ($mosque->jumua_as_dhuhr ? $times['dhuhr'] : $mosque->jumua) : null,
+            'source' => self::SOURCE_PUBLISHED,
         ];
     }
 

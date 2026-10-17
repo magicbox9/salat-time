@@ -87,5 +87,6 @@
     "login_needed": "Veuillez d'abord vous connecter.",
     "not_allowed": "Vous n'êtes pas autorisé à faire cela.",
     "session_expired": "Votre session a expiré. Veuillez recharger la page.",
-    "invalid_cursor": "Cette liste a changé. Veuillez recharger la page."
+    "invalid_cursor": "Cette liste a changé. Veuillez recharger la page.",
+    "times_source_calculated": "Horaires calculés (méthode {version}). Les horaires de la mosquée les remplacent dès qu'ils sont publiés."
 }

@@ -87,5 +87,6 @@
     "login_needed": "Please log in first.",
     "not_allowed": "You are not allowed to do this.",
     "session_expired": "Your session has expired. Please reload the page.",
-    "invalid_cursor": "This list has changed. Please reload the page."
+    "invalid_cursor": "This list has changed. Please reload the page.",
+    "times_source_calculated": "Calculated times (method {version}). The mosque's own timetable replaces them as soon as it is published."
 }

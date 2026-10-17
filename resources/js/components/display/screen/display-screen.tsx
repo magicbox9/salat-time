@@ -121,6 +121,15 @@ export function DisplayScreen({
                             layout={stage.layout}
                         />
                     )}
+                    {model.day?.source === 'calculated' && (
+                        // In the frame's padding: the mosque publishes no timetable here.
+                        <p className="pointer-events-none absolute inset-x-0 bottom-[0.8cqmin] z-20 text-center text-[1.5cqmin] leading-none text-(--d-muted)">
+                            {text.t('calculated')}
+                            {text.t2('calculated') && (
+                                <> · {text.t2('calculated')}</>
+                            )}
+                        </p>
+                    )}
                     <PhaseOverlay
                         model={model}
                         text={text}

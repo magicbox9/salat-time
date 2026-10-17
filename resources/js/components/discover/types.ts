@@ -1,7 +1,7 @@
 import type { DayTimes, MosqueSummary } from '@/types/mosque';
 
-/** Only the published times of a day (enough for the next-prayer countdown). */
-export type DayTimesLite = Pick<DayTimes, 'date' | 'times'>;
+/** Only the times of a day (enough for the next-prayer countdown); source "calculated" when the mosque publishes none. */
+export type DayTimesLite = Pick<DayTimes, 'date' | 'times' | 'source'>;
 
 /** A mosque card on the map and in lists (GET /mosques/near.json, /me/mosques). */
 export type MosqueCard = MosqueSummary & {

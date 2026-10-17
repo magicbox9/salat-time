@@ -209,5 +209,6 @@
     "has_errors": "بعض الإعدادات تحتاج إلى مراجعة.",
     "unit_minutes": "د",
     "unit_seconds": "ث",
-    "unit_days": "أيام"
+    "unit_days": "أيام",
+    "screen_calculated": "مواقيت محسوبة"
 }

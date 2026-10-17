@@ -1,5 +1,6 @@
 import { Clock } from 'lucide-react';
 import { buildDayView } from '@/components/hub/day';
+import { CalculatedTag } from '@/components/prayer/calculated-notice';
 import { useNow } from '@/hooks/use-now';
 import { useT } from '@/lib/i18n';
 import { formatCountdown } from '@/lib/prayer-time';
@@ -16,7 +17,10 @@ type Props = {
     className?: string;
 };
 
-/** "Asr 16:26 · 1:12:05" — the next published prayer with a live countdown (nothing when unpublished). */
+/**
+ * "Asr 16:26 · 1:12:05" — the next prayer with a live countdown (nothing
+ * without times), tagged "Calculated" when the mosque publishes none.
+ */
 export function NextPrayerLine({
     today,
     tomorrow,
@@ -64,6 +68,7 @@ export function NextPrayerLine({
                     countdown={formatCountdown(view.untilNext)}
                 />
             </span>
+            {day?.source === 'calculated' && <CalculatedTag />}
         </p>
     );
 }

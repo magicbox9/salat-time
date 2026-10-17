@@ -1,3 +1,7 @@
+import {
+    CalculatedTag,
+    isCalculated,
+} from '@/components/prayer/calculated-notice';
 import { useNow } from '@/hooks/use-now';
 import { useT } from '@/lib/i18n';
 import { currentPrayer, formatCountdown, nextPrayer } from '@/lib/prayer-time';
@@ -16,8 +20,9 @@ type Props = {
 };
 
 /**
- * Today's published times with the next prayer highlighted and a live
- * countdown. Shared by the map popup and the mosque page.
+ * Today's times with the next prayer highlighted and a live countdown,
+ * marked when they are calculated (the mosque publishes none). Shared by
+ * the map popup and the dashboard.
  */
 export function TodayTimes({
     today,
@@ -40,40 +45,52 @@ export function TodayTimes({
 
     const next = nextPrayer(today, tomorrow, timezone, now);
     const current = currentPrayer(today, timezone, now);
-    const highlight: PrayerName | null = next && !next.tomorrow ? next.prayer : null;
+    const highlight: PrayerName | null =
+        next && !next.tomorrow ? next.prayer : null;
 
     return (
         <div className={cn('space-y-3', className)}>
             {next && (
                 <div className="flex items-baseline justify-between gap-3 rounded-lg bg-primary/10 px-3 py-2">
                     <span className="text-sm font-medium text-primary">
-                        {t('site.next_prayer')}: {t(`site.prayer_${next.prayer}`)}{' '}
+                        {t('site.next_prayer')}:{' '}
+                        {t(`site.prayer_${next.prayer}`)}{' '}
                         <span dir="ltr">{next.time}</span>
                     </span>
                     <span
-                        className="font-mono text-sm tabular-nums text-primary"
+                        className="font-mono text-sm text-primary tabular-nums"
                         dir="ltr"
                     >
                         {formatCountdown(next.inMinutes)}
                     </span>
                 </div>
             )}
-            <ul className={cn('divide-y divide-border', compact ? 'text-sm' : '')}>
+            <ul
+                className={cn(
+                    'divide-y divide-border',
+                    compact ? 'text-sm' : '',
+                )}
+            >
                 {PRAYERS.map((prayer) => {
-                    const iqama = prayer === 'shuruq' ? null : today.iqama[prayer];
+                    const iqama =
+                        prayer === 'shuruq' ? null : today.iqama[prayer];
 
                     return (
                         <li
                             key={prayer}
                             className={cn(
                                 'flex items-center justify-between gap-3 py-1.5',
-                                prayer === highlight && 'font-semibold text-primary',
+                                prayer === highlight &&
+                                    'font-semibold text-primary',
                                 prayer === current && 'text-foreground',
                                 prayer === 'shuruq' && 'text-muted-foreground',
                             )}
                         >
                             <span>{t(`site.prayer_${prayer}`)}</span>
-                            <span className="flex items-baseline gap-3 tabular-nums" dir="ltr">
+                            <span
+                                className="flex items-baseline gap-3 tabular-nums"
+                                dir="ltr"
+                            >
                                 <span>{today.times[prayer]}</span>
                                 {showIqama && (
                                     <span className="w-12 text-end text-xs text-muted-foreground">
@@ -93,6 +110,12 @@ export function TodayTimes({
                     </li>
                 )}
             </ul>
+            {isCalculated(today) && (
+                <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                    <CalculatedTag />
+                    <span>{t('site.calculated_hint')}</span>
+                </p>
+            )}
         </div>
     );
 }

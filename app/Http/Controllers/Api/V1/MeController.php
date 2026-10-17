@@ -36,7 +36,11 @@ class MeController extends Controller implements HasMiddleware
         ]]);
     }
 
-    /** The day my mosque publishes for ?date= (default: today in the mosque's time zone). */
+    /**
+     * My mosque's day for ?date= (default: today in the mosque's time zone):
+     * its published times, or calculated ones (day.source = "calculated", no
+     * iqama) when it publishes none.
+     */
     public function times(Request $request, MosqueTimetable $timetable): JsonResponse
     {
         $data = $request->validate(['date' => ['nullable', 'date_format:Y-m-d']]);
@@ -48,7 +52,7 @@ class MeController extends Controller implements HasMiddleware
         $date = isset($data['date'])
             ? CarbonImmutable::createFromFormat('!Y-m-d', $data['date'], $mosque->timezone)
             : CarbonImmutable::now($mosque->timezone);
-        // Never invented: a mosque without a published calendar returns day = null.
+        // Null only for a gap in the mosque's own calendar, which is never filled with a guess.
         $day = $timetable->day($mosque, $date);
 
         return response()->json(['data' => [
@@ -56,6 +60,7 @@ class MeController extends Controller implements HasMiddleware
             'timezone' => $mosque->timezone,
             'date' => $date->toDateString(),
             'has_times' => $day !== null,
+            'source' => $day['source'] ?? null,
             'day' => $day,
         ]]);
     }

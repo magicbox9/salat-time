@@ -24,12 +24,26 @@ class MosqueTimetableTest extends TestCase
         $this->assertSame('13:30', $day['jumua']);   // 2 January 2026 is a Friday
     }
 
-    public function test_a_mosque_without_a_calendar_has_no_times(): void
+    public function test_published_times_are_marked_as_the_mosques_own(): void
     {
-        $mosque = Mosque::factory()->create();
+        $mosque = Mosque::factory()->withCalendar()->create();
+        $timetable = app(MosqueTimetable::class);
+        $day = $timetable->day($mosque, CarbonImmutable::now('Europe/Paris'));
 
-        $this->assertNull(app(MosqueTimetable::class)->day($mosque, CarbonImmutable::now()));
-        $this->assertFalse(app(MosqueTimetable::class)->hasTimes($mosque));
+        $this->assertSame('published', $day['source']);
+        $this->assertArrayNotHasKey('method', $day);
+        $this->assertTrue($timetable->publishesTimes($mosque));
+    }
+
+    public function test_a_gap_in_a_published_calendar_is_never_filled_with_a_calculation(): void
+    {
+        $mosque = Mosque::factory()->withCalendar()->create();
+        $calendar = $mosque->calendars()->first();
+        $days = $calendar->days;
+        $days[0][4] = [];   // 5 January: nothing published
+        $calendar->update(['days' => $days]);
+
+        $this->assertNull(app(MosqueTimetable::class)->day($mosque, CarbonImmutable::parse(now()->year.'-01-05', 'Europe/Paris')));
     }
 
     public function test_iqama_values_are_resolved_like_the_mac_app(): void

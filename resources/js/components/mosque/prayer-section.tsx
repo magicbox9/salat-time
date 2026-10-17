@@ -2,11 +2,15 @@ import { ExternalLink } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import {
+    CalculatedNotice,
+    isCalculated,
+} from '@/components/prayer/calculated-notice';
 import { useT } from '@/lib/i18n';
 import type { MosqueSummary } from '@/types/mosque';
 import { DayPath } from './day-path';
 import { NextPrayerHero } from './next-prayer-hero';
-import { NoTimes } from './no-times';
+import { NearbyWithTimes, NoTimes } from './no-times';
 import { Segmented } from './segmented';
 import { MonthView, WeekView } from './timetable-views';
 import { TodayGrid } from './today-grid';
@@ -21,7 +25,11 @@ type Props = {
 
 type View = 'today' | 'week' | 'month';
 
-/** Prayer times in the spirit of the Mac app: countdown, today, week, month, day path. */
+/**
+ * Prayer times in the spirit of the Mac app: countdown, today, week, month,
+ * day path. Calculated times (the mosque publishes none) come with a notice
+ * saying so, and without iqama.
+ */
 export function PrayerSection({
     mosque,
     live: initial,
@@ -41,12 +49,20 @@ export function PrayerSection({
         );
     }
 
+    const calculated = isCalculated(live.today);
+
     return (
         <section
             id="prayer-times"
             aria-labelledby="prayer-times-title"
             className="scroll-mt-40 space-y-4"
         >
+            {calculated && (
+                <CalculatedNotice
+                    name={mosque.name}
+                    method={live.today.method}
+                />
+            )}
             <NextPrayerHero
                 today={live.today}
                 tomorrow={live.tomorrow}
@@ -104,32 +120,35 @@ export function PrayerSection({
                     )}
                     {view !== 'today' && (
                         <div className="space-y-3">
-                            <div className="flex items-center gap-2">
-                                <Checkbox
-                                    id="show-iqama"
-                                    checked={showIqama}
-                                    onCheckedChange={(checked) =>
-                                        setShowIqama(checked === true)
-                                    }
-                                />
-                                <Label
-                                    htmlFor="show-iqama"
-                                    className="text-sm font-normal"
-                                >
-                                    {t('mosque.show_iqama')}
-                                </Label>
-                            </div>
+                            {/* Calculated times have no iqama to show. */}
+                            {!calculated && (
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="show-iqama"
+                                        checked={showIqama}
+                                        onCheckedChange={(checked) =>
+                                            setShowIqama(checked === true)
+                                        }
+                                    />
+                                    <Label
+                                        htmlFor="show-iqama"
+                                        className="text-sm font-normal"
+                                    >
+                                        {t('mosque.show_iqama')}
+                                    </Label>
+                                </div>
+                            )}
                             {view === 'week' ? (
                                 <WeekView
                                     slug={mosque.slug}
                                     today={live.today.date}
-                                    showIqama={showIqama}
+                                    showIqama={showIqama && !calculated}
                                 />
                             ) : (
                                 <MonthView
                                     slug={mosque.slug}
                                     today={live.today.date}
-                                    showIqama={showIqama}
+                                    showIqama={showIqama && !calculated}
                                 />
                             )}
                         </div>
@@ -137,8 +156,12 @@ export function PrayerSection({
                 </div>
 
                 <p className="mt-5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                    {t('mosque.times_source')}
-                    {mosque.mawaqit_url && (
+                    {calculated
+                        ? t('mosque.times_source_calculated', {
+                              version: live.today.method?.version ?? '',
+                          })
+                        : t('mosque.times_source')}
+                    {!calculated && mosque.mawaqit_url && (
                         <a
                             href={mosque.mawaqit_url}
                             target="_blank"
@@ -151,6 +174,12 @@ export function PrayerSection({
                     )}
                 </p>
             </div>
+
+            {calculated && nearbyWithTimes.length > 0 && (
+                <div className="rounded-2xl border bg-card p-4 shadow-xs sm:p-6">
+                    <NearbyWithTimes nearby={nearbyWithTimes} className="" />
+                </div>
+            )}
         </section>
     );
 }

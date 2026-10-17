@@ -18,7 +18,7 @@
     "theme_dark": "Dark",
     "theme_system": "System",
     "menu": "Menu",
-    "footer_data": "Mosque times as published by each mosque on Mawaqit. Mosque list © OpenStreetMap contributors and public directories.",
+    "footer_data": "Mosque times as published by each mosque on Mawaqit; where a mosque publishes none, calculated times, marked as such (PrayTimes / USNO approximate solar position). Mosque list © OpenStreetMap contributors and public directories.",
     "footer_made": "Salat Time — made for the Ummah",
     "prayer_fajr": "Fajr",
     "prayer_shuruq": "Sunrise",
@@ -55,5 +55,14 @@
     "dash_claims_none": "No request yet",
     "close": "Close",
     "nav_home": "Home",
-    "nav_campaigns": "Donate"
+    "nav_campaigns": "Donate",
+    "calculated": "Calculated",
+    "calculated_hint": "Calculated for this place: the mosque has not published its times.",
+    "calculated_title": "Calculated prayer times",
+    "calculated_body": "{name} has not published its timetable here, so these times are calculated with {method}. Shuruq, Asr and Maghrib usually match to the minute; Fajr and Isha can differ from the mosque's own times, so check with the mosque.",
+    "calculated_method_departement": "the usual convention of mosques in département {code}",
+    "calculated_method_national": "the most common convention of mosques in France",
+    "calculated_method_uoif": "the UOIF 12° convention with safety minutes",
+    "calculated_method_mwl": "the Muslim World League method (18° / 17°)",
+    "calculated_method_other": "a standard calculation method"
 }

@@ -137,7 +137,7 @@ class HubPageTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('hub/index')
-                ->where('live.today', null)
+                ->where('live.today.source', 'calculated')
                 ->where('mosque.has_times', false)
                 ->has('nearbyWithTimes', 1)
                 ->where('nearbyWithTimes.0.slug', $near->slug)

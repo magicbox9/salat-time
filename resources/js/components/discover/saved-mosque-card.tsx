@@ -80,12 +80,14 @@ export function SavedMosqueCard({
                 >
                     {mosque.has_times
                         ? t('discover.times_published')
-                        : t('discover.no_times_short')}
+                        : mosque.today
+                          ? t('discover.times_calculated')
+                          : t('discover.no_times_short')}
                 </Badge>
             </div>
 
             <div className="mt-4 min-h-6 flex-1">
-                {mosque.has_times ? (
+                {mosque.has_times || mosque.today ? (
                     <NextPrayerLine
                         today={mosque.today}
                         tomorrow={mosque.tomorrow}

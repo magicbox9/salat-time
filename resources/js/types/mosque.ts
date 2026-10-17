@@ -36,12 +36,26 @@ export type MosqueSummary = {
     google_maps_url: string;
 };
 
-/** One published day (App\Services\PrayerTimes\MosqueTimetable::day). */
+/** Where a day's times come from: the mosque's own calendar, or calculated for its place. */
+export type TimesSource = 'published' | 'calculated';
+
+/** The calculation behind a calculated day (App\Services\PrayerTimes\CalculatedTimes). */
+export type CalculationMethod = {
+    /** "fr-dept" (département table), "fr-national", "uoif-safety", "mwl", … */
+    id: string;
+    departement: string | null;
+    /** The method data's identity, e.g. "fr-dept-2026.1". */
+    version: string;
+};
+
+/** One day of times (App\Services\PrayerTimes\MosqueTimetable::day). */
 export type DayTimes = {
     date: string;
     times: Record<PrayerName, string>;
     iqama: Partial<Record<Exclude<PrayerName, 'shuruq'>, string | null>>;
     jumua: string | null;
+    source?: TimesSource;
+    method?: CalculationMethod;
 };
 
 /** GET /mosques/{slug}/times.json */

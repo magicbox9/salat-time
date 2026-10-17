@@ -37,7 +37,8 @@ class NearbyMosquesTest extends TestCase
             ]]])
             ->assertJsonPath('mosques.0.has_times', true)
             ->assertJsonPath('mosques.1.has_times', false)
-            ->assertJsonPath('mosques.1.today', null)
+            ->assertJsonPath('mosques.1.today.source', 'calculated')
+            ->assertJsonPath('mosques.0.today.source', null)
             ->assertJsonPath('mosques.0.is_favorite', false);
 
         $this->assertEqualsWithDelta(111, $response->json('mosques.0.distance_m'), 5);

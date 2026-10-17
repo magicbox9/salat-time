@@ -10,7 +10,8 @@ import { useT } from '@/lib/i18n';
 
 /**
  * The chosen mosque publishes no times here (or none complete for today):
- * say so kindly (never invent them) and offer the closest mosques that do.
+ * say so kindly (a gap is never filled with a guess) and offer the closest
+ * mosques that do.
  */
 export function NoTimes({
     mosqueName,
@@ -23,9 +24,6 @@ export function NoTimes({
     nearby: MosqueCard[];
 }) {
     const t = useT();
-    const { locale } = usePage().props;
-    const [busy, setBusy] = useState(false);
-    const choose = (slug: string) => chooseMosque(slug, t, setBusy);
     const prefix = publishes ? 'hub.no_times_today' : 'hub.no_times';
 
     return (
@@ -50,73 +48,89 @@ export function NoTimes({
             </p>
 
             {nearby.length > 0 ? (
-                <>
-                    <h3 className="mt-6 text-sm font-semibold">
-                        {t('hub.no_times_nearby')}
-                    </h3>
-                    <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {nearby.map((mosque) => {
-                            const distance = formatDistance(
-                                mosque.distance_m,
-                                t,
-                                locale,
-                            );
-
-                            return (
-                                <li
-                                    key={mosque.id}
-                                    className="flex flex-col rounded-xl border p-4"
-                                >
-                                    <Link
-                                        href={`/mosques/${encodeURIComponent(mosque.slug)}`}
-                                        className="font-medium hover:underline"
-                                    >
-                                        <bdi>{mosque.name}</bdi>
-                                    </Link>
-                                    <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
-                                        <MapPin
-                                            className="mt-0.5 size-3 shrink-0"
-                                            aria-hidden
-                                        />
-                                        <span dir="auto">
-                                            {placeLine(mosque)}
-                                            {distance && (
-                                                <>
-                                                    {' '}
-                                                    ·{' '}
-                                                    <span className="tabular-nums">
-                                                        {distance}
-                                                    </span>
-                                                </>
-                                            )}
-                                        </span>
-                                    </p>
-                                    <NextPrayerLine
-                                        today={mosque.today}
-                                        tomorrow={mosque.tomorrow}
-                                        timezone={mosque.timezone}
-                                        className="mt-3"
-                                    />
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="mt-3 self-start"
-                                        disabled={busy}
-                                        onClick={() => choose(mosque.slug)}
-                                    >
-                                        <Home />
-                                        {t('discover.make_my_mosque')}
-                                    </Button>
-                                </li>
-                            );
-                        })}
-                    </ul>
-                </>
+                <NearbyPublishing nearby={nearby} />
             ) : (
                 <Button asChild variant="outline" className="mt-5">
                     <Link href="/explore">{t('hub.action_change')}</Link>
                 </Button>
             )}
         </section>
+    );
+}
+
+/** The closest mosques that publish their own times, each with its next prayer and "make it my mosque". */
+export function NearbyPublishing({ nearby }: { nearby: MosqueCard[] }) {
+    const t = useT();
+    const { locale } = usePage().props;
+    const [busy, setBusy] = useState(false);
+    const choose = (slug: string) => chooseMosque(slug, t, setBusy);
+
+    if (nearby.length === 0) {
+        return null;
+    }
+
+    return (
+        <>
+            <h3 className="mt-6 text-sm font-semibold">
+                {t('hub.no_times_nearby')}
+            </h3>
+            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+                {nearby.map((mosque) => {
+                    const distance = formatDistance(
+                        mosque.distance_m,
+                        t,
+                        locale,
+                    );
+
+                    return (
+                        <li
+                            key={mosque.id}
+                            className="flex flex-col rounded-xl border bg-card p-4"
+                        >
+                            <Link
+                                href={`/mosques/${encodeURIComponent(mosque.slug)}`}
+                                className="font-medium hover:underline"
+                            >
+                                <bdi>{mosque.name}</bdi>
+                            </Link>
+                            <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
+                                <MapPin
+                                    className="mt-0.5 size-3 shrink-0"
+                                    aria-hidden
+                                />
+                                <span dir="auto">
+                                    {placeLine(mosque)}
+                                    {distance && (
+                                        <>
+                                            {' '}
+                                            ·{' '}
+                                            <span className="tabular-nums">
+                                                {distance}
+                                            </span>
+                                        </>
+                                    )}
+                                </span>
+                            </p>
+                            <NextPrayerLine
+                                today={mosque.today}
+                                tomorrow={mosque.tomorrow}
+                                timezone={mosque.timezone}
+                                className="mt-3"
+                            />
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="mt-3 self-start"
+                                disabled={busy}
+                                onClick={() => choose(mosque.slug)}
+                            >
+                                <Home />
+                                {t('discover.make_my_mosque')}
+                            </Button>
+                        </li>
+                    );
+                })}
+            </ul>
+        </>
     );
 }

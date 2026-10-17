@@ -83,7 +83,7 @@ class PublishedTodayTest extends TestCase
 
     private function assertSameAsTimetable(Mosque $mosque): void
     {
-        $timetable = new MosqueTimetable;
+        $timetable = app(MosqueTimetable::class);
         $now = CarbonImmutable::now($mosque->timezone);
         $batch = PublishedToday::for([$mosque])[$mosque->id];
 

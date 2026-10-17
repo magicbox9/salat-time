@@ -18,7 +18,7 @@
     "theme_dark": "Sombre",
     "theme_system": "Système",
     "menu": "Menu",
-    "footer_data": "Horaires tels que publiés par chaque mosquée sur Mawaqit. Liste des mosquées © contributeurs OpenStreetMap et annuaires publics.",
+    "footer_data": "Horaires tels que publiés par chaque mosquée sur Mawaqit ; quand une mosquée n'en publie pas, horaires calculés et signalés comme tels (PrayTimes / position solaire approchée de l'USNO). Liste des mosquées © contributeurs OpenStreetMap et annuaires publics.",
     "footer_made": "Salat Time — fait pour la Oumma",
     "prayer_fajr": "Fajr",
     "prayer_shuruq": "Lever du soleil",
@@ -55,5 +55,14 @@
     "dash_claims_none": "Aucune demande pour l'instant",
     "close": "Fermer",
     "nav_home": "Accueil",
-    "nav_campaigns": "Dons"
+    "nav_campaigns": "Dons",
+    "calculated": "Calculé",
+    "calculated_hint": "Calculés pour ce lieu : la mosquée n'a pas publié ses horaires.",
+    "calculated_title": "Horaires calculés",
+    "calculated_body": "{name} n'a pas publié ses horaires ici : ils sont donc calculés selon {method}. Chourouk, Asr et Maghrib correspondent en général à la minute près ; Fajr et Icha peuvent différer de ceux de la mosquée, vérifiez auprès d'elle.",
+    "calculated_method_departement": "la convention habituelle des mosquées du département {code}",
+    "calculated_method_national": "la convention la plus courante des mosquées de France",
+    "calculated_method_uoif": "la convention UOIF à 12° avec minutes de précaution",
+    "calculated_method_mwl": "la méthode de la Ligue islamique mondiale (18° / 17°)",
+    "calculated_method_other": "une méthode de calcul standard"
 }

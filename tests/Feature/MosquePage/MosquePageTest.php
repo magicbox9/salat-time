@@ -43,7 +43,7 @@ class MosquePageTest extends TestCase
                 ->where('shareUrl', route('mosques.show', $mosque)));
     }
 
-    public function test_a_mosque_without_times_says_so_and_lists_the_nearest_that_publish(): void
+    public function test_a_mosque_without_times_gets_calculated_ones_and_lists_the_nearest_that_publish(): void
     {
         $mosque = Mosque::factory()->at(48.8566, 2.3522)->create();
         $near = Mosque::factory()->withCalendar()->at(48.8600, 2.3500)->create();
@@ -54,7 +54,8 @@ class MosquePageTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('mosques/show')
-                ->where('live.today', null)
+                ->where('live.today.source', 'calculated')
+                ->where('live.today.iqama.fajr', null)
                 ->where('mosque.has_times', false)
                 ->has('nearbyWithTimes', 1)
                 ->where('nearbyWithTimes.0.slug', $near->slug)

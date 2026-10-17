@@ -50,7 +50,8 @@ class HubPage
             'mosque' => fn () => $this->mosque($mosque),
             'chosenBy' => $chosenBy,
             'live' => $getLive,
-            'nearbyWithTimes' => fn () => $getLive()['today'] === null ? $this->nearbyWithTimes($mosque, $user) : [],
+            'nearbyWithTimes' => fn () => ($getLive()['today']['source'] ?? null) !== MosqueTimetable::SOURCE_PUBLISHED
+                ? $this->nearbyWithTimes($mosque, $user) : [],
             'posts' => fn () => $this->posts($mosque),
             'tracker' => fn () => $user instanceof User && $user->hasVerifiedEmail() ? $this->tracker($user) : null,
             'preferences' => fn () => $user instanceof User ? HubPreferences::of($user) : null,

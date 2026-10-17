@@ -107,14 +107,16 @@ class CompanionApiTest extends TestCase
         $this->api()->getJson('/api/v1/me/mosque/times?date=11-03-2026')->assertUnprocessable()->assertJsonValidationErrors('date');
     }
 
-    public function test_a_mosque_without_a_calendar_has_no_invented_times(): void
+    public function test_a_mosque_without_a_calendar_gets_calculated_times_never_passed_off_as_its_own(): void
     {
         $this->ownMosque(withTimes: false);
 
         $this->api()->getJson('/api/v1/me/mosque/times')
             ->assertOk()
-            ->assertJsonPath('data.has_times', false)
-            ->assertJsonPath('data.day', null);
+            ->assertJsonPath('data.has_times', true)
+            ->assertJsonPath('data.source', 'calculated')
+            ->assertJsonPath('data.day.source', 'calculated')
+            ->assertJsonPath('data.day.iqama.fajr', null);
     }
 
     public function test_the_phone_records_a_prayer_with_sensor_metrics(): void

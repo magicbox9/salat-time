@@ -2,6 +2,7 @@ import { usePage } from '@inertiajs/react';
 import { BadgeCheck, Home, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { dateInZone, placeLine } from '@/components/discover/format';
+import { CalculatedTag } from '@/components/prayer/calculated-notice';
 import { useT } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { Clock, Countdown, usePrayerName } from './bits';
@@ -18,6 +19,8 @@ type Props = {
     now: Date;
     /** Extra controls in the hero's corner (adhan mute). */
     corner?: ReactNode;
+    /** Today's times are calculated (the mosque publishes none). */
+    calculated?: boolean;
 };
 
 /**
@@ -25,7 +28,14 @@ type Props = {
  * live countdown and today's Gregorian and Hijri dates, over the living sky
  * of this minute at the mosque.
  */
-export function HubHero({ mosque, view, prefs, now, corner }: Props) {
+export function HubHero({
+    mosque,
+    view,
+    prefs,
+    now,
+    corner,
+    calculated = false,
+}: Props) {
     const t = useT();
     const name = usePrayerName();
     const { locale } = usePage().props;
@@ -152,9 +162,16 @@ export function HubHero({ mosque, view, prefs, now, corner }: Props) {
                     {/* Today's times without a next one (tomorrow not fetched yet) show no countdown — never "no times". */}
                     {next && view?.untilNext != null ? (
                         <>
-                            <p className="text-xs font-medium tracking-wider text-white/70 uppercase">
-                                {t('site.next_prayer')}
-                                {next.tomorrow && <> · {t('site.tomorrow')}</>}
+                            <p className="flex flex-wrap items-center gap-2 text-xs font-medium tracking-wider text-white/70 uppercase">
+                                <span>
+                                    {t('site.next_prayer')}
+                                    {next.tomorrow && (
+                                        <> · {t('site.tomorrow')}</>
+                                    )}
+                                </span>
+                                {calculated && (
+                                    <CalculatedTag className="border-white/40 tracking-normal text-white/90 normal-case" />
+                                )}
                             </p>
                             <p className="mt-1 flex flex-wrap items-baseline gap-x-3">
                                 <span className="text-3xl font-semibold sm:text-4xl">
