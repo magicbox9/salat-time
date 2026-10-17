@@ -17,6 +17,7 @@ docker compose up -d                          # nginx, app, queue, scheduler, db
 docker compose exec app php artisan <cmd>     # artisan, composer, tests
 docker compose exec app php artisan test      # PHPUnit, against PostgreSQL db "salat_testing"
 docker compose exec app php artisan mosques:import   # load the studied mosques (see below)
+docker compose exec app php artisan mosques:prune-osm # drop OSM shops/schools imported before the filter
 npm run build                                 # frontend (Vite); npm run dev for hot reload
 ```
 

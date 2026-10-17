@@ -6,6 +6,7 @@ use App\Models\Mosque;
 use App\Models\MosquePrayerCalendar;
 use App\Services\Geocoding\GeocodingService;
 use App\Services\Geocoding\GeocodingUnavailable;
+use App\Support\OsmPlaceOfWorship;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
@@ -18,7 +19,8 @@ use Illuminate\Support\Str;
  *  1. study 3 MAWAQIT page snapshots — name, position, published yearly calendar, iqama, Jumu'a;
  *     addresses come from the study 3 register;
  *  2. study 3 register rows from the mosquee-proche directory that have no MAWAQIT page;
- *  3. study 1 OpenStreetMap mosques not already present.
+ *  3. study 1 OpenStreetMap mosques not already present (places of worship only: the list
+ *     also holds Muslim shops, funeral directors and schools, see OsmPlaceOfWorship).
  * Records closer than a few dozen metres to one already imported are treated as the same mosque.
  * Re-running updates existing records (matched by MAWAQIT slug, directory id or OSM id).
  */
@@ -220,6 +222,9 @@ class ImportMosques extends Command
         }
         $count = 0;
         foreach (json_decode((string) file_get_contents($path), true) ?: [] as $o) {
+            if (! OsmPlaceOfWorship::accepts($o['tags'] ?? [])) {
+                continue;
+            }
             $lat = (float) $o['lat'];
             $lng = (float) $o['lon'];
             $existing = Mosque::query()->where('osm_ref', $o['osm'])->first();
