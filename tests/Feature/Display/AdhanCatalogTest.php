@@ -6,6 +6,7 @@ use App\Models\MosqueDisplaySetting;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Sleep;
 use Tests\TestCase;
@@ -109,8 +110,30 @@ class AdhanCatalogTest extends TestCase
         foreach (config('display.adhan.recordings') as $recording) {
             Storage::disk('public')->put("adhan/{$recording['file']}", $this->mp3());
         }
+        // The official adhan's two versions, already rendered.
+        foreach (['regular', 'fajr'] as $version) {
+            Storage::disk('public')->put('adhan/'.config("display.adhan.official.$version.file"), $this->mp3());
+        }
 
         $this->artisan('adhan:fetch')->assertSuccessful();
         Http::assertNothingSent();
+    }
+
+    public function test_the_fetch_command_renders_the_official_versions_with_ffmpeg(): void
+    {
+        Process::fake(function ($process) {
+            // ffmpeg's last argument is the output file: write a playable stand-in.
+            file_put_contents(end($process->command), $this->mp3());
+
+            return Process::result();
+        });
+        foreach (config('display.adhan.recordings') as $recording) {
+            Storage::disk('public')->put("adhan/{$recording['file']}", $this->mp3());
+        }
+
+        $this->artisan('adhan:fetch')->assertSuccessful();
+
+        Process::assertRanTimes(fn ($process) => $process->command[0] === 'ffmpeg', 2);
+        Storage::disk('public')->assertExists(['adhan/adhan_official.mp3', 'adhan/adhan_official_fajr.mp3']);
     }
 }

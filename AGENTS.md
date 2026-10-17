@@ -61,6 +61,21 @@ Redis (cache, sessions, queue), MapLibre GL for the globe and maps.
    verified files in `resources/quran` and `resources/content`, or are typed by
    the mosque itself. Never write them from memory.
 
+## The official adhan (all Salat Time apps)
+
+The default adhan in every Salat Time app (web, Mac, Windows, future phones)
+is **Mansour Al-Zahrani** (Assabile `cb51ad2c0c7e`, `adhan_zahrani.mp3`):
+
+| Version | Plays | Kept ranges of the recording |
+|---|---|---|
+| Fajr (`official_fajr`) | the whole recording | 0 s → end (184.69 s) |
+| Other prayers (`official`) | without the Fajr-only passage ("as-salatu khayrun min an-nawm") | 0 → 123.866 s, then 149.440 s → end (159.11 s) |
+
+Here `php artisan adhan:fetch` renders both files with ffmpeg from
+`config('display.adhan.official')`; they lead the catalog, screens default to
+them, and the home plays the Fajr version at Fajr. Never change these cut
+points in one app without changing them in all.
+
 ## Working rules
 
 - Conventional Commits (`feat(web): …`, `fix(mosques): …`), one concern per

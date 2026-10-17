@@ -44,8 +44,9 @@ return [
         'rotation' => ['messages', 'quran', 'adhkar', 'posts', 'campaigns'],
         'rotation_seconds' => 20,
         'adhan_mode' => 'visual',
-        'adhan_id' => null,
-        'fajr_adhan_id' => null,
+        // The official Salat Time adhan (see 'adhan.official' below).
+        'adhan_id' => 'official',
+        'fajr_adhan_id' => 'official_fajr',
         'volume' => 80,
         // Personal screens only (a mosque screen is muted from its own controls).
         'muted' => false,
@@ -101,6 +102,21 @@ return [
         'user_agent' => 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
         'timeout' => 45,
         'min_bytes' => 20000,
+        /*
+         * The official Salat Time adhan, the default in every Salat Time app:
+         * Mansour Al-Zahrani. Fajr plays the whole recording; the other
+         * prayers play it without the Fajr-only passage (2:03.866–2:29.440,
+         * "as-salatu khayrun min an-nawm"). `adhan:fetch` renders both files
+         * from adhan_zahrani.mp3 (ffmpeg). Keep these cut points identical in
+         * the Mac and Windows apps.
+         */
+        'official' => [
+            'source' => 'adhan_zahrani.mp3',
+            'regular' => ['id' => 'official', 'file' => 'adhan_official.mp3', 'name' => 'Salat Time — Mansour Al-Zahrani',
+                'keep' => [[0.0, 123.866], [149.440, null]]],
+            'fajr' => ['id' => 'official_fajr', 'file' => 'adhan_official_fajr.mp3', 'name' => 'Salat Time — Mansour Al-Zahrani (Fajr)',
+                'keep' => [[0.0, null]]],
+        ],
         'recordings' => [
             ['id' => 'makkah_mulla', 'file' => 'adhan_makkah_mulla.mp3', 'hash' => '166d1f7c435a', 'name' => 'Makkah — Sheikh Ali Ibn Ahmed Mala'],
             ['id' => 'madinah', 'file' => 'adhan_madinah.mp3', 'hash' => 'b30ca9a3e115', 'name' => 'Madinah — Masjid an-Nabawi'],

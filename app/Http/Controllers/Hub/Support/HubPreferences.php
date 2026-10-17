@@ -28,7 +28,8 @@ class HubPreferences
         'show_hijri' => true,
         'compact' => false,
         'adhan' => 'visual',
-        'adhan_id' => null,
+        // The official Salat Time adhan (config display.adhan.official).
+        'adhan_id' => 'official',
         'muted' => false,
     ];
 

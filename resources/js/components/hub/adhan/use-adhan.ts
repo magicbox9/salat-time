@@ -135,7 +135,11 @@ export function useAdhan({
     const wantsSound =
         prefs.adhan === 'sound' && !prefs.muted && track !== null;
     const dueKey = due?.key ?? null;
-    const trackUrl = track?.url ?? null;
+    // The official adhan has its own Fajr version.
+    const trackUrl =
+        (due?.prayer === 'fajr' ? track?.fajr_url : undefined) ??
+        track?.url ??
+        null;
 
     // The adhan time has come: play once per prayer and day.
     useEffect(() => {

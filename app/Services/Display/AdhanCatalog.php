@@ -17,7 +17,7 @@ class AdhanCatalog
 {
     public const DISK = 'public';
 
-    /** @return list<array{id: string, name: string, url: string}> */
+    /** @return list<array{id: string, name: string, url: string, fajr_url?: string}> */
     public function list(?Mosque $mosque = null): array
     {
         $disk = $this->disk();
@@ -26,6 +26,27 @@ class AdhanCatalog
         $present = array_flip($disk->files($folder));
         $tracks = [];
         $known = [];
+
+        // The official Salat Time adhan comes first: it is every app's default.
+        $official = (array) config('display.adhan.official');
+        $regular = $official['regular'] ?? null;
+        $fajr = $official['fajr'] ?? null;
+        foreach ([$regular, $fajr] as $entry) {
+            if ($entry) {
+                $known["$folder/{$entry['file']}"] = true;
+            }
+        }
+        $fajrPath = $fajr ? "$folder/{$fajr['file']}" : null;
+        $fajrUrl = $fajrPath && isset($present[$fajrPath]) && $disk->size($fajrPath) >= $minBytes ? $this->url($fajrPath) : null;
+        $regularPath = $regular ? "$folder/{$regular['file']}" : null;
+        if ($regularPath && isset($present[$regularPath]) && $disk->size($regularPath) >= $minBytes) {
+            // fajr_url: the companion played at Fajr when this track is chosen.
+            $tracks[] = ['id' => $regular['id'], 'name' => $regular['name'], 'url' => $this->url($regularPath)]
+                + ($fajrUrl ? ['fajr_url' => $fajrUrl] : []);
+        }
+        if ($fajrUrl) {
+            $tracks[] = ['id' => $fajr['id'], 'name' => $fajr['name'], 'url' => $fajrUrl];
+        }
 
         foreach ((array) config('display.adhan.recordings') as $recording) {
             $path = "$folder/{$recording['file']}";

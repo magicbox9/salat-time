@@ -78,7 +78,13 @@ export type HubPageProps = {
 };
 
 /** GET /adhan/catalog.json (module "display"). */
-export type AdhanTrack = { id: string; name: string; url: string };
+export type AdhanTrack = {
+    id: string;
+    name: string;
+    url: string;
+    /** Played at Fajr instead of `url` (the official adhan's Fajr version). */
+    fajr_url?: string;
+};
 
 export type RowState = 'passed' | 'current' | 'next' | 'upcoming';
 

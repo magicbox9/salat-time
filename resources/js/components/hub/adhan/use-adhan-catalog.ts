@@ -54,7 +54,10 @@ export function useAdhanCatalog(mosqueSlug: string): {
                         return [];
                     }
 
-                    const { id, name, url } = item as Record<string, unknown>;
+                    const { id, name, url, fajr_url: fajrUrl } = item as Record<
+                        string,
+                        unknown
+                    >;
                     // A numeric id (a database key) is kept as text.
                     const key =
                         typeof id === 'number' && Number.isInteger(id)
@@ -67,7 +70,14 @@ export function useAdhanCatalog(mosqueSlug: string): {
                         typeof name === 'string' &&
                         name.trim() !== '' &&
                         playable(url)
-                        ? [{ id: key, name, url }]
+                        ? [
+                              {
+                                  id: key,
+                                  name,
+                                  url,
+                                  ...(playable(fajrUrl) ? { fajr_url: fajrUrl } : {}),
+                              },
+                          ]
                         : [];
                 });
                 setState({ tracks, loaded: true });

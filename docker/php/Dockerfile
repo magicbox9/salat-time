@@ -5,7 +5,7 @@ COPY --from=mlocati/php-extension-installer:latest /usr/bin/install-php-extensio
 
 RUN install-php-extensions \
       pdo_pgsql pgsql redis intl zip gd bcmath opcache pcntl exif sockets \
- && apk add --no-cache git unzip bash postgresql-client
+ && apk add --no-cache git unzip bash postgresql-client ffmpeg
 
 # Composer
 COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
