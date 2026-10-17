@@ -1,0 +1,54 @@
+{
+ "package": "France — mosque convention, platform-neutral method package",
+ "methodID": "fr-dept-2026.1",
+ "generated": "2026-10-16",
+ "generator": "tools/build_package.py",
+ "tz_database": "system tzdata 2026c",
+ "source": "study 4 (plan_checks/france_conventions_e12.json, e12_eval.json, smoke_values.json; engines/mawaqit_backend.py; harness/engine.py + models.py)",
+ "counts": {
+  "engine_vectors": 612,
+  "family_vectors": 1400,
+  "table_departements": 96,
+  "table_city_years": 39,
+  "match_vectors": 312,
+  "postcode_vectors": 24
+ },
+ "files": {
+  "data/france_conventions_v1.json": {
+   "bytes": 16141,
+   "sha256": "bd15c47c1880802d85aca6c2cb4fcb70b5ca63f00a50cafa4fc97e1862bf97a2"
+  },
+  "data/match_presets.json": {
+   "bytes": 1788,
+   "sha256": "442be088e208b2710ae33d5843e31157b4323ed4b79fc29fcc9fe14d7d078c0f"
+  },
+  "data/standard_methods.json": {
+   "bytes": 16271,
+   "sha256": "c421e83b0cbd4aeccf4addfdd020d0e95c09a2127ab1f310cc2b0f3bf2b80666"
+  },
+  "test-vectors/engine_vectors.json": {
+   "bytes": 464132,
+   "sha256": "efd40339a5d4925c0688ae0be9135de3dbf7404343a5e13994f6848c672f5507"
+  },
+  "test-vectors/family_vectors.json": {
+   "bytes": 828416,
+   "sha256": "e312e2070fa17ca8252d6fd9f65a333bfaa6f0e1fdbd36aac694798e5f16de72"
+  },
+  "test-vectors/match_vectors.json": {
+   "bytes": 129488,
+   "sha256": "64142b8f6db9f65182c45d881d3bdd81a54829cb47eb5d7137821cdda9daf551"
+  },
+  "test-vectors/postcode_vectors.json": {
+   "bytes": 1545,
+   "sha256": "a17e8660b193035fa00957b119d31285e8ed19487c79da6d3913e680d9cc031d"
+  },
+  "test-vectors/smoke_values.json": {
+   "bytes": 8719,
+   "sha256": "e4ed375fb04f8484091b4197bcf9ff7fff39389f86e1b2774546573c0ba811b5"
+  },
+  "test-vectors/table_vectors.json": {
+   "bytes": 1329610,
+   "sha256": "9fe242124b6be25c9a1b498bacbfa8f058ae975e55132f8dac0bf9713d3dfef6"
+  }
+ }
+}

@@ -14,3 +14,7 @@ README.md export-ignore
 resources/quran/** -text
 public/fonts/quran/** -text
 resources/content/** -text
+
+# The prayer-time method package: data and test vectors pinned by SHA-256 in MANIFEST.json.
+resources/prayer-method/*.json -text
+tests/Fixtures/prayer-method/** -text

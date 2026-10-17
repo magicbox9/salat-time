@@ -1,0 +1,858 @@
+{
+ "description": "Public calculation methods as prayer specs (SPEC.md section 3). Angles are the verbatim method table of the Mawaqit / islamic-network PHP library, so a mosque that chose one of them in Mawaqit gets the same minutes. High-latitude rule: ANGLE_BASED (library default). Asr: shadow factor 1, server clock 20:00 UTC (best single value for matching Mawaqit). Options a user may change: Asr factor 2 (Hanafi), the high-latitude rule, per-prayer minute adjustments.",
+ "methods": [
+  {
+   "id": "fr-dept",
+   "name": "France — mosque convention",
+   "note": "Departement table (data/france_conventions_v1.json); default in metropolitan France",
+   "specs": null
+  },
+  {
+   "id": "uoif-safety",
+   "name": "Musulmans de France (UOIF) 12° with safety minutes",
+   "note": "The most common Mawaqit setting in France",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": -4
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 5
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "clock": 20.0,
+     "offset": 0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 3
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": 5
+    }
+   }
+  },
+  {
+   "id": "uoif-12",
+   "name": "UOIF 12° (Mawaqit \"FRANCE\", no safety minutes)",
+   "note": "Mawaqit/islamic-network library method FRANCE",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "isna",
+   "name": "Islamic Society of North America (15° / 15°)",
+   "note": "Mawaqit/islamic-network library method ISNA",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 15.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 15.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "mwl",
+   "name": "Muslim World League (18° / 17°)",
+   "note": "Mawaqit/islamic-network library method MWL",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 17.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "egypt",
+   "name": "Egyptian General Authority of Survey (19.5° / 17.5°)",
+   "note": "Mawaqit/islamic-network library method EGYPT",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 19.5,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 17.5,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "umm-al-qura",
+   "name": "Umm al-Qura, Makkah (18.5° / Maghrib + 90 min)",
+   "note": "Mawaqit/islamic-network library method MAKKAH",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.5,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "interval",
+     "minutes": 90
+    }
+   }
+  },
+  {
+   "id": "morocco",
+   "name": "Morocco, Habous (19° / 17°)",
+   "note": "Mawaqit/islamic-network library method MOROCCO",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 19.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 17.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "algeria",
+   "name": "Algeria (18° / 17°)",
+   "note": "Mawaqit/islamic-network library method ALGERIA",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 17.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "tunisia",
+   "name": "Tunisia (18° / 18°)",
+   "note": "Mawaqit/islamic-network library method TUNISIA",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "karachi",
+   "name": "University of Islamic Sciences, Karachi (18° / 18°)",
+   "note": "Mawaqit/islamic-network library method KARACHI",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "kuwait",
+   "name": "Kuwait (18° / 17.5°)",
+   "note": "Mawaqit/islamic-network library method KUWAIT",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 17.5,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "qatar",
+   "name": "Qatar (18° / Maghrib + 90 min)",
+   "note": "Mawaqit/islamic-network library method QATAR",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "interval",
+     "minutes": 90
+    }
+   }
+  },
+  {
+   "id": "gulf",
+   "name": "Gulf Region (19.5° / Maghrib + 90 min)",
+   "note": "Mawaqit/islamic-network library method GULF",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 19.5,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "interval",
+     "minutes": 90
+    }
+   }
+  },
+  {
+   "id": "dubai",
+   "name": "Dubai (18.2° / 18.2°)",
+   "note": "Mawaqit/islamic-network library method DUBAI",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.2,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.2,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "singapore",
+   "name": "MUIS Singapore (20° / 18°)",
+   "note": "Mawaqit/islamic-network library method SINGAPORE",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 20.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "jakim",
+   "name": "JAKIM Malaysia (20° / 18°)",
+   "note": "Mawaqit/islamic-network library method JAKIM",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 20.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "kemenag",
+   "name": "Kemenag Indonesia (20° / 18°)",
+   "note": "Mawaqit/islamic-network library method KEMENAG",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 20.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "turkey-18-17",
+   "name": "Turkey 18° / 17° (library method, not the Diyanet calendar)",
+   "note": "Mawaqit/islamic-network library method TURKEY",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 17.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "russia",
+   "name": "Spiritual Administration of Muslims of Russia (16° / 15°)",
+   "note": "Mawaqit/islamic-network library method RUSSIA",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 16.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 15.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "portugal",
+   "name": "Comunidade Islâmica de Lisboa (18° / Maghrib + 77 min, Maghrib = sunset + 3)",
+   "note": "Mawaqit/islamic-network library method PORTUGAL",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 3
+    },
+    "isha": {
+     "family": "interval",
+     "minutes": 80
+    }
+   }
+  },
+  {
+   "id": "jordan",
+   "name": "Jordan (18° / 18°, Maghrib = sunset + 5)",
+   "note": "Mawaqit/islamic-network library method JORDAN",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "sunset",
+     "offset": 5
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "tehran",
+   "name": "Institute of Geophysics, Tehran (17.7° / 14°, Maghrib 4.5°)",
+   "note": "Mawaqit/islamic-network library method TEHRAN",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 17.7,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "angle",
+     "angle": 4.5,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 14.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  },
+  {
+   "id": "jafari",
+   "name": "Shia Ithna-Ashari, Qum (16° / 14°, Maghrib 4°)",
+   "note": "Mawaqit/islamic-network library method JAFARI",
+   "specs": {
+    "fajr": {
+     "family": "angle",
+     "angle": 16.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "sunrise": {
+     "family": "sunrise",
+     "offset": 0
+    },
+    "dhuhr": {
+     "family": "transit",
+     "offset": 0
+    },
+    "asr": {
+     "family": "shadow",
+     "factor": 1,
+     "offset": 0,
+     "clock": 20.0
+    },
+    "maghrib": {
+     "family": "angle",
+     "angle": 4.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    },
+    "isha": {
+     "family": "angle",
+     "angle": 14.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  }
+ ]
+}

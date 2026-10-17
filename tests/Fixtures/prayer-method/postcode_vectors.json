@@ -1,0 +1,101 @@
+{
+ "description": "Postcode -> departement code (SPEC.md section 4). null = not a metropolitan departement (overseas 97/98, Monaco 98000) or not a 5-digit postcode; spaces are ignored.",
+ "cases": [
+  {
+   "postcode": "75001",
+   "departement": "75"
+  },
+  {
+   "postcode": "75116",
+   "departement": "75"
+  },
+  {
+   "postcode": "69007",
+   "departement": "69"
+  },
+  {
+   "postcode": "69400",
+   "departement": "69"
+  },
+  {
+   "postcode": "13001",
+   "departement": "13"
+  },
+  {
+   "postcode": "59000",
+   "departement": "59"
+  },
+  {
+   "postcode": "01000",
+   "departement": "01"
+  },
+  {
+   "postcode": "06000",
+   "departement": "06"
+  },
+  {
+   "postcode": "20000",
+   "departement": "2A"
+  },
+  {
+   "postcode": "20090",
+   "departement": "2A"
+  },
+  {
+   "postcode": "20167",
+   "departement": "2A"
+  },
+  {
+   "postcode": "20199",
+   "departement": "2A"
+  },
+  {
+   "postcode": "20200",
+   "departement": "2B"
+  },
+  {
+   "postcode": "20600",
+   "departement": "2B"
+  },
+  {
+   "postcode": "20290",
+   "departement": "2B"
+  },
+  {
+   "postcode": "95000",
+   "departement": "95"
+  },
+  {
+   "postcode": "97400",
+   "departement": null
+  },
+  {
+   "postcode": "97600",
+   "departement": null
+  },
+  {
+   "postcode": "98000",
+   "departement": null
+  },
+  {
+   "postcode": "7500",
+   "departement": null
+  },
+  {
+   "postcode": "750011",
+   "departement": null
+  },
+  {
+   "postcode": "ABCDE",
+   "departement": null
+  },
+  {
+   "postcode": "",
+   "departement": null
+  },
+  {
+   "postcode": " 69 007 ",
+   "departement": "69"
+  }
+ ]
+}

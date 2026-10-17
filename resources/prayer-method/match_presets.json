@@ -1,0 +1,99 @@
+{
+ "description": "Candidates for \"Match my mosque\" (SPEC.md section 6), after the departement default (candidate 0). Generic public conventions only. \"Maghrib + N\" is stored relative to sunset (Maghrib = sunset + 3).",
+ "adjustment_range": [
+  -10,
+  10
+ ],
+ "presets": {
+  "fajr": [
+   {
+    "id": "uoif-12-minus4",
+    "label": "12°, 4 min earlier",
+    "spec": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": -4
+    }
+   },
+   {
+    "id": "uoif-12-minus5",
+    "label": "12°, 5 min earlier",
+    "spec": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": -5
+    }
+   },
+   {
+    "id": "isna-15",
+    "label": "15°",
+    "spec": {
+     "family": "angle",
+     "angle": 15.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   },
+   {
+    "id": "mwl-18",
+    "label": "18°",
+    "spec": {
+     "family": "angle",
+     "angle": 18.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  ],
+  "isha": [
+   {
+    "id": "uoif-12-plus5",
+    "label": "12°, 5 min later",
+    "spec": {
+     "family": "angle",
+     "angle": 12.0,
+     "rule": "ANGLE_BASED",
+     "offset": 5
+    }
+   },
+   {
+    "id": "maghrib-plus-90",
+    "label": "Maghrib + 90 min",
+    "spec": {
+     "family": "interval",
+     "minutes": 93
+    }
+   },
+   {
+    "id": "maghrib-plus-80",
+    "label": "Maghrib + 80 min",
+    "spec": {
+     "family": "interval",
+     "minutes": 83
+    }
+   },
+   {
+    "id": "isna-15",
+    "label": "15°",
+    "spec": {
+     "family": "angle",
+     "angle": 15.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   },
+   {
+    "id": "mwl-17",
+    "label": "17°",
+    "spec": {
+     "family": "angle",
+     "angle": 17.0,
+     "rule": "ANGLE_BASED",
+     "offset": 0
+    }
+   }
+  ]
+ }
+}
